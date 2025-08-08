@@ -9,7 +9,7 @@ def send_test_event():
     event_data = {
         "event_id": str(uuid.uuid4()),
         "event_type": "chat",
-        "event_data": {"question": "What is your return policy?"},
+        "event_data": {"question": "What is your return policy?", "store": "pinklily"},
     }
 
     headers = {

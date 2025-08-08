@@ -17,12 +17,9 @@ class Product(BaseModel):
     colors: List[str]
 
 
-class MessageRequest(BaseModel):
-    content: str
-
-
 class MessageResponse(BaseModel):
     content: str
+    store: str
     suggestions: Optional[List[str]] = None
     products: Optional[List[Product]] = None
     timestamp: datetime

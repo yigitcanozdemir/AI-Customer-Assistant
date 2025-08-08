@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 client = OpenAI(api_key=settings.openai_api_key)
 
 
-async def handle_chat_event(question: str) -> MessageResponse:
+async def handle_chat_event(question: str, store: str) -> MessageResponse:
     try:
 
         response = client.responses.create(
@@ -14,16 +14,21 @@ async def handle_chat_event(question: str) -> MessageResponse:
             input=[
                 {
                     "role": "system",
-                    "content": "You are a helpful e-commerce assistant.",
+                    "content": f"You are a helpful e-commerce assistant for {store.title()} store.",
                 },
                 {"role": "user", "content": question},
             ],
-            temperature=0.7,
         )
         content = response.output_text
         return MessageResponse(
             content=content,
-            suggestions=["Add to cart", "Show similart products", "Show more details"],
+            store=store,
+            suggestions=[
+                "Add to cart",
+                "Show similart products",
+                "Show more details",
+                "Browse catalog",
+            ],
             products=[],
             timestamp=datetime.now(timezone.utc),
         )

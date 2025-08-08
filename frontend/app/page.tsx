@@ -120,7 +120,7 @@ export default function ElegantFashionAssistant() {
         event_id: `chat_${Date.now()}`,
         event_type: "chat",
         event_data: {
-          question: content
+          question: content, store: "pinklily"
         }
       }
 

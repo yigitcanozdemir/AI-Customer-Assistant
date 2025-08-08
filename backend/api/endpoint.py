@@ -33,12 +33,14 @@ async def handle_event(
 
     if data.event_type == "chat":
         question = data.event_data.get("question")
+        store = data.event_data.get("store")
         if not question:
             raise HTTPException(
                 status_code=400, detail="Missing 'question' in event_data"
             )
         start = time.time()
-        response: MessageResponse = await handle_chat_event(question)
+
+        response: MessageResponse = await handle_chat_event(question, store)
         end = time.time()
         print(f"Chat event processed in {end - start:.2f} seconds")
         print(response.model_dump_json(indent=2))
