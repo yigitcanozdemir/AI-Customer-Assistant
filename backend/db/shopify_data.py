@@ -53,5 +53,4 @@ def fetch_and_clean_products(name: str):
     print(f"Cleaned data written to {output_path}")
 
 
-# Kullanım:
 fetch_and_clean_products("pinklily")
