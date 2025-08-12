@@ -1,0 +1,17 @@
+[project]
+name = "ai-customer-assistant"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncpg>=0.30.0",
+    "docling>=2.43.0",
+    "fastapi>=0.116.1",
+    "ipykernel>=6.30.1",
+    "openai>=1.99.7",
+    "pgvector>=0.4.1",
+    "pydantic>=2.11.7",
+    "sqlalchemy>=2.0.43",
+    "tiktoken>=0.11.0",
+]
