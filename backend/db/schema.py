@@ -12,10 +12,11 @@ from sqlalchemy import (
     Index,
     text,
 )
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker
-from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
+from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY, UUID
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
+import uuid
 
 
 Base = declarative_base()
@@ -24,7 +25,13 @@ Base = declarative_base()
 class Product(Base):
     __tablename__ = "products"
 
-    id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        unique=True,
+        nullable=False,
+    )
     store = Column(String(100), nullable=False, index=True)
     title = Column(Text, nullable=False)
     handle = Column(String(255), nullable=True)
@@ -45,14 +52,20 @@ class Product(Base):
 class Variant(Base):
     __tablename__ = "variants"
 
-    id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        unique=True,
+        nullable=False,
+    )
     product_id = Column(
-        BigInteger,
+        UUID(as_uuid=True),
         ForeignKey("products.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    title = Column(String(255), nullable=True)
+    title = Column(String(255), nullable=False)
     option1 = Column(String(255), nullable=True)
     option2 = Column(String(255), nullable=True)
     option3 = Column(String(255), nullable=True)
@@ -72,9 +85,15 @@ class Variant(Base):
 class Image(Base):
     __tablename__ = "images"
 
-    id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        unique=True,
+        nullable=False,
+    )
     product_id = Column(
-        BigInteger,
+        UUID(as_uuid=True),
         ForeignKey("products.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -90,27 +109,40 @@ class Image(Base):
 class Embedding(Base):
     __tablename__ = "embeddings"
 
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        unique=True,
+        nullable=False,
+    )
     product_id = Column(
-        BigInteger,
+        UUID(as_uuid=True),
         ForeignKey("products.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     content_type = Column(String(50), nullable=False)
     content = Column(Text, nullable=True)
-    embedding = Column(Vector(3072), nullable=False)
-
+    embedding = Column(Vector(1536), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
     product = relationship("Product", back_populates="embeddings")
 
 
 class FAQ(Base):
     __tablename__ = "faqs"
 
-    id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        unique=True,
+        nullable=False,
+    )
     store = Column(String(100), nullable=False, index=True)
     content = Column(Text, nullable=True)
 
-    embedding = Column(Vector(3072), nullable=False)
+    embedding = Column(Vector(1536), nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
