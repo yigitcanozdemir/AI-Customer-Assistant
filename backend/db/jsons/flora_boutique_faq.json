@@ -1,0 +1,42 @@
+[
+    {
+        "store": "Flora Boutique",
+        "policies": [
+            {
+                "title": "Flora Boutique Shipping",
+                "content": "Please note: Orders CANNOT be changed, modified, or canceled after checkout. Make sure you double-check your items, sizes, and shipping address before completing your order. 🌸 Once your package leaves our warehouse, it’s on its own adventure!"
+            },
+            {
+                "title": "Shipping Methods and Charges",
+                "content": [
+                    {
+                        "method": "Standard",
+                        "charge": "$5.95",
+                        "order_by": "3:00 PM ET",
+                        "delivery": "3 to 6 business days after shipping. Perfect for when you’re not in a rush but want your goodies safely delivered."
+                    },
+                    {
+                        "method": "Express",
+                        "charge": "$18",
+                        "order_by": "3:00 PM ET",
+                        "delivery": "2 to 3 business days. Your order will practically sprint to your doorstep!"
+                    },
+                    {
+                        "method": "Next-Day",
+                        "charge": "$28",
+                        "order_by": "12:00 PM ET",
+                        "delivery": "1 business day. Need it NOW? This option is for true impatience champions."
+                    }
+                ]
+            },
+            {
+                "title": "Free Shipping Offer",
+                "content": "We love to treat our loyal shoppers! Orders over $75 ship free within the continental United States. Just add your faves to the cart and voilà — no shipping fees!"
+            },
+            {
+                "title": "Returns Made Easy",
+                "content": "Not vibing with your purchase? No worries — you’ve got 30 days from the ship date to return or exchange it. Choose store credit for instant access to shop again or request a refund (processing fee of $7.95 applies). Damaged or defective items? Snap a pic and contact our Customer Care within 3 days — we’ll make it right, no questions asked. Boxes, slips, and invoices: remember to include them so your return is smooth like butter."
+            }
+        ]
+    }
+]

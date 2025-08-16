@@ -1,0 +1,42 @@
+[
+    {
+        "store": "Luna Apparel",
+        "policies": [
+            {
+                "title": "Luna Shipping Info",
+                "content": "All sales are final after checkout. No changes, modifications, or cancellations allowed. Check your cart twice (Santa style) before you hit that button! 🎁"
+            },
+            {
+                "title": "Shipping Options",
+                "content": [
+                    {
+                        "method": "Standard",
+                        "charge": "$7.00",
+                        "order_by": "1:00 PM PT",
+                        "delivery": "3 to 5 business days. Reliable and budget-friendly."
+                    },
+                    {
+                        "method": "Priority",
+                        "charge": "$22",
+                        "order_by": "1:00 PM PT",
+                        "delivery": "2 business days. Because sometimes patience is overrated."
+                    },
+                    {
+                        "method": "Overnight",
+                        "charge": "$32",
+                        "order_by": "11:00 AM PT",
+                        "delivery": "1 business day. Your order arrives practically before you even finish your coffee."
+                    }
+                ]
+            },
+            {
+                "title": "Returns & Exchanges",
+                "content": "30-day hassle-free returns. Prefer store credit? Instant, no waiting. Refunds are processed within 7-10 business days after arrival at our warehouse (processing fee applies). Exchanges for the right size or style are free — because we believe shopping should be fun, not stressful. 🎉 Damaged items? Send us a pic within 3 days and we’ll fix it fast."
+            },
+            {
+                "title": "Final Notes",
+                "content": "Final Sale items cannot be returned. Lighting, screen settings, and slight fabric variations are natural and part of the charm — not defects. Always double-check your order before confirming!"
+            }
+        ]
+    }
+]

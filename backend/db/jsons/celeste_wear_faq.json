@@ -1,0 +1,42 @@
+[
+    {
+        "store": "Celeste Wear",
+        "policies": [
+            {
+                "title": "Celeste Shipping",
+                "content": "No order changes or cancellations after checkout. Please confirm your cart carefully — mistakes can’t be undone once processed. 🛍️"
+            },
+            {
+                "title": "Shipping Choices",
+                "content": [
+                    {
+                        "method": "Standard",
+                        "charge": "$6.00",
+                        "order_by": "12:00 PM MT",
+                        "delivery": "3-5 business days. Affordable and steady."
+                    },
+                    {
+                        "method": "Express",
+                        "charge": "$19",
+                        "order_by": "12:00 PM MT",
+                        "delivery": "2-3 business days. Quick delivery without breaking the bank."
+                    },
+                    {
+                        "method": "Next-Day",
+                        "charge": "$31",
+                        "order_by": "10:00 AM MT",
+                        "delivery": "1-2 business days. For urgent fashion emergencies!"
+                    }
+                ]
+            },
+            {
+                "title": "Free Shipping",
+                "content": "Orders over $80 in the continental US qualify for free shipping. Sit back, relax, and let us handle the delivery."
+            },
+            {
+                "title": "Returns & FAQ",
+                "content": "30-day return policy with store credit or refund options. Refunds to original payment method have a $7.95 processing fee. Exchanges are free. Damaged items? Contact support within 3 days with a photo. Price adjustments are not offered due to high demand and limited stock. Once returned items arrive, processing takes 7-10 business days for refunds; store credit is issued immediately."
+            }
+        ]
+    }
+]

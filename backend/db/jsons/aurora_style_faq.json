@@ -1,0 +1,38 @@
+[
+    {
+        "store": "Aurora Styles",
+        "policies": [
+            {
+                "title": "Aurora Shipping Guidelines",
+                "content": "Orders cannot be edited or canceled after payment is confirmed. Please ensure your shipping info is accurate — packages sent to incorrect addresses may be returned and restocking fees may apply. 🌟"
+            },
+            {
+                "title": "Delivery Methods",
+                "content": [
+                    {
+                        "method": "Standard",
+                        "charge": "$6.50",
+                        "order_by": "2:00 PM CT",
+                        "delivery": "3 to 5 business days. Reliable and economical."
+                    },
+                    {
+                        "method": "Fast Track",
+                        "charge": "$21",
+                        "order_by": "2:00 PM CT",
+                        "delivery": "2 to 3 business days. For when you just can’t wait."
+                    },
+                    {
+                        "method": "Next-Day",
+                        "charge": "$29",
+                        "order_by": "12:00 PM CT",
+                        "delivery": "1 to 2 business days. Lightning speed for urgent needs."
+                    }
+                ]
+            },
+            {
+                "title": "Returns Policy",
+                "content": "30-day returns accepted. Exchanges for the same item are free. Refunds to original payment method have a $7.95 processing fee. Damaged or defective items? Contact Customer Support within 3 days with a photo — we’ll make it right, guaranteed. Multiple items in one return? Bundle them carefully with all slips and boxes included."
+            }
+        ]
+    }
+]
