@@ -1,0 +1,339 @@
+[
+    {
+        "id": "dayiuse-001",
+        "store": "Dayifuse Fashion",
+        "name": "KHAGANATE T-SHIRT",
+        "category": "T-Shirt",
+        "price": 1150,
+        "currency": "TRY",
+        "description": "The Khaganate T-Shirt features a design that reflects the strength and aesthetics of Turkish history and culture. The khagan figure on the back symbolizes leadership, while the wolf and eagle motifs represent freedom and power. Surrounding Turkish patterns uniquely showcase cultural heritage. Fabric: 30/2 jersey, 100% cotton yarn. Knit: Suprem. Style: Oversized. Weight: 240 g/m². Finish: Silky treatment. Collar fabric: 20/1 cotton jersey. Stitching: Cotton thread. Back print: Screen printing with 100% natural fabric dye. Front embroidery: 3-color raised industrial embroidery. Care: Wash inside out at 30°C.",
+        "colors": [
+            {
+                "name": "White",
+                "images": [
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/efc038b6-a021-4fb9-9a0d-3d5ad760aa60/1080/mockup.webp",
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/3a8abd2e-506f-4b0c-b6a1-6dd9c1f0e01d/1080/rra.webp"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 10
+                    },
+                    {
+                        "size": "S",
+                        "stock": 15
+                    },
+                    {
+                        "size": "M",
+                        "stock": 8
+                    },
+                    {
+                        "size": "L",
+                        "stock": 12
+                    }
+                ]
+            },
+            {
+                "name": "Black",
+                "images": [
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/f7c00aed-97f4-4abc-9998-cb57b889ac8d/1080/aagagz.webp",
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/6203c26a-a046-4c93-83eb-9caac5aefa7d/1080/agagagaga.webp"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 0
+                    },
+                    {
+                        "size": "S",
+                        "stock": 12
+                    },
+                    {
+                        "size": "M",
+                        "stock": 5
+                    },
+                    {
+                        "size": "L",
+                        "stock": 30
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "oversized",
+            "casual",
+            "cotton"
+        ]
+    },
+    {
+        "id": "dayiuse-002",
+        "store": "Dayifuse Fashion",
+        "name": "DICE T-SHIRT",
+        "category": "T-Shirt",
+        "price": 1250,
+        "currency": "TRY",
+        "description": "The Dice T-Shirt symbolizes the uncertainty of fate with its dice motif, featuring a dark theme and striking details for a bold statement. Express the magic of the unknown with this eye-catching design. Fabric: 20/1 premium cotton yarn. Weight: 210 g/m². Knit: Suprem. Style: Oversized. Stitching: Cotton thread. Collar: 95% cotton, 5% Lycra 1:1 rib. Back print: Screen printing with 100% natural fabric dye. Cotton heat pressing. Front embroidery: Three-color raised industrial embroidery. Care: Wash inside out at 30°C.",
+        "colors": [
+            {
+                "name": "White",
+                "images": [
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/c693cb29-2fc6-48a7-8ac8-f2dc8455f6ca/1080/diceonbeyaz342543.webp",
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/4064e775-e49a-4c0e-9025-a3a00052c4be/1080/dice-arka-beyaz.webp"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 5
+                    },
+                    {
+                        "size": "S",
+                        "stock": 8
+                    },
+                    {
+                        "size": "M",
+                        "stock": 6
+                    },
+                    {
+                        "size": "L",
+                        "stock": 0
+                    }
+                ]
+            },
+            {
+                "name": "Black",
+                "images": [
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/de4be843-4037-4139-bb9e-6fa0ec545782/1080/dice-on-final-siyah.webp",
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/1ecae220-410b-4699-9543-69d94841826d/1080/dice-arka-final.webp"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 0
+                    },
+                    {
+                        "size": "S",
+                        "stock": 5
+                    },
+                    {
+                        "size": "M",
+                        "stock": 0
+                    },
+                    {
+                        "size": "L",
+                        "stock": 10
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "oversized",
+            "casual",
+            "cotton"
+        ]
+    },
+    {
+        "id": "dayiuse-003",
+        "store": "Dayifuse Fashion",
+        "name": "WOLF T-SHIRT",
+        "category": "T-Shirt",
+        "price": 1250,
+        "currency": "TRY",
+        "description": "The Wolf T-Shirt is inspired by the wolf figure, an important symbol in Turkish mythology and a revered emblem of the Turks. Representing power, freedom, and guidance, this figure comes to life surrounded by rich motifs in this design. With carefully crafted details and a blend of past and future, The Wolf T-Shirt is a unique piece carrying historical roots and cultural heritage. Fabric: 20/1 premium cotton yarn. Weight: 210 g/m². Knit: Suprem. Style: Oversized. Stitching: Cotton thread. Collar: 95% cotton, 5% Lycra 1:1 rib. Back print: Screen printing with 100% natural fabric dye. Cotton heat pressing. Front embroidery: Two-color raised industrial embroidery. Care: Wash inside out at 30°C.",
+        "colors": [
+            {
+                "name": "White",
+                "images": [
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/eb0eee37-020c-4f12-82b7-25eefdbc6674/1080/konfusewolfbeyazon.webp",
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/d0f61a68-9d8d-4627-9d82-97eea6b6e1fd/1080/wolfbeyazarkaguncel.webp"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 7
+                    },
+                    {
+                        "size": "S",
+                        "stock": 12
+                    },
+                    {
+                        "size": "M",
+                        "stock": 0
+                    },
+                    {
+                        "size": "L",
+                        "stock": 0
+                    }
+                ]
+            },
+            {
+                "name": "Black",
+                "images": [
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/eafbe116-3383-451d-a7f4-b06787d06155/1080/wolf-siyah-on2.webp",
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/5f881986-c9a0-4753-95f2-78b4ab0a8477/1080/wolfarkasiyahv1.webp"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 0
+                    },
+                    {
+                        "size": "S",
+                        "stock": 9
+                    },
+                    {
+                        "size": "M",
+                        "stock": 3
+                    },
+                    {
+                        "size": "L",
+                        "stock": 0
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "oversized",
+            "casual",
+            "cotton"
+        ]
+    },
+    {
+        "id": "dayiuse-004",
+        "store": "Dayifuse Fashion",
+        "name": "STRIPED HYENA T-SHIRT",
+        "category": "T-Shirt",
+        "price": 1250,
+        "currency": "TRY",
+        "description": "Inspired by the striped hyena that quietly survives in the mysterious wilderness of Anatolia, this design is carefully crafted to reflect the character and spirit of this resilient and unique creature. Aiming to raise awareness for the preservation of nature, each detail of this piece mirrors the hyena’s distinctive stripes and essence. Brought to life with a thoughtful touch, this garment carries traces of a profound past. Fabric: 20/1 premium cotton yarn. Weight: 210 g/m². Knit: Suprem. Style: Oversized. Stitching: Cotton thread. Collar: 95% cotton, 5% Lycra 1:1 rib. Back print: Screen printing with 100% natural fabric dye. Cotton heat pressing. Front embroidery: Three-color raised industrial embroidery. Care: Wash inside out at 30°C.",
+        "colors": [
+            {
+                "name": "Black",
+                "images": [
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/a2baaec0-6c6a-4e1e-a59b-faaa884b7b2f/1080/hyenaonsiyah.webp",
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/abe9d1be-2bbe-4e19-a827-0b9b3be59049/1080/hyenamockup5464.webp"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 5
+                    },
+                    {
+                        "size": "S",
+                        "stock": 9
+                    },
+                    {
+                        "size": "M",
+                        "stock": 3
+                    },
+                    {
+                        "size": "L",
+                        "stock": 2
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "oversized",
+            "casual",
+            "cotton"
+        ]
+    },
+    {
+        "id": "dayiuse-005",
+        "store": "Dayifuse Fashion",
+        "name": "ANATOLIAN PARS HOODIE",
+        "category": "Hoodie",
+        "price": 2450,
+        "currency": "TRY",
+        "description": "Inspired by the rich cultural heritage and wild nature of Anatolia, this design features a striking Anatolian panther on the back, symbolizing the region's strong and free spirit, while reflecting the essence of traditional Anatolian culture. Fabric: 70% cotton, 30% polyester yarn. Knit: 2:2 with 5% Lycra rib. Style: Oversized. Weight: 400 g/m². Stitching: Cotton thread. Back print: Screen printing with 100% natural fabric dye. Front embroidery: Three-color raised industrial embroidery. Care: Wash inside out at 30°C.",
+        "colors": [
+            {
+                "name": "White",
+                "images": [
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/c5b32c8d-8744-49b3-8f5b-0d3cf9c62e70/1080/parshoodie-1.webp",
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/b60cfe71-a82d-4c89-a577-3095c5c78c8f/1080/parshoodie-2.webp"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 4
+                    },
+                    {
+                        "size": "S",
+                        "stock": 0
+                    },
+                    {
+                        "size": "M",
+                        "stock": 30
+                    },
+                    {
+                        "size": "L",
+                        "stock": 12
+                    }
+                ]
+            },
+            {
+                "name": "Black",
+                "images": [
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/3cb89837-458b-456a-9659-b1f61406d2b5/1080/1.webp",
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/1c63ce20-0082-432b-a962-90b0da5ba1b4/1080/2.webp"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 1
+                    },
+                    {
+                        "size": "S",
+                        "stock": 5
+                    },
+                    {
+                        "size": "M",
+                        "stock": 4
+                    },
+                    {
+                        "size": "L",
+                        "stock": 3
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "oversized",
+            "casual",
+            "cotton",
+            "hoodie"
+        ]
+    },
+    {
+        "id": "dayiuse-005",
+        "store": "Dayifuse Fashion",
+        "name": "LOOM HAT",
+        "category": "Hat",
+        "price": 650,
+        "currency": "TRY",
+        "description": "The 'Loom Collection' cap is inspired by traditional carpet motifs, combining classic touches with modern style. Fabric: Fine ribbed velvet. Adjustable metal buckle. Circumference: 58 cm - Visor: 8 cm. Care: Wipe clean.",
+        "colors": [
+            {
+                "name": "Black",
+                "images": [
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/23248362-c5b7-488b-bb69-9bef14a721ab/1080/1.webp",
+                    "https://cdn.myikas.com/images/0b03644a-1913-45a8-805d-79ffa5a00641/75b832ac-af39-4910-9eec-e128ff44aa88/1080/2.webp"
+                ],
+                "variants": [
+                    {
+                        "size": "OneSize",
+                        "stock": 10
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "hat",
+            "velvet",
+            "adjustable",
+            "loom",
+            "accessory"
+        ]
+    }
+]

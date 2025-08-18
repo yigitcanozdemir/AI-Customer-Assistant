@@ -1,0 +1,289 @@
+[
+    {
+        "id": "luna-001",
+        "store": "Luna Apperal",
+        "name": "CREAM RIBBED COZZY SWEATER",
+        "category": "Sweater",
+        "price": 40,
+        "currency": "USD",
+        "description": "A soft cream-colored ribbed cozy sweater, perfect for layering in cooler weather, combining comfort with classic style.",
+        "colors": [
+            {
+                "name": "Cream",
+                "images": [
+                    "https://plus.unsplash.com/premium_photo-1669688174622-0393f5c6baa2"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 3
+                    },
+                    {
+                        "size": "S",
+                        "stock": 2
+                    },
+                    {
+                        "size": "M",
+                        "stock": 0
+                    },
+                    {
+                        "size": "L",
+                        "stock": 8
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "sweater",
+            "cozy",
+            "ribbed",
+            "casual"
+        ]
+    },
+    {
+        "id": "luna-002",
+        "store": "Luna Apperal",
+        "name": "ZIP-UP SLIM BLACK JACKET",
+        "category": "Jacket",
+        "price": 45,
+        "currency": "USD",
+        "description": "A slim black zip-up jacket, designed for versatile layering and modern urban style.",
+        "colors": [
+            {
+                "name": "Black",
+                "images": [
+                    "https://images.unsplash.com/photo-1488161628813-04466f872be2"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 2
+                    },
+                    {
+                        "size": "S",
+                        "stock": 1
+                    },
+                    {
+                        "size": "M",
+                        "stock": 5
+                    },
+                    {
+                        "size": "L",
+                        "stock": 4
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "jacket",
+            "black",
+            "zip-up",
+            "slim"
+        ]
+    },
+    {
+        "id": "luna-003",
+        "store": "Luna Apperal",
+        "name": "VESTED BLACK SET",
+        "category": "Set",
+        "price": 99,
+        "currency": "USD",
+        "description": "A black vest and pants set, perfect for a stylish, coordinated look with modern tailoring.",
+        "colors": [
+            {
+                "name": "Black",
+                "images": [
+                    "https://images.unsplash.com/photo-1599725728598-dc7ed109ff89"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 2
+                    },
+                    {
+                        "size": "S",
+                        "stock": 3
+                    },
+                    {
+                        "size": "M",
+                        "stock": 5
+                    },
+                    {
+                        "size": "L",
+                        "stock": 9
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "set",
+            "black",
+            "tailored",
+            "men"
+        ]
+    },
+    {
+        "id": "luna-004",
+        "store": "Luna Apperal",
+        "name": "BLACK JEAN CARGO PANTS",
+        "category": "Pants",
+        "price": 40,
+        "currency": "USD",
+        "description": "Comfortable black cargo pants in denim, featuring multiple pockets and relaxed fit for everyday wear.",
+        "colors": [
+            {
+                "name": "Black",
+                "images": [
+                    "https://images.unsplash.com/photo-1548883354-7622d03aca27"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 1
+                    },
+                    {
+                        "size": "S",
+                        "stock": 5
+                    },
+                    {
+                        "size": "M",
+                        "stock": 3
+                    },
+                    {
+                        "size": "L",
+                        "stock": 0
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "pants",
+            "cargo",
+            "denim",
+            "casual"
+        ]
+    },
+    {
+        "id": "luna-005",
+        "store": "Luna Apperal",
+        "name": "RELAXED ORANGE T-SHIRT",
+        "category": "T-Shirt",
+        "price": 30,
+        "currency": "USD",
+        "description": "A relaxed-fit light orange t-shirt, perfect for casual summer wear, offering comfort and style.",
+        "colors": [
+            {
+                "name": "Light Orange",
+                "images": [
+                    "https://plus.unsplash.com/premium_photo-1689327920656-bcfe8a9709fa"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 8
+                    },
+                    {
+                        "size": "S",
+                        "stock": 1
+                    },
+                    {
+                        "size": "M",
+                        "stock": 5
+                    },
+                    {
+                        "size": "L",
+                        "stock": 2
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "tshirt",
+            "casual",
+            "summer",
+            "relaxed"
+        ]
+    },
+    {
+        "id": "luna-006",
+        "store": "Luna Apperal",
+        "name": "WHITE COLLAR DETAILED POLO",
+        "category": "Polo Shirt",
+        "price": 35,
+        "currency": "USD",
+        "description": "A classic white-collared polo shirt with refined detailing, suitable for casual or semi-formal settings.",
+        "colors": [
+            {
+                "name": "White",
+                "images": [
+                    "https://images.unsplash.com/photo-1623200693945-ec1e9991039a"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 0
+                    },
+                    {
+                        "size": "S",
+                        "stock": 5
+                    },
+                    {
+                        "size": "M",
+                        "stock": 2
+                    },
+                    {
+                        "size": "L",
+                        "stock": 3
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "polo",
+            "white collar",
+            "casual",
+            "semi-formal"
+        ]
+    },
+    {
+        "id": "luna-007",
+        "store": "Luna Apperal",
+        "name": "GENUINE LEATHER NAVY BACKPACK",
+        "category": "Bag",
+        "price": 45,
+        "currency": "USD",
+        "description": "A genuine navy leather backpack, combining durability with a sleek design, perfect for daily or travel use.",
+        "colors": [
+            {
+                "name": "Navy",
+                "images": [
+                    "https://images.unsplash.com/photo-1665832102447-a853788f620c"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 5
+                    },
+                    {
+                        "size": "S",
+                        "stock": 0
+                    },
+                    {
+                        "size": "M",
+                        "stock": 1
+                    },
+                    {
+                        "size": "L",
+                        "stock": 2
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "bag",
+            "leather",
+            "backpack",
+            "men"
+        ]
+    }
+]

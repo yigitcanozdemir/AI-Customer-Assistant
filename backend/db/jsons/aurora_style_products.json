@@ -1,0 +1,374 @@
+[
+    {
+        "id": "aurora-001",
+        "store": "Aurora Style",
+        "name": "CHARCOAL LINEN SUMMER JUMPSUIT",
+        "category": "Jumpsuit",
+        "price": 60,
+        "currency": "USD",
+        "description": "A breathable charcoal linen jumpsuit perfect for summer, featuring a relaxed fit and elegant design that combines comfort with style. Ideal for casual and semi-formal occasions.",
+        "colors": [
+            {
+                "name": "Charcoal",
+                "images": [
+                    "https://cdn.pixabay.com/photo/2018/07/22/21/57/fashion-3555645_1280.jpg",
+                    "https://cdn.pixabay.com/photo/2018/07/22/21/56/fashion-3555641_1280.jpg"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 3
+                    },
+                    {
+                        "size": "S",
+                        "stock": 2
+                    },
+                    {
+                        "size": "M",
+                        "stock": 0
+                    },
+                    {
+                        "size": "L",
+                        "stock": 8
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "linen",
+            "summer",
+            "casual",
+            "oversized"
+        ]
+    },
+    {
+        "id": "aurora-002",
+        "store": "Aurora Style",
+        "name": "VESTED SKIRT SET",
+        "category": "Set",
+        "price": 70,
+        "currency": "USD",
+        "description": "A chic vest and skirt set, featuring elegant tailoring and a versatile style suitable for both office and casual outings.",
+        "colors": [
+            {
+                "name": "Neutral",
+                "images": [
+                    "https://cdn.pixabay.com/photo/2018/07/22/21/58/fashion-3555649_1280.jpg",
+                    "https://cdn.pixabay.com/photo/2018/07/22/21/57/fashion-3555646_1280.jpg"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 1
+                    },
+                    {
+                        "size": "S",
+                        "stock": 3
+                    },
+                    {
+                        "size": "M",
+                        "stock": 4
+                    },
+                    {
+                        "size": "L",
+                        "stock": 5
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "set",
+            "elegant",
+            "office",
+            "casual"
+        ]
+    },
+    {
+        "id": "aurora-003",
+        "store": "Aurora Style",
+        "name": "GRAY SHORTS JUMPSUIT",
+        "category": "Jumpsuit",
+        "price": 50,
+        "currency": "USD",
+        "description": "A stylish gray jumpsuit with shorts, perfect for summer outings, offering comfort and a relaxed, contemporary look.",
+        "colors": [
+            {
+                "name": "Gray",
+                "images": [
+                    "https://cdn.pixabay.com/photo/2018/07/22/21/56/woman-3555644_1280.jpg"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 10
+                    },
+                    {
+                        "size": "S",
+                        "stock": 8
+                    },
+                    {
+                        "size": "M",
+                        "stock": 4
+                    },
+                    {
+                        "size": "L",
+                        "stock": 2
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "summer",
+            "casual",
+            "relaxed"
+        ]
+    },
+    {
+        "id": "aurora-004",
+        "store": "Aurora Style",
+        "name": "BLACK BELTED MINI DRESS",
+        "category": "Dress",
+        "price": 55,
+        "currency": "USD",
+        "description": "A sleek black mini dress with belt accent, designed for evening outings or parties, combining elegance with modern style.",
+        "colors": [
+            {
+                "name": "Black",
+                "images": [
+                    "https://cdn.pixabay.com/photo/2018/07/22/21/59/fashion-3555650_1280.jpg",
+                    "https://cdn.pixabay.com/photo/2018/07/22/21/58/fashion-3555648_1280.jpg"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 1
+                    },
+                    {
+                        "size": "S",
+                        "stock": 4
+                    },
+                    {
+                        "size": "M",
+                        "stock": 2
+                    },
+                    {
+                        "size": "L",
+                        "stock": 0
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "party",
+            "mini",
+            "belted",
+            "evening"
+        ]
+    },
+    {
+        "id": "aurora-005",
+        "store": "Aurora Style",
+        "name": "FUSCHIA RELAXED SET",
+        "category": "Set",
+        "price": 70,
+        "currency": "USD",
+        "description": "A fuschia-colored relaxed set, combining comfort and style, perfect for casual outings or lounging in elegance.",
+        "colors": [
+            {
+                "name": "Fuschia",
+                "images": [
+                    "https://cdn.pixabay.com/photo/2018/06/25/17/03/fashion-3497411_1280.jpg"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 0
+                    },
+                    {
+                        "size": "S",
+                        "stock": 2
+                    },
+                    {
+                        "size": "M",
+                        "stock": 10
+                    },
+                    {
+                        "size": "L",
+                        "stock": 6
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "casual",
+            "relaxed",
+            "set",
+            "fuschia"
+        ]
+    },
+    {
+        "id": "aurora-006",
+        "store": "Aurora Style",
+        "name": "GREEN BACKLESS DRESS",
+        "category": "Dress",
+        "price": 80,
+        "currency": "USD",
+        "description": "A stunning green backless dress, highlighting elegance and boldness, suitable for evening events or summer parties.",
+        "colors": [
+            {
+                "name": "Green",
+                "images": [
+                    "https://cdn.pixabay.com/photo/2018/06/25/17/01/fashion-3497404_960_720.jpg",
+                    "https://cdn.pixabay.com/photo/2018/06/25/17/00/fashion-3497400_1280.jpg"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 7
+                    },
+                    {
+                        "size": "S",
+                        "stock": 3
+                    },
+                    {
+                        "size": "M",
+                        "stock": 4
+                    },
+                    {
+                        "size": "L",
+                        "stock": 5
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "evening",
+            "backless",
+            "party",
+            "dress"
+        ]
+    },
+    {
+        "id": "aurora-007",
+        "store": "Aurora Style",
+        "name": "CINNAMON FRONT ZIP DRESS",
+        "category": "Dress",
+        "price": 59,
+        "currency": "USD",
+        "description": "A cinnamon-colored dress with front zipper, combining modern details with a classic silhouette, perfect for day and night occasions.",
+        "colors": [
+            {
+                "name": "Cinnamon",
+                "images": [
+                    "https://cdn.pixabay.com/photo/2018/06/25/17/01/fashion-3497408_960_720.jpg"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 3
+                    },
+                    {
+                        "size": "S",
+                        "stock": 1
+                    },
+                    {
+                        "size": "M",
+                        "stock": 5
+                    },
+                    {
+                        "size": "L",
+                        "stock": 0
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "zipper",
+            "dress",
+            "modern",
+            "cinnamon"
+        ]
+    },
+    {
+        "id": "aurora-008",
+        "store": "Aurora Style",
+        "name": "RUFFLED SLEEVE SKIRT SET",
+        "category": "Set",
+        "price": 59,
+        "currency": "USD",
+        "description": "A playful set with ruffled sleeves and slit skirt, adding charm and elegance to your casual or semi-formal wardrobe.",
+        "colors": [
+            {
+                "name": "Neutral",
+                "images": [
+                    "https://cdn.pixabay.com/photo/2018/06/25/17/01/fashion-3497403_960_720.jpg"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 10
+                    },
+                    {
+                        "size": "S",
+                        "stock": 7
+                    },
+                    {
+                        "size": "M",
+                        "stock": 3
+                    },
+                    {
+                        "size": "L",
+                        "stock": 5
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "ruffle",
+            "skirt",
+            "set",
+            "casual"
+        ]
+    },
+    {
+        "id": "aurora-009",
+        "store": "Aurora Style",
+        "name": "DEEP NECK MURDUM TOP",
+        "category": "Top",
+        "price": 40,
+        "currency": "USD",
+        "description": "A deep-neck murdum-colored top, featuring elegant tailoring and a relaxed fit, ideal for casual or semi-formal occasions.",
+        "colors": [
+            {
+                "name": "Murdum",
+                "images": [
+                    "https://cdn.pixabay.com/photo/2018/06/25/17/02/fashion-3497410_1280.jpg"
+                ],
+                "variants": [
+                    {
+                        "size": "XS",
+                        "stock": 2
+                    },
+                    {
+                        "size": "S",
+                        "stock": 0
+                    },
+                    {
+                        "size": "M",
+                        "stock": 3
+                    },
+                    {
+                        "size": "L",
+                        "stock": 2
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "top",
+            "deep neck",
+            "casual",
+            "murdum"
+        ]
+    }
+]

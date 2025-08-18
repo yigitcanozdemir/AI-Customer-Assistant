@@ -1,0 +1,526 @@
+[
+    {
+        "id": "celeste-001",
+        "store": "Celeste Wear",
+        "name": "ETHNIC EMBROIDERED RED HEEL",
+        "category": "Woman Shoes",
+        "price": 80,
+        "currency": "USD",
+        "description": "A red high-heeled shoe with ethnic embroidery, perfect for adding a bold statement to your outfit.",
+        "colors": [
+            {
+                "name": "Red",
+                "images": [
+                    "https://cdn.pixabay.com/photo/2016/03/27/22/16/fashion-1284496_1280.jpg"
+                ],
+                "variants": [
+                    {
+                        "size": "5",
+                        "stock": 5
+                    },
+                    {
+                        "size": "5.5",
+                        "stock": 5
+                    },
+                    {
+                        "size": "6",
+                        "stock": 2
+                    },
+                    {
+                        "size": "6.5",
+                        "stock": 3
+                    },
+                    {
+                        "size": "7",
+                        "stock": 1
+                    },
+                    {
+                        "size": "7.5",
+                        "stock": 1
+                    },
+                    {
+                        "size": "8",
+                        "stock": 1
+                    },
+                    {
+                        "size": "8.5",
+                        "stock": 1
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "heels",
+            "red",
+            "embroidered",
+            "women"
+        ]
+    },
+    {
+        "id": "celeste-002",
+        "store": "Celeste Wear",
+        "name": "GENUINE LEATHER BLACK-BROWN OXFORDS",
+        "category": "Man Shoes",
+        "price": 60,
+        "currency": "USD",
+        "description": "Classic genuine leather black and brown oxford shoes, ideal for formal and office wear.",
+        "colors": [
+            {
+                "name": "Black/Brown",
+                "images": [
+                    "https://cdn.pixabay.com/photo/2021/03/06/07/26/brogue-shoes-6072988_1280.jpg"
+                ],
+                "variants": [
+                    {
+                        "size": "8",
+                        "stock": 3
+                    },
+                    {
+                        "size": "8.5",
+                        "stock": 5
+                    },
+                    {
+                        "size": "9",
+                        "stock": 6
+                    },
+                    {
+                        "size": "9.5",
+                        "stock": 2
+                    },
+                    {
+                        "size": "10",
+                        "stock": 1
+                    },
+                    {
+                        "size": "10.5",
+                        "stock": 4
+                    },
+                    {
+                        "size": "11",
+                        "stock": 7
+                    },
+                    {
+                        "size": "11.5",
+                        "stock": 2
+                    },
+                    {
+                        "size": "12",
+                        "stock": 1
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "oxfords",
+            "leather",
+            "formal",
+            "men"
+        ]
+    },
+    {
+        "id": "celeste-003",
+        "store": "Celeste Wear",
+        "name": "SHINY BLACK LEATHER OXFORDS",
+        "category": "Man Shoes",
+        "price": 70,
+        "currency": "USD",
+        "description": "Shiny black leather oxford shoes, elegant and versatile for both formal and smart-casual occasions.",
+        "colors": [
+            {
+                "name": "Black",
+                "images": [
+                    "https://cdn.pixabay.com/photo/2017/08/20/10/28/leather-shoes-2661198_1280.jpg"
+                ],
+                "variants": [
+                    {
+                        "size": "8",
+                        "stock": 3
+                    },
+                    {
+                        "size": "8.5",
+                        "stock": 4
+                    },
+                    {
+                        "size": "9",
+                        "stock": 5
+                    },
+                    {
+                        "size": "9.5",
+                        "stock": 1
+                    },
+                    {
+                        "size": "10",
+                        "stock": 0
+                    },
+                    {
+                        "size": "10.5",
+                        "stock": 2
+                    },
+                    {
+                        "size": "11",
+                        "stock": 0
+                    },
+                    {
+                        "size": "11.5",
+                        "stock": 3
+                    },
+                    {
+                        "size": "12",
+                        "stock": 4
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "oxfords",
+            "black",
+            "leather",
+            "formal"
+        ]
+    },
+    {
+        "id": "celeste-004",
+        "store": "Celeste Wear",
+        "name": "FLOWER EMBROIDERED CREAM HEELS",
+        "category": "Woman Shoes",
+        "price": 75,
+        "currency": "USD",
+        "description": "Short-heeled shoes in cream color with delicate floral embroidery, ideal for elegant occasions.",
+        "colors": [
+            {
+                "name": "Cream",
+                "images": [
+                    "https://cdn.pixabay.com/photo/2023/06/05/16/43/wedding-shoes-8042773_1280.jpg"
+                ],
+                "variants": [
+                    {
+                        "size": "5",
+                        "stock": 10
+                    },
+                    {
+                        "size": "5.5",
+                        "stock": 8
+                    },
+                    {
+                        "size": "6",
+                        "stock": 3
+                    },
+                    {
+                        "size": "6.5",
+                        "stock": 4
+                    },
+                    {
+                        "size": "7",
+                        "stock": 0
+                    },
+                    {
+                        "size": "7.5",
+                        "stock": 0
+                    },
+                    {
+                        "size": "8",
+                        "stock": 3
+                    },
+                    {
+                        "size": "8.5",
+                        "stock": 5
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "heels",
+            "cream",
+            "embroidered",
+            "women"
+        ]
+    },
+    {
+        "id": "celeste-005",
+        "store": "Celeste Wear",
+        "name": "TOOTHED BLACK LEATHER WOMEN'S LOAFER",
+        "category": "Woman Shoes",
+        "price": 60,
+        "currency": "USD",
+        "description": "Black leather women's loafer with a textured sole, combining comfort and style for everyday wear.",
+        "colors": [
+            {
+                "name": "Black",
+                "images": [
+                    "https://plus.unsplash.com/premium_photo-1695604461285-09f2cf47ec80"
+                ],
+                "variants": [
+                    {
+                        "size": "5",
+                        "stock": 0
+                    },
+                    {
+                        "size": "5.5",
+                        "stock": 4
+                    },
+                    {
+                        "size": "6",
+                        "stock": 3
+                    },
+                    {
+                        "size": "6.5",
+                        "stock": 2
+                    },
+                    {
+                        "size": "7",
+                        "stock": 4
+                    },
+                    {
+                        "size": "7.5",
+                        "stock": 0
+                    },
+                    {
+                        "size": "8",
+                        "stock": 5
+                    },
+                    {
+                        "size": "8.5",
+                        "stock": 8
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "loafer",
+            "black",
+            "leather",
+            "women"
+        ]
+    },
+    {
+        "id": "celeste-006",
+        "store": "Celeste Wear",
+        "name": "ANKLE-TIE RED EVENING HEELS",
+        "category": "Woman Shoes",
+        "price": 75,
+        "currency": "USD",
+        "description": "Red evening heels with ankle ties, perfect for a glamorous and confident look.",
+        "colors": [
+            {
+                "name": "Red",
+                "images": [
+                    "https://plus.unsplash.com/premium_photo-1673977133185-a460c4744cec"
+                ],
+                "variants": [
+                    {
+                        "size": "5",
+                        "stock": 12
+                    },
+                    {
+                        "size": "5.5",
+                        "stock": 3
+                    },
+                    {
+                        "size": "6",
+                        "stock": 4
+                    },
+                    {
+                        "size": "6.5",
+                        "stock": 5
+                    },
+                    {
+                        "size": "7",
+                        "stock": 6
+                    },
+                    {
+                        "size": "7.5",
+                        "stock": 9
+                    },
+                    {
+                        "size": "8",
+                        "stock": 4
+                    },
+                    {
+                        "size": "8.5",
+                        "stock": 5
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "heels",
+            "red",
+            "evening",
+            "women"
+        ]
+    },
+    {
+        "id": "celeste-007",
+        "store": "Celeste Wear",
+        "name": "SHINY LEATHER HIGH HEEL BOOTS",
+        "category": "Woman Shoes",
+        "price": 70,
+        "currency": "USD",
+        "description": "High-heeled shiny leather boots, a statement piece for fashionable women.",
+        "colors": [
+            {
+                "name": "Black",
+                "images": [
+                    "https://plus.unsplash.com/premium_photo-1671379100088-ea688f5cd763"
+                ],
+                "variants": [
+                    {
+                        "size": "5",
+                        "stock": 0
+                    },
+                    {
+                        "size": "5.5",
+                        "stock": 2
+                    },
+                    {
+                        "size": "6",
+                        "stock": 3
+                    },
+                    {
+                        "size": "6.5",
+                        "stock": 5
+                    },
+                    {
+                        "size": "7",
+                        "stock": 6
+                    },
+                    {
+                        "size": "7.5",
+                        "stock": 2
+                    },
+                    {
+                        "size": "8",
+                        "stock": 3
+                    },
+                    {
+                        "size": "8.5",
+                        "stock": 4
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "boots",
+            "high heel",
+            "black",
+            "women"
+        ]
+    },
+    {
+        "id": "celeste-008",
+        "store": "Celeste Wear",
+        "name": "WOMEN'S HEEL SANDALS",
+        "category": "Woman Shoes",
+        "price": 60,
+        "currency": "USD",
+        "description": "Classic women's heel sandals, easy to wear and versatile for both casual and formal occasions.",
+        "colors": [
+            {
+                "name": "Beige",
+                "images": [
+                    "https://plus.unsplash.com/premium_photo-1711051513016-72baa1035293"
+                ],
+                "variants": [
+                    {
+                        "size": "5",
+                        "stock": 4
+                    },
+                    {
+                        "size": "5.5",
+                        "stock": 2
+                    },
+                    {
+                        "size": "6",
+                        "stock": 0
+                    },
+                    {
+                        "size": "6.5",
+                        "stock": 0
+                    },
+                    {
+                        "size": "7",
+                        "stock": 5
+                    },
+                    {
+                        "size": "7.5",
+                        "stock": 2
+                    },
+                    {
+                        "size": "8",
+                        "stock": 5
+                    },
+                    {
+                        "size": "8.5",
+                        "stock": 1
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "heels",
+            "sandals",
+            "women"
+        ]
+    },
+    {
+        "id": "celeste-009",
+        "store": "Celeste Wear",
+        "name": "SOFT SUEDE MEN'S BOOTS",
+        "category": "Man Shoes",
+        "price": 80,
+        "currency": "USD",
+        "description": "Soft suede men's boots, comfortable and stylish for casual or semi-formal wear.",
+        "colors": [
+            {
+                "name": "Brown",
+                "images": [
+                    "https://plus.unsplash.com/premium_photo-1670983858132-c2f3c4dbf08c"
+                ],
+                "variants": [
+                    {
+                        "size": "8",
+                        "stock": 2
+                    },
+                    {
+                        "size": "8.5",
+                        "stock": 1
+                    },
+                    {
+                        "size": "9",
+                        "stock": 2
+                    },
+                    {
+                        "size": "9.5",
+                        "stock": 5
+                    },
+                    {
+                        "size": "10",
+                        "stock": 5
+                    },
+                    {
+                        "size": "10.5",
+                        "stock": 5
+                    },
+                    {
+                        "size": "11",
+                        "stock": 5
+                    },
+                    {
+                        "size": "11.5",
+                        "stock": 5
+                    },
+                    {
+                        "size": "12",
+                        "stock": 5
+                    }
+                ]
+            }
+        ],
+        "tags": [
+            "boots",
+            "suede",
+            "men",
+            "casual"
+        ]
+    }
+]

@@ -3,35 +3,24 @@
         "store": "Aurora Styles",
         "policies": [
             {
-                "title": "Aurora Shipping Guidelines",
-                "content": "Orders cannot be edited or canceled after payment is confirmed. Please ensure your shipping info is accurate — packages sent to incorrect addresses may be returned and restocking fees may apply. 🌟"
+                "question": "Can I edit or cancel my order after payment?",
+                "answer": "Orders cannot be edited or canceled once payment is confirmed. Please ensure your shipping information is correct — packages sent to incorrect addresses may be returned and restocking fees may apply."
             },
             {
-                "title": "Delivery Methods",
-                "content": [
-                    {
-                        "method": "Standard",
-                        "charge": "$6.50",
-                        "order_by": "2:00 PM CT",
-                        "delivery": "3 to 5 business days. Reliable and economical."
-                    },
-                    {
-                        "method": "Fast Track",
-                        "charge": "$21",
-                        "order_by": "2:00 PM CT",
-                        "delivery": "2 to 3 business days. For when you just can’t wait."
-                    },
-                    {
-                        "method": "Next-Day",
-                        "charge": "$29",
-                        "order_by": "12:00 PM CT",
-                        "delivery": "1 to 2 business days. Lightning speed for urgent needs."
-                    }
-                ]
+                "question": "What are the details for standard delivery?",
+                "answer": "Standard delivery costs $6.50. Orders placed by 2:00 PM CT will arrive within 3 to 5 business days. This option is reliable and economical."
             },
             {
-                "title": "Returns Policy",
-                "content": "30-day returns accepted. Exchanges for the same item are free. Refunds to original payment method have a $7.95 processing fee. Damaged or defective items? Contact Customer Support within 3 days with a photo — we’ll make it right, guaranteed. Multiple items in one return? Bundle them carefully with all slips and boxes included."
+                "question": "What are the details for Fast Track delivery?",
+                "answer": "Fast Track delivery costs $21. Orders placed by 2:00 PM CT will arrive within 2 to 3 business days. Perfect when you can’t wait."
+            },
+            {
+                "question": "What are the details for Next-Day delivery?",
+                "answer": "Next-Day delivery costs $29. Orders placed by 12:00 PM CT will arrive within 1 to 2 business days. Ideal for urgent needs."
+            },
+            {
+                "question": "What is Aurora Styles’ returns policy?",
+                "answer": "Returns are accepted within 30 days. Exchanges for the same item are free. Refunds to the original payment method have a $7.95 processing fee. Damaged or defective items must be reported to Customer Support within 3 days with a photo for resolution. Multiple items in one return must be bundled together with all slips and boxes included."
             }
         ]
     }

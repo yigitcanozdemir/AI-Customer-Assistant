@@ -32,13 +32,12 @@ class Product(Base):
         unique=True,
         nullable=False,
     )
-    store = Column(String(100), nullable=False, index=True)
-    title = Column(Text, nullable=False)
-    handle = Column(String(255), nullable=True)
-    body_html = Column(Text, nullable=True)
-    vendor = Column(String(255), nullable=True)
-    product_type = Column(String(255), nullable=True)
-    tags = Column(PG_ARRAY(String), nullable=True)
+    store = Column(String(100), nullable=False, index=False)
+    name = Column(Text, nullable=False)
+    price = Column(Numeric(10, 2), nullable=False)
+    currency = Column(String(10), nullable=False)
+    description = Column(Text, nullable=False)
+    tags = Column(ARRAY(String), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
 
@@ -65,17 +64,9 @@ class Variant(Base):
         nullable=False,
         index=True,
     )
-    title = Column(String(255), nullable=False)
-    option1 = Column(String(255), nullable=True)
-    option2 = Column(String(255), nullable=True)
-    option3 = Column(String(255), nullable=True)
-    sku = Column(String(255), nullable=True)
-    requires_shipping = Column(Boolean, nullable=True)
-    taxable = Column(Boolean, nullable=True)
-    available = Column(Boolean, nullable=True)
+    color = Column(String(50), nullable=False)
+    size = Column(String(20), nullable=False)
     stock = Column(Integer, default=0)
-    price = Column(Numeric(10, 2), nullable=True)
-    grams = Column(Integer, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
 
@@ -98,8 +89,7 @@ class Image(Base):
         nullable=False,
         index=True,
     )
-    position = Column(Integer, nullable=True)
-    src = Column(Text, nullable=False)
+    url = Column(Text, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
 
@@ -122,8 +112,7 @@ class Embedding(Base):
         nullable=False,
         index=True,
     )
-    content_type = Column(String(50), nullable=False)
-    content = Column(Text, nullable=True)
+    description = Column(Text, nullable=False)
     embedding = Column(Vector(1536), nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
@@ -140,9 +129,8 @@ class FAQ(Base):
         unique=True,
         nullable=False,
     )
-    store = Column(String(100), nullable=False, index=True)
-    content = Column(Text, nullable=True)
-
+    store = Column(String(100), nullable=False, index=False)
+    content = Column(Text, nullable=False)
     embedding = Column(Vector(1536), nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())

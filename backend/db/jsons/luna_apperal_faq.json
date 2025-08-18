@@ -3,39 +3,28 @@
         "store": "Luna Apparel",
         "policies": [
             {
-                "title": "Luna Shipping Info",
-                "content": "All sales are final after checkout. No changes, modifications, or cancellations allowed. Check your cart twice (Santa style) before you hit that button! 🎁"
+                "question": "Can I modify or cancel my order after checkout?",
+                "answer": "All sales are final after checkout. No changes, modifications, or cancellations are allowed. Please double-check your cart before placing your order."
             },
             {
-                "title": "Shipping Options",
-                "content": [
-                    {
-                        "method": "Standard",
-                        "charge": "$7.00",
-                        "order_by": "1:00 PM PT",
-                        "delivery": "3 to 5 business days. Reliable and budget-friendly."
-                    },
-                    {
-                        "method": "Priority",
-                        "charge": "$22",
-                        "order_by": "1:00 PM PT",
-                        "delivery": "2 business days. Because sometimes patience is overrated."
-                    },
-                    {
-                        "method": "Overnight",
-                        "charge": "$32",
-                        "order_by": "11:00 AM PT",
-                        "delivery": "1 business day. Your order arrives practically before you even finish your coffee."
-                    }
-                ]
+                "question": "What are the standard shipping details?",
+                "answer": "Standard shipping costs $7.00. Orders placed by 1:00 PM PT will be delivered within 3 to 5 business days. Reliable and budget-friendly."
             },
             {
-                "title": "Returns & Exchanges",
-                "content": "30-day hassle-free returns. Prefer store credit? Instant, no waiting. Refunds are processed within 7-10 business days after arrival at our warehouse (processing fee applies). Exchanges for the right size or style are free — because we believe shopping should be fun, not stressful. 🎉 Damaged items? Send us a pic within 3 days and we’ll fix it fast."
+                "question": "What are the priority shipping details?",
+                "answer": "Priority shipping costs $22. Orders placed by 1:00 PM PT will arrive within 2 business days. Perfect when you don’t want to wait."
             },
             {
-                "title": "Final Notes",
-                "content": "Final Sale items cannot be returned. Lighting, screen settings, and slight fabric variations are natural and part of the charm — not defects. Always double-check your order before confirming!"
+                "question": "What are the overnight shipping details?",
+                "answer": "Overnight shipping costs $32. Orders placed by 11:00 AM PT will be delivered the next business day. Fast enough to beat your morning coffee!"
+            },
+            {
+                "question": "What is Luna Apparel’s returns and exchanges policy?",
+                "answer": "We offer 30-day hassle-free returns. Store credit is issued instantly, while refunds are processed within 7-10 business days after the item arrives at our warehouse (processing fee applies). Exchanges for size or style are free. For damaged items, send us a picture within 3 days and we’ll resolve it quickly."
+            },
+            {
+                "question": "Are there items that cannot be returned?",
+                "answer": "Final Sale items cannot be returned. Please note: lighting, screen settings, and slight fabric variations are natural and not considered defects. Always review your order before confirming."
             }
         ]
     }

@@ -21,55 +21,65 @@ async def process_product_embeddings(session, product_data, store):
     product = await create_product(
         session,
         store=store,
-        title=product_data["title"],
-        handle=product_data["handle"],
-        body_html=product_data.get("body_html") or None,
-        vendor=product_data.get("vendor") or None,
-        product_type=product_data.get("product_type") or None,
+        name=product_data["name"],
+        price=product_data.get("price"),
+        currency=product_data.get("currency"),
+        description=product_data.get("description") or None,
         tags=product_data.get("tags", []) or None,
     )
 
     variants_data = []
-    for v in product_data.get("variants", []):
-        stock_value = random.randint(10, 100) if v.get("available") else 0
-        variants_data.append(
-            {
-                "product_id": product.id,
-                "title": v.get("title"),
-                "option1": v.get("option1"),
-                "option2": v.get("option2"),
-                "option3": v.get("option3"),
-                "sku": v.get("sku"),
-                "requires_shipping": v.get("requires_shipping"),
-                "taxable": v.get("taxable"),
-                "available": v.get("available"),
-                "stock": stock_value,
-                "price": float(v["price"]) if v.get("price") else None,
-                "grams": v.get("grams"),
-            }
-        )
+    images_data = []
+
+
+async def process_product_embeddings(session, product_data, store):
+
+    product = await create_product(
+        session,
+        store=store,
+        name=product_data["name"],
+        price=product_data.get("price"),
+        currency=product_data.get("currency"),
+        description=product_data.get("description") or None,
+        tags=product_data.get("tags", []) or None,
+    )
+
+    variants_data = []
+    images_data = []
+
+    for color in product_data.get("colors", []):
+        color_name = color.get("name")
+
+        for v in color.get("variants", []):
+            variants_data.append(
+                {
+                    "product_id": product.id,
+                    "color": color_name,
+                    "size": v.get("size"),
+                    "stock": v.get("stock"),
+                }
+            )
+
+        for img_url in color.get("images", []):
+            images_data.append(
+                {
+                    "product_id": product.id,
+                    "url": img_url,
+                }
+            )
+
     if variants_data:
         await create_variants(session, variants_data)
-
-    images_data = [
-        {
-            "product_id": product.id,
-            "position": img.get("position"),
-            "src": img.get("src", ""),
-        }
-        for img in product_data.get("images", [])
-    ]
     if images_data:
         await create_images(session, images_data)
 
-    if product.body_html and product.body_html.strip():
+    if product.description and product.description.strip():
         try:
-            embedding_vector = await create_embedding(product.body_html)
+            embedding_vector = await create_embedding(product.description)
             await create_product_embedding(
                 session,
                 product_id=product.id,
-                content_type="body_html_chunk",
-                content=product.body_html,
+                description=product.description,
                 embedding=embedding_vector,
             )
         except Exception as e:
@@ -79,7 +89,7 @@ async def process_product_embeddings(session, product_data, store):
 
 
 async def process_faq_embeddings(session, faq_data, store):
-    chunker = HybridChunker(tokenizer=tokenizer, max_tokens=585, merge_peers=True)
+    chunker = HybridChunker(tokenizer=tokenizer, max_tokens=600, merge_peers=True)
     chunks = list(chunker.chunk(dl_doc=faq_data.document))
     faq_entries = []
 
