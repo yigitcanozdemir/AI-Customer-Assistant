@@ -204,9 +204,8 @@ export default function ElegantFashionAssistant() {
     try {
       const eventPayload = {
         event_id: `chat_${Date.now()}`,
-        event_type: "chat",
         event_data: {
-          question: content, store: "pinklily"
+          question: content, store: "pinklily", message_history: [...messages]
         }
         
       }

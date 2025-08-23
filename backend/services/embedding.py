@@ -1,9 +1,10 @@
 import asyncio
 import logging
 from openai import AsyncOpenAI
+from backend.config import settings
 
 logger = logging.getLogger(__name__)
-client = AsyncOpenAI()
+client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 MAX_RETRIES = 3
 EMBEDDING_MODEL = "text-embedding-3-small"

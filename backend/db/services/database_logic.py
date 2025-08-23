@@ -31,22 +31,6 @@ async def process_product_embeddings(session, product_data, store):
     variants_data = []
     images_data = []
 
-
-async def process_product_embeddings(session, product_data, store):
-
-    product = await create_product(
-        session,
-        store=store,
-        name=product_data["name"],
-        price=product_data.get("price"),
-        currency=product_data.get("currency"),
-        description=product_data.get("description") or None,
-        tags=product_data.get("tags", []) or None,
-    )
-
-    variants_data = []
-    images_data = []
-
     for color in product_data.get("colors", []):
         color_name = color.get("name")
 
