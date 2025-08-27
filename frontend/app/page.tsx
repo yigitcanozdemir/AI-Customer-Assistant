@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Send, Package, RotateCcw, Sparkles, Star, Heart, Search, MessageCircle, X } from "lucide-react"
-
+import { v4 as uuidv4 } from "uuid"
 interface Message {
   id: string
   type: "user" | "assistant"
@@ -22,6 +22,7 @@ interface Product {
   name: string
   price: number
   originalPrice?: number
+  currency?: string
   image: string
   rating: number
   category: string
@@ -39,6 +40,7 @@ export default function ElegantFashionAssistant() {
   const [isTyping, setIsTyping] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [sessionId, setSessionId] = useState<string>("")
   const elegantDresses: Product[] = [
     {
       id: "nataya-001",
@@ -133,7 +135,11 @@ export default function ElegantFashionAssistant() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
-
+  useEffect(() => {
+    const id = localStorage.getItem("chat_session_id") || uuidv4()
+    localStorage.setItem("chat_session_id", id)
+    setSessionId(id)
+  }, [])
 
   useEffect(() => {
     if (isAssistantOpen) {
@@ -202,10 +208,11 @@ export default function ElegantFashionAssistant() {
     setIsTyping(true)
 
     try {
+
       const eventPayload = {
-        event_id: `chat_${Date.now()}`,
+        event_id: sessionId,
         event_data: {
-          question: content, store: "pinklily", message_history: [...messages]
+          question: content, store: "pinklily"
         }
         
       }
@@ -227,7 +234,7 @@ export default function ElegantFashionAssistant() {
       console.log("Backend response:", JSON.stringify(data, null, 2))
       console.log("Content type:", typeof data)
       const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: uuidv4(),
         type: "assistant",
         content: data.content || "I'm sorry, I didn't receive a proper response.",
         timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
@@ -241,7 +248,7 @@ export default function ElegantFashionAssistant() {
       console.error("API error:", error)
       setIsTyping(false)
       setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
+        id: uuidv4(),
         type: "assistant",
         content: "Sorry, I'm having trouble connecting right now. Please try again in a moment.",
         timestamp: new Date(),

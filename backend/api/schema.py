@@ -7,6 +7,7 @@ class ProductVariant(BaseModel):
     color: Optional[str] = None
     size: Optional[str] = None
     stock: int = 0
+    available: bool = False
 
 
 class Product(BaseModel):
@@ -15,11 +16,9 @@ class Product(BaseModel):
     description: str = ""
     price: float = 0.0
     currency: str = "USD"
-    rating: int = 0
-    category: str = "General"
     inStock: bool = False
-    image: str = "/placeholder-image.jpg"  # Required single image field
-    images: List[str] = Field(default_factory=list)  # Additional images
+    image: str = "/placeholder-image.jpg"
+    images: List[str] = Field(default_factory=list)
     variants: List[ProductVariant] = Field(default_factory=list)
     sizes: List[str] = Field(default_factory=list)
     colors: List[str] = Field(default_factory=list)
@@ -45,7 +44,6 @@ class Message(BaseModel):
 class ChatEventData(BaseModel):
     question: str
     store: Optional[str] = None
-    message_history: List[Message]
 
 
 class EventSchema(BaseModel):

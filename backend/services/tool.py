@@ -3,12 +3,17 @@ from sqlalchemy.orm import joinedload
 from backend.db.session import get_session
 from backend.db.schema import Product, Variant, Embedding
 from backend.services.embedding import create_embedding
+from backend.api.schema import (
+    Product as ProductModel,
+    ProductVariant as ProductVariantModel,
+)
+
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-async def product_search(query: str, top_k: int = 5):
+async def product_search(query: str, top_k: int = 3):
     try:
         embedding_vector = await create_embedding(query)
 
@@ -51,72 +56,61 @@ async def product_search(query: str, top_k: int = 5):
                 images = [img.url for img in product.images] if product.images else []
                 primary_image = images[0] if images else "/placeholder-image.jpg"
 
-                formatted_product = {
-                    "id": str(product.id),
-                    "name": product.name,
-                    "description": product.description or "",
-                    "price": (
+                variants = (
+                    [
+                        ProductVariantModel(
+                            color=v.color,
+                            size=v.size,
+                            stock=v.stock,
+                            available=v.stock > 0,
+                        )
+                        for v in product.variants
+                    ]
+                    if product.variants
+                    else []
+                )
+
+                product_obj = ProductModel(
+                    id=str(product.id),
+                    name=product.name,
+                    description=product.description or "",
+                    price=(
                         float(product.price)
                         if hasattr(product, "price") and product.price
                         else 0.0
                     ),
-                    "currency": (
-                        product.currency if hasattr(product, "currency") else "USD"
-                    ),
-                    "rating": 0,
-                    "category": getattr(product, "category", "General"),
-                    "inStock": (
-                        any(v.stock > 0 for v in product.variants)
-                        if product.variants
-                        else False
-                    ),
-                    "image": primary_image,
-                    "images": images,
-                    "variants": (
-                        [
-                            {"color": v.color, "size": v.size, "stock": v.stock}
-                            for v in product.variants
-                        ]
-                        if product.variants
-                        else []
-                    ),
-                    "sizes": (
-                        list(set(v.size for v in product.variants if v.size))
-                        if product.variants
-                        else []
-                    ),
-                    "colors": (
-                        list(set(v.color for v in product.variants if v.color))
-                        if product.variants
-                        else []
-                    ),
-                }
-                formatted_products.append(formatted_product)
+                    currency=getattr(product, "currency", "USD"),
+                    inStock=any(v.stock > 0 for v in variants) if variants else False,
+                    image=primary_image,
+                    images=images,
+                    variants=variants,
+                    sizes=list({v.size for v in variants if v.size}),
+                    colors=list({v.color for v in variants if v.color}),
+                )
+                formatted_products.append(product_obj)
 
             return formatted_products
 
     except Exception as e:
         logger.error(f"Product search error: {e}")
         return [
-            {
-                "id": "demo",
-                "name": "Demo Product",
-                "description": "Demo description",
-                "price": 0.0,
-                "currency": "USD",
-                "rating": 0,
-                "category": "Demo",
-                "inStock": False,
-                "image": "/placeholder-image.jpg",
-                "images": [],
-                "variants": [],
-                "sizes": [],
-                "colors": [],
-            }
+            ProductModel(
+                id="demo",
+                name="Demo Product",
+                description="Demo description",
+                price=0.0,
+                currency="USD",
+                inStock=False,
+                image="/placeholder-image.jpg",
+                images=[],
+                variants=[],
+                sizes=[],
+                colors=[],
+            )
         ]
 
 
-async def variant_check(product_id: str, size: str, color: str = None):
+async def variant_check(product_id: str, size: str = None, color: str = None):
     try:
         async with get_session() as session:
             stmt = select(Variant).filter(
@@ -188,26 +182,15 @@ async def call_tool(tool_name: str, arguments: dict):
     except Exception as e:
         logger.error(f"Tool {tool_name} error: {e}")
 
-        if tool_name == "product_search" or tool_name == "product_search_raw":
-            return [
-                {
-                    "id": "demo",
-                    "name": "Demo Product",
-                    "description": "We're having trouble finding products right now. Please try again.",
-                    "price": 0.0,
-                    "currency": "USD",
-                    "rating": 0,
-                    "category": "Demo",
-                    "inStock": False,
-                    "image": "/placeholder-image.jpg",
-                    "images": [],
-                    "variants": [],
-                    "sizes": [],
-                    "colors": [],
-                }
-            ]
+        if tool_name == "product_search":
+            return await product_search("demo")
         elif tool_name == "variant_check":
-            return {"available": False, "error": "Unable to check variant availability"}
+            return {
+                "available": False,
+                "size": arguments.get("size"),
+                "color": arguments.get("color"),
+                "stock": 0,
+            }
         elif tool_name == "process_order":
             return {"status": "error", "error": "Unable to process order at this time"}
 

@@ -2,11 +2,11 @@ import json
 from http import HTTPStatus
 from fastapi.responses import JSONResponse
 import traceback
-
+from backend.services.session_manager import get_message_history, add_message
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from backend.api.chat import handle_chat_event
-from backend.api.schema import MessageResponse, EventSchema
+from backend.api.schema import MessageResponse, EventSchema, Message
 from backend.api.convert import convert_messages
 from datetime import datetime
 import time
@@ -24,10 +24,19 @@ async def handle_event(
         raise HTTPException(status_code=401, detail="Invalid authentication token")
 
     try:
+        session_id = data.event_id
         question = data.event_data.question
         store = data.event_data.store
-        message_history = convert_messages(data.event_data.message_history)
-        print(f"Message History: {message_history}\n")
+        message_history = get_message_history(session_id)
+
+        user_message = Message(
+            id=str(len(message_history) + 1),
+            type="user",
+            content=question,
+            timestamp=datetime.utcnow(),
+        )
+        add_message(session_id, user_message)
+        message_history = get_message_history(session_id)
 
         if not question:
             raise HTTPException(
@@ -38,11 +47,19 @@ async def handle_event(
         response: MessageResponse = await handle_chat_event(
             question, store, message_history
         )
+
+        assistant_message = Message(
+            id=str(len(message_history) + 2),
+            type="assistant",
+            content=response.content,
+            timestamp=datetime.utcnow(),
+            products=response.products,
+        )
+        add_message(session_id, assistant_message)
         end = time.time()
         print(f"Chat event processed in {end - start:.2f} seconds")
         print(response.model_dump_json(indent=2))
-        event_dict = data.model_dump()
-        print(f"Event data: {json.dumps(event_dict, indent=2, default=str)}")
+
         response_dict = response.model_dump()
         if "timestamp" in response_dict and isinstance(
             response_dict["timestamp"], datetime
