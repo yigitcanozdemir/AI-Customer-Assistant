@@ -20,8 +20,18 @@ TOOLS = [
         "description": "Search products in the database",
         "parameters": {
             "type": "object",
-            "properties": {"query": {"type": "string"}},
-            "required": ["query"],
+            "properties": {"query": {"type": "string"}, "store": {"type": "string"}},
+            "required": ["query", "store"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "faq_search",
+        "description": "Search faqs in the database",
+        "parameters": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}, "store": {"type": "string"}},
+            "required": ["query", "store"],
         },
     },
     {
@@ -107,8 +117,10 @@ async def handle_chat_event(
             - Suggest styling tips and complementary items
             - Never include images, prices, or detailed product information in your text response
             - When using variant_check, always use id from recent_products
+            
+            IMPORTANT: Always use the store name exactly as provided by the user when calling any tool or API. Do not correct spelling.
 
-            Available tools: product_search, variant_check, process_order.""",
+            Available tools: product_search, faq_search, variant_check, process_order.""",
         }
         input_list = [
             system_prompt,
@@ -222,16 +234,32 @@ async def handle_chat_event(
 def extract_recent_products(message_history: List[Message]) -> List[dict]:
     recent_products = []
 
-    for message in message_history[-5:]:
-        if message.products:
-            for product in message.products:
-                recent_products.append(product.dict())
+    for i, message in enumerate(message_history[-5:]):
+
+        if hasattr(message, "products"):
+
+            if message.products:
+                for j, product in enumerate(message.products):
+
+                    try:
+                        if hasattr(product, "dict"):
+                            product_dict = product.dict()
+                        elif hasattr(product, "__dict__"):
+                            product_dict = product.__dict__
+                        else:
+                            product_dict = vars(product)
+
+                        print(f"📊 Product {j}: converted successfully")
+                        recent_products.append(product_dict)
+                    except Exception as e:
+                        print(f"❌ Product {j}: conversion failed: {e}")
 
     seen_ids = set()
     unique_products = []
     for product in recent_products:
-        if product.get("id") not in seen_ids:
-            seen_ids.add(product.get("id"))
+        product_id = product.get("id")
+        if product_id and product_id not in seen_ids:
+            seen_ids.add(product_id)
             unique_products.append(product)
 
     return unique_products[-10:]

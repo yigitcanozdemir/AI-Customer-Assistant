@@ -43,7 +43,7 @@ class Message(BaseModel):
 
 class ChatEventData(BaseModel):
     question: str
-    store: Optional[str] = None
+    store: str
 
 
 class EventSchema(BaseModel):

@@ -1,19 +1,15 @@
 from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
 from backend.db.session import get_session
-from backend.db.schema import Product, Variant, Embedding
+from backend.db.schema import Product, Variant, Embedding, FAQ
 from backend.services.embedding import create_embedding
-from backend.api.schema import (
-    Product as ProductModel,
-    ProductVariant as ProductVariantModel,
-)
-
+from backend.api.helper import format_products
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-async def product_search(query: str, top_k: int = 3):
+async def product_search(query: str, store=str, top_k: int = 3):
     try:
         embedding_vector = await create_embedding(query)
 
@@ -26,6 +22,7 @@ async def product_search(query: str, top_k: int = 3):
                     ),
                 )
                 .join(Embedding, Product.id == Embedding.product_id)
+                .where(Product.store == store)
                 .order_by("distance")
                 .limit(top_k)
             )
@@ -51,50 +48,12 @@ async def product_search(query: str, top_k: int = 3):
                 product_map[pid] for pid in product_ids if pid in product_map
             ]
 
-            formatted_products = []
-            for product in ordered_products:
-                images = [img.url for img in product.images] if product.images else []
-                primary_image = images[0] if images else "/placeholder-image.jpg"
-
-                variants = (
-                    [
-                        ProductVariantModel(
-                            color=v.color,
-                            size=v.size,
-                            stock=v.stock,
-                            available=v.stock > 0,
-                        )
-                        for v in product.variants
-                    ]
-                    if product.variants
-                    else []
-                )
-
-                product_obj = ProductModel(
-                    id=str(product.id),
-                    name=product.name,
-                    description=product.description or "",
-                    price=(
-                        float(product.price)
-                        if hasattr(product, "price") and product.price
-                        else 0.0
-                    ),
-                    currency=getattr(product, "currency", "USD"),
-                    inStock=any(v.stock > 0 for v in variants) if variants else False,
-                    image=primary_image,
-                    images=images,
-                    variants=variants,
-                    sizes=list({v.size for v in variants if v.size}),
-                    colors=list({v.color for v in variants if v.color}),
-                )
-                formatted_products.append(product_obj)
-
-            return formatted_products
+            return format_products(ordered_products)
 
     except Exception as e:
         logger.error(f"Product search error: {e}")
         return [
-            ProductModel(
+            format_products(
                 id="demo",
                 name="Demo Product",
                 description="Demo description",
@@ -108,6 +67,32 @@ async def product_search(query: str, top_k: int = 3):
                 colors=[],
             )
         ]
+
+
+async def faq_search(query: str, store: str, top_k: int = 1):
+    try:
+        embedding_vector = await create_embedding(query)
+
+        async with get_session() as session:
+            similarity_stmt = (
+                select(
+                    FAQ.id,
+                    FAQ.content,
+                    FAQ.embedding.cosine_distance(embedding_vector).label("distance"),
+                )
+                .where(FAQ.store == store)
+                .order_by("distance")
+                .limit(top_k)
+            )
+
+        similarity_result = await session.execute(similarity_stmt)
+        faqs_with_distance = similarity_result.all()
+
+        return [{"id": faq.id, "content": faq.content} for faq in faqs_with_distance]
+
+    except Exception as e:
+        print(f"FAQ search error: {e}")
+        return []
 
 
 async def variant_check(product_id: str, size: str = None, color: str = None):
@@ -170,6 +155,7 @@ TOOLS = {
     "product_search": product_search,
     "variant_check": variant_check,
     "process_order": process_order,
+    "faq_search": faq_search,
 }
 
 
@@ -183,7 +169,10 @@ async def call_tool(tool_name: str, arguments: dict):
         logger.error(f"Tool {tool_name} error: {e}")
 
         if tool_name == "product_search":
-            return await product_search("demo")
+            return await product_search("demo", "demo")
+
+        elif tool_name == "faq_search":
+            return [{"id": "demo", "content": "This is a demo FAQ response."}]
         elif tool_name == "variant_check":
             return {
                 "available": False,

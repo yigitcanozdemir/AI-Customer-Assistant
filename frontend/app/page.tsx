@@ -8,6 +8,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Send, Package, RotateCcw, Sparkles, Star, Heart, Search, MessageCircle, X } from "lucide-react"
 import { v4 as uuidv4 } from "uuid"
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
+
 interface Message {
   id: string
   type: "user" | "assistant"
@@ -16,22 +18,32 @@ interface Message {
   products?: Product[]
   suggestions?: string[]
 }
-
+interface ProductVariant {
+  id: string
+  name: string
+  price?: number
+  inStock?: boolean
+}
 interface Product {
   id: string
   name: string
+  description: string
   price: number
   originalPrice?: number
-  currency?: string
-  image: string
-  rating: number
-  category: string
-  description: string
+  currency: string
   inStock: boolean
+  image: string
+  images: string[]
+  variants: ProductVariant[]
   sizes: string[]
   colors: string[]
 }
-
+const stores = [
+  "Aurora Style",
+  "Luna Apperal",
+  "Celeste Wear",
+  "Dayifuse Fashion"
+];
 export default function ElegantFashionAssistant() {
   const [isAssistantOpen, setIsAssistantOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
@@ -41,92 +53,49 @@ export default function ElegantFashionAssistant() {
   const [searchQuery, setSearchQuery] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [sessionId, setSessionId] = useState<string>("")
-  const elegantDresses: Product[] = [
-    {
-      id: "nataya-001",
-      name: "Vintage Inspired Lace A-Line Dress",
-      price: 189.99,
-      originalPrice: 249.99,
-      image: "/placeholder.svg?height=400&width=300&text=Elegant+Lace+A-Line+Dress",
-      rating: 4.8,
-      category: "Evening Wear",
-      description:
-        "Exquisite vintage-inspired lace with a flattering A-line silhouette, perfect for weddings and special celebrations",
-      inStock: true,
-      sizes: ["8", "10", "12", "14", "16", "18", "20"],
-      colors: ["Navy", "Dusty Rose", "Champagne", "Sage"],
-    },
-    {
-      id: "nataya-002",
-      name: "Elegant Wrap Dress with Sleeves",
-      price: 159.99,
-      image: "/placeholder.svg?height=400&width=300&text=Wrap+Dress+with+Sleeves",
-      rating: 4.9,
-      category: "Cocktail",
-      description: "Timeless wrap style with elegant three-quarter sleeves, universally flattering and comfortable",
-      inStock: true,
-      sizes: ["6", "8", "10", "12", "14", "16", "18", "20", "22"],
-      colors: ["Deep Navy", "Burgundy", "Forest Green", "Plum"],
-    },
-    {
-      id: "nataya-003",
-      name: "Mother of Bride Chiffon Gown",
-      price: 229.99,
-      image: "/placeholder.svg?height=400&width=300&text=Chiffon+Mother+Gown",
-      rating: 4.7,
-      category: "Formal",
-      description: "Flowing chiffon with delicate beading, designed for comfort and elegance at special celebrations",
-      inStock: true,
-      sizes: ["8", "10", "12", "14", "16", "18", "20", "22"],
-      colors: ["Soft Gray", "Dusty Rose", "Sage Green", "Champagne"],
-    },
-    {
-      id: "nataya-004",
-      name: "Classic Sheath Dress with Jacket",
-      price: 199.99,
-      image: "/placeholder.svg?height=400&width=300&text=Sheath+Dress+Jacket",
-      rating: 4.6,
-      category: "Formal",
-      description:
-        "Sophisticated sheath dress with matching jacket, perfect for daytime weddings and professional events",
-      inStock: true,
-      sizes: ["8", "10", "12", "14", "16", "18", "20"],
-      colors: ["Navy", "Charcoal", "Dusty Blue", "Taupe"],
-    },
-    {
-      id: "nataya-005",
-      name: "Beaded Evening Gown",
-      price: 299.99,
-      originalPrice: 399.99,
-      image: "/placeholder.svg?height=400&width=300&text=Beaded+Evening+Gown",
-      rating: 4.9,
-      category: "Evening Wear",
-      description: "Stunning beaded evening gown with elegant draping, perfect for galas and formal celebrations",
-      inStock: true,
-      sizes: ["6", "8", "10", "12", "14", "16", "18", "20"],
-      colors: ["Black", "Navy", "Deep Purple", "Emerald"],
-    },
-    {
-      id: "nataya-006",
-      name: "Tea Length Cocktail Dress",
-      price: 149.99,
-      image: "/placeholder.svg?height=400&width=300&text=Tea+Length+Dress",
-      rating: 4.7,
-      category: "Cocktail",
-      description: "Charming tea-length dress with vintage-inspired details, perfect for afternoon celebrations",
-      inStock: true,
-      sizes: ["6", "8", "10", "12", "14", "16", "18", "20", "22"],
-      colors: ["Rose", "Lavender", "Mint", "Cream"],
-    },
-  ]
+  const [selectedStore, setSelectedStore] = useState<string>("Aurora Style");
+
+  const [products, setProducts] = useState<Product[]>([])
 
 
-  const filteredDresses = elegantDresses.filter(
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch(`http://localhost:8000/events/products?store=${selectedStore}`, {
+          headers: {
+            "Authorization": "Bearer your-secret-token"
+          }
+        })
+        if (!res.ok) throw new Error("Failed to fetch products")
+        const data: Product[] = await res.json()
+        setProducts(data)
+      } catch (err) {
+        console.error("Error fetching products:", err)
+      }
+    }
+
+    fetchProducts()
+  }, [selectedStore])
+
+  const filteredDresses = products.filter(
     (dress) =>
       dress.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      dress.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      dress.description.toLowerCase().includes(searchQuery.toLowerCase()),
+      dress.description.toLowerCase().includes(searchQuery.toLowerCase())
   )
+  const fetchProductById = async (id: string) => {
+  try {
+    const res = await fetch(`http://localhost:8000/events/products/${id}`, {
+      headers: {
+        "Authorization": "Bearer your-secret-token"
+      }
+    })
+    if (!res.ok) throw new Error("Failed to fetch product details")
+    const data: Product = await res.json()
+    setSelectedProduct(data)
+  } catch (err) {
+    console.error(err)
+  }
+}
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -136,8 +105,7 @@ export default function ElegantFashionAssistant() {
     scrollToBottom()
   }, [messages])
   useEffect(() => {
-    const id = localStorage.getItem("chat_session_id") || uuidv4()
-    localStorage.setItem("chat_session_id", id)
+    const id = uuidv4()
     setSessionId(id)
   }, [])
 
@@ -147,18 +115,19 @@ export default function ElegantFashionAssistant() {
     } else {
       document.body.classList.remove("sidebar-open")
     }
-
-    // Cleanup on unmount
     return () => {
       document.body.classList.remove("sidebar-open")
     }
   }, [isAssistantOpen])
 
   const openAssistant = (product?: Product) => {
-    setSelectedProduct(product || null)
+    if (product) {
+      fetchProductById(product.id)
+    } else {
+      setSelectedProduct(null)
+    }
     setIsAssistantOpen(true)
 
-    // Initialize conversation based on product context
     if (product) {
       setMessages([
         {
@@ -212,12 +181,12 @@ export default function ElegantFashionAssistant() {
       const eventPayload = {
         event_id: sessionId,
         event_data: {
-          question: content, store: "pinklily"
+          question: content, store: selectedStore
         }
         
       }
 
-      const response = await fetch("http://localhost:8000/events", {
+      const response = await fetch("http://localhost:8000/events/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -269,16 +238,36 @@ export default function ElegantFashionAssistant() {
       <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col sm:flex-row items-center justify-between mb-4 space-y-3 sm:space-y-0">
-            <h1 className="text-2xl lg:text-3xl font-serif text-gray-900 font-light">Nataya Collection</h1>
-            <Button
-              onClick={() => openAssistant()}
-              variant="outline"
-              className="border-rose-300 text-rose-600 hover:bg-rose-50 font-elegant w-full sm:w-auto"
-            >
-              <MessageCircle className="w-4 h-4 mr-2" />
-              Style Assistant
-            </Button>
-          </div>
+            <h1 className="text-2xl lg:text-3xl font-serif text-gray-900 font-light">{selectedStore}</h1>
+
+
+            <div className="flex items-center space-x-3">
+                <Select
+                  onValueChange={(value) => setSelectedStore(value)}
+                  defaultValue={selectedStore}
+                >
+                  <SelectTrigger className="w-[180px] border-gray-200 focus:border-rose-400 focus:ring-rose-400/20 rounded-xl bg-white/50 font-elegant text-sm">
+                    <SelectValue placeholder="Select store" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stores.map((store) => (
+                      <SelectItem key={store} value={store}>
+                        {store}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  onClick={() => openAssistant()}
+                  variant="outline"
+                  className="border-rose-300 text-rose-600 hover:bg-rose-50 font-elegant w-full sm:w-auto"
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Style Assistant
+                </Button>
+              </div>
+            </div>
 
           {/* Search Bar */}
           <div className="relative max-w-2xl mx-auto">
@@ -319,14 +308,7 @@ export default function ElegantFashionAssistant() {
                   <h3 className="font-serif text-lg lg:text-xl text-gray-900 mb-2 lg:mb-3 font-medium">{dress.name}</h3>
                   <div className="flex items-center mb-2 lg:mb-3">
                     <div className="flex text-rose-600">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`w-3 h-3 lg:w-4 lg:h-4 ${i < Math.floor(dress.rating) ? "fill-current" : ""}`}
-                        />
-                      ))}
                     </div>
-                    <span className="text-xs lg:text-sm text-gray-600 ml-2 font-elegant">({dress.rating})</span>
                   </div>
                   <p className="text-xs lg:text-sm text-gray-600 mb-3 lg:mb-4 leading-relaxed line-clamp-2">
                     {dress.description}
@@ -450,14 +432,7 @@ export default function ElegantFashionAssistant() {
                                   </h4>
                                   <div className="flex items-center mb-2">
                                     <div className="flex text-rose-600">
-                                      {[...Array(5)].map((_, i) => (
-                                        <Star
-                                          key={i}
-                                          className={`w-3 h-3 ${i < Math.floor(product.rating) ? "fill-current" : ""}`}
-                                        />
-                                      ))}
                                     </div>
-                                    <span className="text-xs text-gray-600 ml-1">({product.rating})</span>
                                   </div>
                                   <div className="flex items-center justify-between">
                                     <span className="font-semibold text-rose-600 text-sm lg:text-base">

@@ -10,13 +10,19 @@ from backend.api.schema import MessageResponse, EventSchema, Message
 from backend.api.convert import convert_messages
 from datetime import datetime
 import time
+from backend.db.session import get_session
+from backend.db.schema import Product
+
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
+from backend.api.helper import format_products
 
 router = APIRouter()
 security = HTTPBearer()
 API_TOKEN = "your-secret-token"
 
 
-@router.post("/")
+@router.post("/chat")
 async def handle_event(
     data: EventSchema, credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
@@ -73,3 +79,36 @@ async def handle_event(
             content={"message": "Internal server error"},
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
         )
+
+
+@router.get("/products")
+async def list_products(store: str = "default", limit: int = 30):
+    async with get_session() as session:
+        stmt = (
+            select(Product)
+            .options(joinedload(Product.variants), joinedload(Product.images))
+            .where(Product.store == store)
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+        products = result.unique().scalars().all()
+        formatted_result = format_products(products)
+        print(json.dumps([p.model_dump() for p in formatted_result], indent=2))
+        return formatted_result
+
+
+@router.get("/products/{product_id}")
+async def get_product(product_id: str):
+    async with get_session() as session:
+        stmt = (
+            select(Product)
+            .options(joinedload(Product.variants), joinedload(Product.images))
+            .where(Product.id == product_id)
+        )
+        result = await session.execute(stmt)
+        product = result.scalar_one_or_none()
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        formatted_result = format_products([product])[0]
+        print(json.dumps([p.model_dump() for p in formatted_result], indent=2))
+        return formatted_result
