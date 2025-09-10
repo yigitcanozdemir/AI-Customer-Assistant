@@ -1,14 +1,28 @@
 import sys
 import os
 
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+current_file = os.path.abspath(__file__) if "__file__" in globals() else os.getcwd()
+project_root = current_file
+
+while True:
+    if os.path.isdir(os.path.join(project_root, "backend")):
+        break
+    parent = os.path.dirname(project_root)
+    if parent == project_root:
+        raise Exception("Project root with 'backend' folder not found.")
+    project_root = parent
+
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+print(sys.path)
 import json
 import logging
 
 from pathlib import Path
 from typing import List, Dict, Any
 import asyncio
-from session import get_session, engine
+from backend.db.session import get_session, engine
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.database_logic import (
     process_faq_embeddings,

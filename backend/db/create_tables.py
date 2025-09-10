@@ -1,9 +1,9 @@
 import asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-from schema import Base
+from backend.db.schema import Base
 import nest_asyncio
-from session import engine
+from backend.db.session import engine
 
 nest_asyncio.apply()
 
