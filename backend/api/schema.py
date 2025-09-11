@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Union
 from datetime import datetime, date
 
 
@@ -8,6 +8,16 @@ class ProductVariant(BaseModel):
     size: Optional[str] = None
     stock: int = 0
     available: bool = False
+
+
+class ProductContext(BaseModel):
+    id: str
+    name: str
+    price: float
+    currency: str
+    sizes: List[str] = []
+    colors: List[str] = []
+    variants: List[ProductVariant] = []
 
 
 class Product(BaseModel):
@@ -37,13 +47,14 @@ class Message(BaseModel):
     type: str
     content: str
     timestamp: datetime
-    products: Optional[List[Product]] = None
+    products: Optional[List[Union[Product, ProductContext]]] = None
     suggestions: Optional[List[str]] = None
 
 
 class ChatEventData(BaseModel):
     question: str
     store: str
+    product: Optional[ProductContext] = None
 
 
 class EventSchema(BaseModel):
