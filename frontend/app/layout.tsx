@@ -1,7 +1,12 @@
-"use client"
+"use client";
+
 import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
+import { Suspense } from "react";
+import { Analytics } from "@vercel/analytics/next";
+import { CartProvider } from "@/lib/cart-context";
 import { StoreProvider } from "../context/StoreContext";
+import { ChatProvider } from "@/context/ChatContext"
+import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,6 +18,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+
 export default function RootLayout({
   children,
 }: {
@@ -20,10 +26,17 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <StoreProvider>
-          {children}
-        </StoreProvider>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        <Suspense fallback={null}>
+          <StoreProvider>
+            <ChatProvider>
+              <CartProvider>{children}</CartProvider>
+            </ChatProvider>
+          </StoreProvider>
+        </Suspense>
+        <Analytics />
       </body>
     </html>
   );
