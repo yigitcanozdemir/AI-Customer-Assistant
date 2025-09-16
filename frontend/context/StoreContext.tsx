@@ -6,6 +6,7 @@ export interface Message {
   content: string
   timestamp: Date
   products?: any[]
+  order?: any[]
   suggestions?: string[]
 }
 

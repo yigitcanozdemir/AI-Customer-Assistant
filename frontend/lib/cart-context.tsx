@@ -15,6 +15,7 @@ export interface CartItem {
   color: string
   quantity: number
   inStock: boolean
+  variantId?: string | null
 }
 
 interface CartState {

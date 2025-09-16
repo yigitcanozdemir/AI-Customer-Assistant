@@ -1,10 +1,12 @@
 from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
 from backend.db.session import get_session
-from backend.db.schema import Product, Variant, Embedding, FAQ
+from backend.db.schema import Product, Variant, Embedding, FAQ, Order
 from backend.services.embedding import create_embedding
 from backend.api.helper import format_products
 import logging
+import uuid
+from backend.api.schema import OrderStatus, ListOrdersResponse, OrderProduct
 
 logger = logging.getLogger(__name__)
 
@@ -126,29 +128,110 @@ async def variant_check(product_id: str, size: str = None, color: str = None):
         }
 
 
-async def process_order(order_id: int, action: str):
-    try:
-        valid_actions = ["create", "update", "cancel", "confirm"]
-        if action not in valid_actions:
-            return {
-                "status": "error",
-                "message": f"Invalid action. Must be one of: {valid_actions}",
-            }
+async def process_order(order_id: uuid.UUID, action: str):
+    valid_actions = ["create", "update", "cancel", "return", "confirm"]
 
-        return {
-            "status": "success",
-            "order_id": order_id,
-            "action": action,
-            "timestamp": "2025-08-23T19:15:39.724687Z",
-        }
-    except Exception as e:
-        logger.error(f"Order processing error: {e}")
+    if action not in valid_actions:
         return {
             "status": "error",
-            "order_id": order_id,
-            "action": action,
-            "error": str(e),
+            "message": f"Invalid action. Must be one of: {valid_actions}",
         }
+
+    async with get_session() as session:
+        async with session.begin():
+            order = await session.get(Order, order_id)
+            if not order:
+                return {"status": "error", "message": "Order not found"}
+
+            if action == "cancel":
+                order.status = "cancelled"
+            elif action == "return":
+                order.status = "returned"
+            elif action == "confirm":
+                order.status = "confirmed"
+            elif action == "update":
+                order.status = "updated"
+
+        await session.commit()
+
+    return {
+        "status": "success",
+        "order_id": order_id,
+        "action": action,
+        "current_status": order.status,
+        "timestamp": "2025-08-23T19:15:39.724687Z",
+    }
+
+
+async def list_orders(user_id: str) -> ListOrdersResponse:
+    try:
+        async with get_session() as session:
+            stmt = (
+                select(Order)
+                .options(
+                    joinedload(Order.product).joinedload(Product.images),
+                    joinedload(Order.variant),
+                )
+                .where(Order.user_id == user_id)
+                .order_by(Order.created_at.desc())  # Add ordering for better UX
+            )
+            result = await session.execute(stmt)
+            orders = result.unique().scalars().all()  # Add .unique() here!
+
+            print(f"Found {len(orders)} orders for user {user_id}")  # Debug print
+
+            orders_list = []
+            for order in orders:
+                try:
+                    product = order.product
+                    variant = order.variant
+
+                    if not product:
+                        print(f"Warning: Order {order.order_id} has no product")
+                        continue
+
+                    primary_image = (
+                        product.images[0].url
+                        if product.images
+                        else "/placeholder-image.jpg"
+                    )
+                    variant_text = (
+                        f"{variant.color} / {variant.size}" if variant else None
+                    )
+
+                    product_data = OrderProduct(
+                        id=product.id,
+                        variant_id=variant.id if variant else None,
+                        name=product.name,
+                        price=float(product.price),
+                        currency=product.currency,
+                        image=primary_image,
+                        variant_text=variant_text,
+                    )
+
+                    order_status = OrderStatus(
+                        order_id=order.order_id,
+                        status=order.status,
+                        user_name=order.user_name,  # Add the missing user_name field!
+                        created_at=order.created_at,
+                        product=product_data,
+                    )
+                    orders_list.append(order_status)
+
+                except Exception as order_error:
+                    print(f"Error processing order {order.order_id}: {order_error}")
+                    continue
+
+            print(f"Successfully processed {len(orders_list)} orders")  # Debug print
+            return ListOrdersResponse(orders=orders_list)
+
+    except Exception as e:
+        logger.error(f"List orders error: {e}")
+        print(f"List orders detailed error: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return ListOrdersResponse(orders=[])
 
 
 TOOLS = {
@@ -156,6 +239,7 @@ TOOLS = {
     "variant_check": variant_check,
     "process_order": process_order,
     "faq_search": faq_search,
+    "list_orders": list_orders,
 }
 
 
@@ -182,5 +266,7 @@ async def call_tool(tool_name: str, arguments: dict):
             }
         elif tool_name == "process_order":
             return {"status": "error", "error": "Unable to process order at this time"}
+        elif tool_name == "list_orders":
+            return ListOrdersResponse(orders=[])
 
         return {"error": str(e)}

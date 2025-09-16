@@ -11,9 +11,25 @@ export interface Message {
   content: string
   timestamp: Date
   products?: Product[]
+  orders?: OrderStatus[]
   suggestions?: string[]
 }
 
+interface OrderProduct {
+  id: string
+  name: string
+  price: number
+  currency: string
+  image?: string | null
+  variant?: string | null
+}
+
+interface OrderStatus {
+  order_id: string
+  status: string
+  created_at: Date
+  product: OrderProduct
+}
 interface ProductVariant {
   color?: string
   size?: string
@@ -51,6 +67,9 @@ interface ChatContextType {
   wsRef: React.MutableRefObject<WebSocket | null>
   selectedProduct: Product | null
   setSelectedProduct: React.Dispatch<React.SetStateAction<Product | null>>
+
+  selectedOrder: OrderStatus | null
+  setSelectedOrder: React.Dispatch<React.SetStateAction<OrderStatus | null>>
   resetChatForStore: () => void
 }
 
@@ -74,6 +93,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isTyping, setIsTyping] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
+  const [selectedOrder, setSelectedOrder] = useState<OrderStatus | null>(null)
 
   const [storeSessionMap, setStoreSessionMap] = useState<
     Record<
@@ -88,7 +108,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   >(() => {
     if (typeof window !== "undefined") {
       try {
-        const saved = localStorage.getItem("chatSessions")
+        const saved = sessionStorage.getItem("chatSessions")
         return saved ? JSON.parse(saved) : {}
       } catch {
         return {}
@@ -100,7 +120,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
-        localStorage.setItem("chatSessions", JSON.stringify(storeSessionMap))
+        sessionStorage.setItem("chatSessions", JSON.stringify(storeSessionMap))
       } catch (error) {
         console.error("Failed to save chat sessions:", error)
       }
@@ -215,6 +235,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     wsRef,
     selectedProduct,
     setSelectedProduct,
+    selectedOrder,
+    setSelectedOrder,
     resetChatForStore,
   }
 

@@ -14,6 +14,7 @@ def format_products(products):
         variants = (
             [
                 ProductVariantModel(
+                    id=str(v.id),
                     color=v.color,
                     size=v.size,
                     stock=v.stock,

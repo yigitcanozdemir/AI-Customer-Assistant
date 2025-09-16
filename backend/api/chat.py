@@ -4,12 +4,16 @@ from backend.api.schema import MessageResponse
 from datetime import datetime, timezone
 from backend.services.tool import call_tool
 import json
-from backend.api.schema import MessageResponse, Product as ProductModel, Message
+from backend.api.schema import (
+    MessageResponse,
+    Product as ProductModel,
+    Message,
+    ListOrdersResponse,
+)
 from fastapi.encoders import jsonable_encoder
 from pprint import pprint
 from typing import List
 from backend.api.convert import convert_messages
-
 
 client = AsyncOpenAI(api_key=settings.openai_api_key)
 
@@ -55,17 +59,31 @@ TOOLS = [
         "parameters": {
             "type": "object",
             "properties": {
-                "order_id": {"type": "integer"},
+                "order_id": {"type": "string"},
                 "action": {"type": "string"},
             },
             "required": ["order_id", "action"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "list_orders",
+        "description": "List users orders",
+        "parameters": {
+            "type": "object",
+            "properties": {},  # Remove user_id from required parameters
+            "required": [],
         },
     },
 ]
 
 
 async def handle_chat_event(
-    user_input: str, store: str, message_history: List[Message]
+    user_input: str,
+    store: str,
+    message_history: List[Message],
+    user_id: str,  # Make sure this is a UUID string, not a name
+    user_name: str,
 ) -> MessageResponse:
     try:
         message_history = manage_context_window(message_history, max_messages=15)
@@ -87,9 +105,13 @@ async def handle_chat_event(
             message_history = manage_context_window(message_history, max_messages=10)
 
         print(f"Estimated tokens: {estimated_tokens}")
+        print(f"User ID: {user_id}")  # Debug print to see what user_id looks like
+
         system_prompt = {
             "role": "system",
-            "content": f"""You are a helpful and knowledgeable style assistant for {store.title()} store. 
+            "content": f"""You are a helpful and knowledgeable style assistant for {store.title()} store.
+            
+            You call user with their name: {user_name} Note that user_id is not their name. user_id is UUID.
 
             Your personality:
             - Friendly, enthusiastic, and professional
@@ -97,13 +119,14 @@ async def handle_chat_event(
             - Helpful in finding the perfect products for customers
 
             IMPORTANT RESPONSE RULES:
-            - When you use product_search tool, DO NOT include product details, prices, images, or links in your response
-            - The product information will be displayed separately by the frontend
+            - When you use product_search or process_order and list_order tool, DO NOT include product or order details, prices, images, or links in your response
+            - The product and order information will be displayed separately by the frontend
             - Your response should only contain conversational text about the search results
             - Focus on being helpful and suggesting styling tips
             - Example: "I found some great dresses for you! Check out the options below - the green backless dress would be perfect for a summer event."
-            - Never repeat product descriptions or prices in the text response. Product info is sent separately in JSON, not in text
-            - Do NOT use Markdown, bold, bullet points, or section titles like "Products:". Respond in plain text only.
+            - Never repeat product or order descriptions or prices in the text response. Product info is sent separately in JSON, not in text
+            - Do NOT use Markdown, bold, bullet points, or section titles like "Products:". Respond in plain text only and do not use "*" this like annotation.
+            - When order_list tool is used, do not include any order details in your response. Just say something like "Here are your recent orders." Because order details are shown separately.
 
             IMPORTANT CONTEXT RULES:
             - If user asks about products that were ALREADY shown in recent conversation, DO NOT use product_search tool
@@ -114,19 +137,22 @@ async def handle_chat_event(
             When using tools:
             - Use product_search to find relevant items based on user queries
             - Provide brief, conversational responses WITHOUT product details
+            - If user ask about orders do not ask order ID, always call list_orders tool to show their orders.
             - Suggest styling tips and complementary items
             - Never include images, prices, or detailed product information in your text response
             - When using variant_check, always use id from recent_products
+            - For list_orders tool, do NOT include any parameters - the system will handle user identification automatically
             
             IMPORTANT: Always use the store name exactly as provided by the user when calling any tool or API. Do not correct spelling.
 
-            Available tools: product_search, faq_search, variant_check, process_order.""",
+            Available tools: product_search, faq_search, variant_check, process_order, list_orders.""",
         }
+
         input_list = [
             system_prompt,
             {
                 "role": "system",
-                "content": json.dumps(recent_products),
+                "content": json.dumps(jsonable_encoder(recent_products)),
             },
         ] + convert_messages(message_history)
 
@@ -138,12 +164,12 @@ async def handle_chat_event(
 
         content = ""
         products: list[ProductModel] = []
+        orders = None
 
         input_list += response.output
         tool_calls_found = False
 
         for output_item in response.output:
-
             if hasattr(output_item, "type") and output_item.type == "function_call":
                 tool_calls_found = True
                 try:
@@ -152,9 +178,14 @@ async def handle_chat_event(
                     print(f"Failed to parse arguments: {output_item.arguments}")
                     args = {}
 
+                if output_item.name == "list_orders":
+                    args["user_id"] = user_id
+
                 print(f"Calling tool {output_item.name} with args: {args}")
+
                 tool_result = await call_tool(output_item.name, args)
                 print(f"Tool result: {tool_result}")
+
                 if output_item.name == "product_search" and isinstance(
                     tool_result, list
                 ):
@@ -172,13 +203,26 @@ async def handle_chat_event(
                                 v.available = tool_result.get("available", v.available)
                                 p.inStock = any(var.available for var in p.variants)
 
-                input_list.append(
-                    {
-                        "type": "function_call_output",
-                        "call_id": output_item.call_id,
-                        "output": json.dumps(jsonable_encoder(tool_result)),
-                    }
-                )
+                elif output_item.name == "list_orders" and isinstance(
+                    tool_result, ListOrdersResponse
+                ):
+                    orders = tool_result.orders
+                    input_list.append(
+                        {
+                            "type": "function_call_output",
+                            "call_id": output_item.call_id,
+                            "output": json.dumps(jsonable_encoder(tool_result)),
+                        }
+                    )
+
+                elif output_item.name == "process_order":
+                    input_list.append(
+                        {
+                            "type": "function_call_output",
+                            "call_id": output_item.call_id,
+                            "output": json.dumps(jsonable_encoder(tool_result)),
+                        }
+                    )
 
         if tool_calls_found:
             followup = await client.responses.create(
@@ -207,13 +251,16 @@ async def handle_chat_event(
                         content += output_item.text
             else:
                 content = "I'm here to help you find the perfect items! What are you looking for today?"
+
         print("Final input:")
         pprint(input_list, indent=2)
+
         return MessageResponse(
             content=content,
             store=store,
             suggestions=[],
             products=products,
+            orders=orders,
             timestamp=datetime.now(timezone.utc),
         )
 
@@ -227,6 +274,7 @@ async def handle_chat_event(
             suggestions=["Try again", "Browse catalog", "Contact support"],
             store=store,
             products=[],
+            orders=None,
             timestamp=datetime.now(timezone.utc),
         )
 
@@ -235,12 +283,9 @@ def extract_recent_products(message_history: List[Message]) -> List[dict]:
     recent_products = []
 
     for i, message in enumerate(message_history[-5:]):
-
         if hasattr(message, "products"):
-
             if message.products:
                 for j, product in enumerate(message.products):
-
                     try:
                         if hasattr(product, "dict"):
                             product_dict = product.dict()

@@ -1,7 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-
+import { UserEntryModal } from "@/components/ui/user-entry-modal"
 import type React from "react"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -14,19 +14,16 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageCircle,
-  AlertCircle,
-  Wifi,
-  WifiOff,
 } from "lucide-react"
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select"
 import { useStore } from "@/context/StoreContext"
 import { useCart } from "@/lib/cart-context"
 import { ShoppingCart } from "@/components/ui/shopping-cart"
 import { ChatSidebar } from "@/components/ui/chat-sidebar"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useChat } from "@/context/ChatContext"
 
 interface ProductVariant {
+  id: string
   color?: string
   size?: string
   stock: number
@@ -50,47 +47,6 @@ interface Product {
 
 const stores = ["Aurora Style", "Luna Apperal", "Celeste Wear", "Dayifuse Fashion"]
 
-const mockProducts: Product[] = [
-  {
-    id: "1",
-    name: "Elegant Evening Dress",
-    description:
-      "A stunning evening dress perfect for special occasions. Made with premium materials and exquisite craftsmanship.",
-    price: 299.99,
-    originalPrice: 399.99,
-    currency: "USD",
-    inStock: true,
-    image: "/elegant-evening-dress.png",
-    images: ["/elegant-evening-dress-black.jpg", "/elegant-evening-dress-navy.jpg"],
-    variants: [
-      { color: "Black", size: "S", stock: 5, available: true },
-      { color: "Black", size: "M", stock: 3, available: true },
-      { color: "Navy", size: "S", stock: 2, available: true },
-      { color: "Navy", size: "M", stock: 4, available: true },
-    ],
-    sizes: ["S", "M", "L"],
-    colors: ["Black", "Navy"],
-  },
-  {
-    id: "2",
-    name: "Casual Summer Dress",
-    description:
-      "Light and comfortable summer dress perfect for everyday wear. Breathable fabric with a flattering fit.",
-    price: 89.99,
-    currency: "USD",
-    inStock: true,
-    image: "/casual-summer-dress.png",
-    images: ["/casual-summer-dress-white.jpg", "/casual-summer-dress-blue.jpg"],
-    variants: [
-      { color: "White", size: "S", stock: 8, available: true },
-      { color: "White", size: "M", stock: 6, available: true },
-      { color: "Blue", size: "S", stock: 4, available: true },
-      { color: "Blue", size: "M", stock: 7, available: true },
-    ],
-    sizes: ["S", "M", "L", "XL"],
-    colors: ["White", "Blue"],
-  },
-]
 
 const formatCurrency = (price: number, currency: string): string => {
   switch (currency) {
@@ -111,8 +67,7 @@ export default function Store() {
   const [products, setProducts] = useState<Product[] | null>(null)
   const [currentImageIndex, setCurrentImageIndex] = useState<{ [key: string]: number }>({})
   const [isLoading, setIsLoading] = useState(true)
-  const [backendError, setBackendError] = useState<string | null>(null)
-  const [isUsingMockData, setIsUsingMockData] = useState(false)
+
   const [hasProcessedUrlStore, setHasProcessedUrlStore] = useState(false)
   const { addItem, openCart, toggleCart, state } = useCart()
 
@@ -126,7 +81,7 @@ export default function Store() {
       setStore(storeFromUrl)
     }
     setHasProcessedUrlStore(true)
-  }, []) // Run only on mount
+  }, [])
 
   useEffect(() => {
     if (!hasProcessedUrlStore) return
@@ -134,7 +89,6 @@ export default function Store() {
     const fetchProducts = async () => {
       try {
         setIsLoading(true)
-        setBackendError(null)
         console.log("Attempting to fetch products from backend...")
 
         const res = await fetch(`http://localhost:8000/events/products?store=${selectedStore}`, {
@@ -147,19 +101,16 @@ export default function Store() {
         const data: Product[] = await res.json()
         console.log("Successfully fetched products from backend:", data.length)
         setProducts(data)
-        setIsUsingMockData(false)
+
       } catch (err) {
         console.error("Error fetching products from backend:", err)
-        setBackendError("Backend unavailable - using demo data")
-        setProducts(mockProducts)
-        setIsUsingMockData(true)
       } finally {
         setIsLoading(false)
       }
     }
 
     fetchProducts()
-  }, [selectedStore, hasProcessedUrlStore]) // Add hasProcessedUrlStore dependency
+  }, [selectedStore, hasProcessedUrlStore])
 
   const filteredDresses = (products ?? []).filter(
     (dress) =>
@@ -199,7 +150,7 @@ export default function Store() {
         {
           id: "1",
           type: "assistant",
-          content: `Hello! I see you're interested in the ${product.name}. I have all the details about this product including pricing (${formatCurrency(product.price, product.currency)}), available sizes (${product.sizes.join(", ")}), colors (${product.colors.join(", ")}), and current stock levels. What would you like to know?`,
+          content: `Hello! I see you're interested in the ${product.name}. What would you like to know?`,
           timestamp: new Date(),
           products: [product],
           suggestions: [
@@ -217,6 +168,8 @@ export default function Store() {
   const openProductPage = (productId: string) => {
     const url = new URL(`/product/${productId}`, window.location.origin)
     url.searchParams.set("store", selectedStore)
+    url.searchParams.delete("product")
+    url.searchParams.delete("chat")
     window.location.href = url.toString()
   }
 
@@ -236,8 +189,12 @@ export default function Store() {
 
   const handleAddToCart = (dress: Product, e: React.MouseEvent) => {
     e.stopPropagation()
-    const firstAvailableSize = dress.sizes[0] || "M"
     const firstAvailableColor = dress.colors[0] || "Default"
+    const firstAvailableSize = dress.variants.find(v => v.color === firstAvailableColor)?.size || "M"
+    const selectedVariant = dress.variants.find(
+      (v) => v.color === firstAvailableColor && v.size === firstAvailableSize
+    )
+    if (!selectedVariant) return
 
     addItem({
       productId: dress.id,
@@ -248,6 +205,7 @@ export default function Store() {
       size: firstAvailableSize,
       color: firstAvailableColor,
       inStock: dress.inStock,
+      variantId: selectedVariant.id
     })
 
     openCart()
@@ -255,17 +213,12 @@ export default function Store() {
 
   return (
     <div className="min-h-screen bg-background">
+      <UserEntryModal />
       <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 lg:px-6">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center space-x-8">
               <div className="flex items-center space-x-2">
-                {isUsingMockData ? (
-                  <WifiOff className="w-4 h-4 text-muted-foreground" />
-                ) : (
-                  <Wifi className="w-4 h-4 text-green-500" />
-                )}
-                <span className="text-xs text-muted-foreground">{isUsingMockData ? "Demo Mode" : "Live"}</span>
               </div>
             </div>
 
@@ -331,16 +284,6 @@ export default function Store() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 lg:px-6 py-8">
-        {isUsingMockData && (
-          <Alert className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Currently running in demo mode with sample products. Connect your backend at localhost:8000 to see live
-              data.
-            </AlertDescription>
-          </Alert>
-        )}
-
         <div className={`transition-all duration-500 ease-in-out ${isAssistantOpen ? "lg:mr-[400px]" : ""}`}>
           {isLoading ? (
             <div className="flex items-center justify-center py-16">

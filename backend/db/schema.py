@@ -32,7 +32,7 @@ class Product(Base):
         unique=True,
         nullable=False,
     )
-    store = Column(String(100), nullable=False, index=False)
+    store = Column(String(100), nullable=False)
     name = Column(Text, nullable=False)
     price = Column(Numeric(10, 2), nullable=False)
     currency = Column(String(10), nullable=False)
@@ -46,6 +46,7 @@ class Product(Base):
     embeddings = relationship(
         "Embedding", back_populates="product", cascade="all, delete"
     )
+    __table_args__ = (Index("ix_products_store", "store"),)
 
 
 class Variant(Base):
@@ -71,6 +72,9 @@ class Variant(Base):
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
 
     product = relationship("Product", back_populates="variants")
+    __table_args__ = (
+        Index("ix_variants_product_size_color", "product_id", "size", "color"),
+    )
 
 
 class Image(Base):
@@ -134,3 +138,33 @@ class FAQ(Base):
     embedding = Column(Vector(1536), nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
+
+    __table_args__ = (Index("ix_faqs_store", "store"),)
+
+
+class Order(Base):
+    __tablename__ = "orders"
+    order_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
+    user_name = Column(String(20), nullable=True)
+    product_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("products.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    variant_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("variants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status = Column(String(20), nullable=False, default="created")
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    product = relationship("Product", backref="orders")
+    variant = relationship("Variant", backref="orders")
+
+    __table_args__ = (
+        Index("ix_orders_user_id", "user_id"),
+        Index("ix_orders_status", "status"),
+    )

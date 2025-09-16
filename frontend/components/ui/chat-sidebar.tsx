@@ -10,6 +10,7 @@ import { Send, Package, RotateCcw, Sparkles, X } from "lucide-react"
 import { v4 as uuidv4 } from "uuid"
 import { useStore } from "@/context/StoreContext"
 import { useChat } from "@/context/ChatContext"
+import { useUser } from "@/context/UserContext"
 
 interface ProductVariant {
   color?: string
@@ -50,8 +51,8 @@ export function ChatSidebar() {
   const [inputValue, setInputValue] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { store: selectedStore } = useStore()
-  const { store: selectedStoreForProduct } = useStore() // Moved useStore hook here
-
+  const { store: selectedStoreForProduct } = useStore()
+  const { userId, userName } = useUser()
   const {
     messages,
     setMessages,
@@ -66,19 +67,23 @@ export function ChatSidebar() {
     setIsTyping,
     wsRef,
     selectedProduct,
+    selectedOrder,
+    setSelectedOrder,
   } = useChat()
 
   useEffect(() => {
-    if (isAssistantOpen && !ws) {
-      connectWebSocket()
-    }
+    if (!isAssistantOpen) return
 
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close()
-      }
+    console.log("Store changed, reconnecting WebSocket for new session...")
+    if (wsRef.current) {
+      wsRef.current.close()
     }
-  }, [isAssistantOpen])
+    setWs(null)
+    wsRef.current = null
+
+    connectWebSocket()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStore, sessionId, isAssistantOpen])
 
   const connectWebSocket = () => {
     try {
@@ -104,6 +109,7 @@ export function ChatSidebar() {
             content: data.content || "I'm sorry, I didn't receive a proper response.",
             timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
             products: data.products || [],
+            orders: data.orders || [],
             suggestions: data.suggestions || [],
           }
 
@@ -136,12 +142,7 @@ export function ChatSidebar() {
             content:
               "I'm currently in demo mode since the backend isn't connected. I can still help you explore our products! Try asking about sizing, styling, or specific items.",
             timestamp: new Date(),
-            suggestions: [
-              "Tell me about the evening dress",
-              "What sizes are available?",
-              "Show me casual options",
-              "Help with styling tips",
-            ],
+            suggestions: ["Try again", "Contact support"],
           },
         ])
       }
@@ -194,6 +195,8 @@ export function ChatSidebar() {
         event_data: {
           question: content,
           store: selectedStore,
+          user_name: userName || "Anonymous User",
+          user_id: userId || "00000000-0000-0000-0000-000000000000",
           product: selectedProduct
             ? {
                 id: selectedProduct.id,
@@ -205,13 +208,26 @@ export function ChatSidebar() {
                 colors: selectedProduct.colors,
                 variants: selectedProduct.variants,
               }
-            : null,
+            : undefined,
+          order: selectedOrder
+            ? {
+                order_id: selectedOrder.order_id,
+                status: selectedOrder.status,
+                user_name: userName || "Anonymous User",
+                created_at: selectedOrder.created_at,
+                product: selectedOrder.product,
+              }
+            : undefined,
         },
       }
 
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(eventPayload))
         console.log("Message sent via WebSocket with product context:", eventPayload)
+
+        if (selectedOrder) {
+          setSelectedOrder(null)
+        }
       } else {
         handleWebSocketError()
       }
@@ -242,6 +258,55 @@ export function ChatSidebar() {
 
   const handleViewProduct = (productId: string) => {
     window.location.href = `/product/${productId}?store=${encodeURIComponent(selectedStoreForProduct)}`
+  }
+
+  const handleOrderSelect = (order: any) => {
+    const userMessage = {
+      id: Date.now().toString(),
+      type: "user" as const,
+      content: `This one: ${order.product.name}`,
+      timestamp: new Date(),
+    }
+
+    setMessages((prev) => [...prev, userMessage])
+    setIsTyping(true)
+
+    // Send WebSocket message with the order data directly
+    const eventPayload = {
+      event_id: sessionId,
+      event_data: {
+        question: `This one: ${order.product.name}`,
+        store: selectedStore,
+        user_name: userName || "Anonymous User",
+        user_id: userId || "00000000-0000-0000-0000-000000000000",
+        product: selectedProduct
+          ? {
+              id: selectedProduct.id,
+              name: selectedProduct.name,
+              price: selectedProduct.price,
+              currency: selectedProduct.currency,
+              description: selectedProduct.description,
+              sizes: selectedProduct.sizes,
+              colors: selectedProduct.colors,
+              variants: selectedProduct.variants,
+            }
+          : undefined,
+        order: {
+          order_id: order.order_id,
+          status: order.status,
+          user_name: userName || "Anonymous User",
+          created_at: order.created_at,
+          product: order.product,
+        },
+      },
+    }
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(eventPayload))
+      console.log("Order message sent via WebSocket:", eventPayload)
+    } else {
+      handleWebSocketError()
+    }
   }
 
   if (!isAssistantOpen) return null
@@ -325,6 +390,44 @@ export function ChatSidebar() {
                                     View
                                   </Button>
                                 </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+
+                  {message.orders && message.orders.length > 0 && (
+                    <div className="space-y-2 ml-2">
+                      {message.orders.map((order) => (
+                        <Card
+                          key={order.order_id}
+                          className={`border-0 shadow-sm bg-card cursor-pointer hover:bg-muted/50 transition-colors ${
+                            selectedOrder?.order_id === order.order_id ? "border-blue-500 bg-blue-50" : ""
+                          }`}
+                          onClick={() => handleOrderSelect(order)}
+                        >
+                          <CardContent className="p-3">
+                            <div className="flex space-x-3">
+                              <img
+                                src={order.product.image || "/placeholder.svg"}
+                                alt={order.product.name}
+                                className="w-12 h-16 object-cover rounded"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-sm text-card-foreground mb-1 line-clamp-2 font-modern-body">
+                                  {order.product.name}
+                                </h4>
+                                <div className="flex items-center justify-between">
+                                  <span className="font-semibold text-primary text-sm">
+                                    {formatCurrency(order.product.price, order.product.currency)}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(order.created_at).toLocaleDateString()}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">Status: {order.status}</p>
                               </div>
                             </div>
                           </CardContent>

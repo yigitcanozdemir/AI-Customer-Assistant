@@ -2,7 +2,7 @@ import random
 import logging
 from docling.chunking import HybridChunker
 
-from services.embedding import create_embedding
+from backend.services.embedding import create_embedding
 from .db_operations import (
     create_product,
     create_variants,
@@ -10,7 +10,7 @@ from .db_operations import (
     create_product_embedding,
     create_faq_entries,
 )
-from db.utils.tokenizer import OpenAITokenizerWrapper
+from backend.db.utils.tokenizer import OpenAITokenizerWrapper
 
 logger = logging.getLogger(__name__)
 tokenizer = OpenAITokenizerWrapper()

@@ -1,3 +1,21 @@
+import sys
+import os
+
+current_file = os.path.abspath(__file__) if "__file__" in globals() else os.getcwd()
+project_root = current_file
+
+while True:
+    if os.path.isdir(os.path.join(project_root, "backend")):
+        break
+    parent = os.path.dirname(project_root)
+    if parent == project_root:
+        raise Exception("Project root with 'backend' folder not found.")
+    project_root = parent
+
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+print(sys.path)
 import asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine

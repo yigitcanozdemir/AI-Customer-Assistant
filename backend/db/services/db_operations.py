@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from db.schema import Product, Variant, Image, Embedding, FAQ
+from backend.db.schema import Product, Variant, Image, Embedding, FAQ
 from sqlalchemy import delete, text
 from typing import Type, List, Optional
 

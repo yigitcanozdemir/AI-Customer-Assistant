@@ -14,8 +14,6 @@ import {
   RotateCcw,
   MessageCircle,
   AlertCircle,
-  Wifi,
-  WifiOff,
 } from "lucide-react"
 import { useParams, useRouter } from "next/navigation"
 import { useStore } from "@/context/StoreContext"
@@ -26,6 +24,7 @@ import { useChat } from "@/context/ChatContext"
 import { useCallback } from "react"
 
 interface ProductVariant {
+  id: string
   color?: string
   size?: string
   stock: number
@@ -47,28 +46,7 @@ interface Product {
   colors: string[]
 }
 
-const mockProduct: Product = {
-  id: "1",
-  name: "Elegant Evening Dress",
-  description:
-    "A stunning evening dress perfect for special occasions. Made with premium materials and exquisite craftsmanship. Features a flattering silhouette that enhances your natural beauty.",
-  price: 299.99,
-  originalPrice: 399.99,
-  currency: "USD",
-  inStock: true,
-  image: "/elegant-evening-dress.png",
-  images: ["/elegant-evening-dress-black.jpg", "/elegant-evening-dress-navy.jpg", "/elegant-evening-dress-detail.jpg"],
-  variants: [
-    { color: "Black", size: "S", stock: 5, available: true },
-    { color: "Black", size: "M", stock: 3, available: true },
-    { color: "Black", size: "L", stock: 2, available: true },
-    { color: "Navy", size: "S", stock: 2, available: true },
-    { color: "Navy", size: "M", stock: 4, available: true },
-    { color: "Navy", size: "L", stock: 1, available: true },
-  ],
-  sizes: ["S", "M", "L"],
-  colors: ["Black", "Navy"],
-}
+
 
 const formatCurrency = (price: number, currency: string): string => {
   switch (currency) {
@@ -146,8 +124,6 @@ export default function ProductPage() {
         setProduct(data)
       } catch (err) {
         console.error("Error fetching product, using mock data:", err)
-        setIsUsingMockData(true)
-        setProduct(mockProduct)
       } finally {
         setIsLoading(false)
       }
@@ -224,9 +200,13 @@ export default function ProductPage() {
           <h1 className="text-2xl font-bold mb-4">Product Not Found</h1>
           <Button
             onClick={() => {
-              const urlParams = new URLSearchParams(window.location.search)
-              const storeParam = urlParams.get("store") || currentStore
-              router.push(`/?store=${encodeURIComponent(storeParam)}`)
+              if (window.history.length > 1) {
+                router.back() // browser geri tuşu gibi
+              } else {
+                const urlParams = new URLSearchParams(window.location.search)
+                const storeParam = urlParams.get("store") || currentStore
+                router.push(`/?store=${encodeURIComponent(storeParam)}`)
+              }
             }}
             variant="outline"
           >
@@ -241,6 +221,8 @@ export default function ProductPage() {
   const handleAddToCart = () => {
     if (!product || !selectedColor || !selectedSize) return
 
+    const selectedVariant = getCurrentVariant()
+    if (!selectedVariant) return
     addItem({
       productId: product.id,
       name: product.name,
@@ -249,8 +231,9 @@ export default function ProductPage() {
       image: currentImages[0] || product.image,
       size: selectedSize,
       color: selectedColor,
-      inStock: isCurrentVariantInStock(),
+      inStock: selectedVariant.available,
       quantity,
+      variantId: selectedVariant.id
     })
 
     openCart()
@@ -265,27 +248,19 @@ export default function ProductPage() {
         <div className="container mx-auto px-4 lg:px-6">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center space-x-4">
-              <Button
-                onClick={() => {
-                  const urlParams = new URLSearchParams(window.location.search)
+              <Button   onClick={() => {
+                if (window.history.length > 1) {
+                  router.back() 
+                } else {const urlParams = new URLSearchParams(window.location.search)
                   const storeParam = urlParams.get("store") || currentStore
                   router.push(`/?store=${encodeURIComponent(storeParam)}`)
-                }}
-                variant="ghost"
-                size="sm"
-              >
+                }
+              }}
+              variant="ghost"
+              size="sm">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to Store
               </Button>
-
-              <div className="flex items-center space-x-2">
-                {isUsingMockData ? (
-                  <WifiOff className="w-4 h-4 text-muted-foreground" />
-                ) : (
-                  <Wifi className="w-4 h-4 text-green-500" />
-                )}
-                <span className="text-xs text-muted-foreground">{isUsingMockData ? "Demo Mode" : "Live"}</span>
-              </div>
             </div>
 
             <div className="flex items-center space-x-4">
