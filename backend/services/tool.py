@@ -128,7 +128,7 @@ async def variant_check(product_id: str, size: str = None, color: str = None):
         }
 
 
-async def process_order(order_id: uuid.UUID, action: str):
+async def process_order(order_id: uuid.UUID, action: str, store: str):
     valid_actions = ["create", "update", "cancel", "return", "confirm"]
 
     if action not in valid_actions:
@@ -139,7 +139,9 @@ async def process_order(order_id: uuid.UUID, action: str):
 
     async with get_session() as session:
         async with session.begin():
-            order = await session.get(Order, order_id)
+            stmt = select(Order).where(Order.order_id == order_id, Order.store == store)
+            result = await session.execute(stmt)
+            order = result.scalar_one_or_none()
             if not order:
                 return {"status": "error", "message": "Order not found"}
 
@@ -163,7 +165,7 @@ async def process_order(order_id: uuid.UUID, action: str):
     }
 
 
-async def list_orders(user_id: str) -> ListOrdersResponse:
+async def list_orders(user_id: str, store: str) -> ListOrdersResponse:
     try:
         async with get_session() as session:
             stmt = (
@@ -172,13 +174,13 @@ async def list_orders(user_id: str) -> ListOrdersResponse:
                     joinedload(Order.product).joinedload(Product.images),
                     joinedload(Order.variant),
                 )
-                .where(Order.user_id == user_id)
-                .order_by(Order.created_at.desc())  # Add ordering for better UX
+                .where(Order.user_id == user_id, Order.store == store)
+                .order_by(Order.created_at.desc())
             )
             result = await session.execute(stmt)
-            orders = result.unique().scalars().all()  # Add .unique() here!
+            orders = result.unique().scalars().all()
 
-            print(f"Found {len(orders)} orders for user {user_id}")  # Debug print
+            print(f"Found {len(orders)} orders for user {user_id}")
 
             orders_list = []
             for order in orders:
@@ -212,7 +214,7 @@ async def list_orders(user_id: str) -> ListOrdersResponse:
                     order_status = OrderStatus(
                         order_id=order.order_id,
                         status=order.status,
-                        user_name=order.user_name,  # Add the missing user_name field!
+                        user_name=order.user_name,
                         created_at=order.created_at,
                         product=product_data,
                     )
@@ -222,7 +224,7 @@ async def list_orders(user_id: str) -> ListOrdersResponse:
                     print(f"Error processing order {order.order_id}: {order_error}")
                     continue
 
-            print(f"Successfully processed {len(orders_list)} orders")  # Debug print
+            print(f"Successfully processed {len(orders_list)} orders")
             return ListOrdersResponse(orders=orders_list)
 
     except Exception as e:

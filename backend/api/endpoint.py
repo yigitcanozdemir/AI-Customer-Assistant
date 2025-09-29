@@ -169,6 +169,7 @@ async def create_order(request: CreateOrderRequest):
                         user_name=request.user_name,
                         product_id=item.product_id,
                         variant_id=item.variant_id,
+                        store=request.store,
                         status="created",
                         created_at=created_at,
                     )

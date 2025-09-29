@@ -11,10 +11,12 @@ import { useCart } from "@/lib/cart-context"
 import { useUser } from "@/context/UserContext"
 import { CheckoutModal } from "./checkout-modal"
 import { OrderSuccessModal } from "./order-success-modal"
-
+import { useStore } from "@/context/StoreContext"
+import { log } from "console"
 interface CreateOrderRequest {
   user_id: string
   user_name: string
+  store : string
   items: {
     product_id: string
     variant_id?: string | null
@@ -62,6 +64,7 @@ export function ShoppingCart() {
   const { userId, userName } = useUser()
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const { store: selectedStore } = useStore()
   const [isOrderSuccessOpen, setIsOrderSuccessOpen] = useState(false)
   const [orderData, setOrderData] = useState<CreateOrderResponse | null>(null)
 
@@ -74,6 +77,7 @@ export function ShoppingCart() {
       const payload: CreateOrderRequest = {
         user_id: userId,
         user_name: userName,
+        store: selectedStore,
         items: state.items.map((item) => ({
           product_id: item.productId,
           variant_id: item.variantId || null,
@@ -90,9 +94,10 @@ export function ShoppingCart() {
           },
         })),
       }
+      console.log("Selected Store in Cart:", selectedStore)
 
-      console.log("[v0] Sending request to:", "http://localhost:8000/events/orders")
-      console.log("[v0] Payload:", JSON.stringify(payload, null, 2))
+      console.log("Sending request to:", "http://localhost:8000/events/orders")
+      console.log("Payload:", JSON.stringify(payload, null, 2))
 
       const res = await fetch("http://localhost:8000/events/orders", {
         method: "POST",
@@ -100,23 +105,23 @@ export function ShoppingCart() {
         body: JSON.stringify(payload),
       })
 
-      console.log("[v0] Response status:", res.status)
+      console.log("Response status:", res.status)
 
       if (!res.ok) {
         const errorText = await res.text()
-        console.error("[v0] Error response:", errorText)
+        console.error("Error response:", errorText)
         throw new Error(`Order creation failed: ${res.status} ${errorText}`)
       }
 
       const data: CreateOrderResponse = await res.json()
-      console.log("[v0] Order created:", data)
+      console.log("Order created:", data)
 
       setOrderData(data)
       clearCart()
       setIsCheckoutOpen(false)
       setIsOrderSuccessOpen(true)
     } catch (error) {
-      console.error("[v0] Checkout error:", error)
+      console.error("Checkout error:", error)
       let errorMessage = "Unknown error"
       if (error instanceof Error) {
         errorMessage = error.message

@@ -25,6 +25,7 @@ class OrderItem(BaseModel):
 class CreateOrderRequest(BaseModel):
     user_id: uuid.UUID
     user_name: str
+    store: str
     items: List[OrderItem]
 
 

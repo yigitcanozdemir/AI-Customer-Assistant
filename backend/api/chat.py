@@ -61,8 +61,9 @@ TOOLS = [
             "properties": {
                 "order_id": {"type": "string"},
                 "action": {"type": "string"},
+                "store": {"type": "string"},
             },
-            "required": ["order_id", "action"],
+            "required": ["order_id", "action", "store"],
         },
     },
     {
@@ -71,8 +72,8 @@ TOOLS = [
         "description": "List users orders",
         "parameters": {
             "type": "object",
-            "properties": {},  # Remove user_id from required parameters
-            "required": [],
+            "properties": {"store": {"type": "string"}},
+            "required": ["store"],
         },
     },
 ]
@@ -82,7 +83,7 @@ async def handle_chat_event(
     user_input: str,
     store: str,
     message_history: List[Message],
-    user_id: str,  # Make sure this is a UUID string, not a name
+    user_id: str,
     user_name: str,
 ) -> MessageResponse:
     try:
@@ -105,7 +106,7 @@ async def handle_chat_event(
             message_history = manage_context_window(message_history, max_messages=10)
 
         print(f"Estimated tokens: {estimated_tokens}")
-        print(f"User ID: {user_id}")  # Debug print to see what user_id looks like
+        print(f"User ID: {user_id}")
 
         system_prompt = {
             "role": "system",

@@ -55,12 +55,10 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
       let newItems: CartItem[]
 
       if (existingItemIndex >= 0) {
-        // Update existing item quantity
         newItems = state.items.map((item, index) =>
           index === existingItemIndex ? { ...item, quantity: item.quantity + (action.payload.quantity || 1) } : item,
         )
       } else {
-        // Add new item
         const newItem: CartItem = {
           ...action.payload,
           id: `${action.payload.productId}-${action.payload.size}-${action.payload.color}`,
@@ -190,7 +188,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error("Error loading cart from localStorage:", error)
       }
     } else {
-      // Clear cart when switching to a store with no saved cart
       dispatch({ type: "CLEAR_CART" })
     }
   }, [store])

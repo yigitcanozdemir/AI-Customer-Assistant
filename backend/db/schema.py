@@ -159,8 +159,10 @@ class Order(Base):
         nullable=True,
         index=True,
     )
+    store = Column(String(100), nullable=False, index=False)
     status = Column(String(20), nullable=False, default="created")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
     product = relationship("Product", backref="orders")
     variant = relationship("Variant", backref="orders")
 
