@@ -58,9 +58,6 @@ class ProductContext(BaseModel):
     name: str
     price: float
     currency: str
-    sizes: List[str] = []
-    colors: List[str] = []
-    variants: List[ProductVariant] = []
 
 
 class Product(BaseModel):

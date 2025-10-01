@@ -203,10 +203,6 @@ export function ChatSidebar() {
                 name: selectedProduct.name,
                 price: selectedProduct.price,
                 currency: selectedProduct.currency,
-                description: selectedProduct.description,
-                sizes: selectedProduct.sizes,
-                colors: selectedProduct.colors,
-                variants: selectedProduct.variants,
               }
             : undefined,
           order: selectedOrder

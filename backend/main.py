@@ -1,3 +1,7 @@
+from backend.logging import setup_logging
+
+setup_logging()
+
 from fastapi import FastAPI
 from backend.config import settings
 from backend.api.routes import router as process_router
@@ -5,28 +9,45 @@ from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 from backend.db.session import get_session
 from contextlib import asynccontextmanager
+from backend.services.cache import cache_manager
+import logging
+from sqlalchemy import text
+
+logger = logging.getLogger(__name__)
 
 
 async def clear_expired_orders():
     while True:
         async with get_session() as session:
-            await session.execute(
-                "DELETE FROM orders WHERE created_at < NOW() - INTERVAL '10 minutes';"
+            result = await session.execute(
+                text(
+                    "DELETE FROM orders WHERE created_at < NOW() - INTERVAL '10 minutes'"
+                )
             )
             await session.commit()
-            print("🗑 Orders older than 10 minutes cleared.")
+            logger.info(
+                "Orders older than 10 minutes cleared. Deleted rows: %s",
+                result.rowcount,
+            )
         await asyncio.sleep(600)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Connecting to Redis...")
+    await cache_manager.connect()
+    logger.info("Redis connected successfully")
+
     task = asyncio.create_task(clear_expired_orders())
-    print("🚀 Clear expired orders task started.")
+    logger.info("Clear expired orders task started.")
 
     yield
 
     task.cancel()
-    print("🛑 Clear expired orders task stopped.")
+    logger.info("Clear expired orders task stopped.")
+
+    await cache_manager.close()
+    logger.info("Redis connection closed.")
 
 
 app = FastAPI(debug=settings.debug, lifespan=lifespan)

@@ -6,7 +6,13 @@ from backend.services.embedding import create_embedding
 from backend.api.helper import format_products
 import logging
 import uuid
-from backend.api.schema import OrderStatus, ListOrdersResponse, OrderProduct
+from backend.api.schema import (
+    OrderStatus,
+    ListOrdersResponse,
+    OrderProduct,
+    ProductVariant,
+)
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -97,35 +103,34 @@ async def faq_search(query: str, store: str, top_k: int = 1):
         return []
 
 
-async def variant_check(product_id: str, size: str = None, color: str = None):
+async def variant_check(
+    product_id: str, size: str = None, color: str = None
+) -> List[ProductVariant]:
     try:
         async with get_session() as session:
-            stmt = select(Variant).filter(
-                Variant.product_id == product_id, Variant.size == size
-            )
+            stmt = select(Variant).filter(Variant.product_id == product_id)
+            if size:
+                stmt = stmt.filter(Variant.size == size)
             if color:
                 stmt = stmt.filter(Variant.color == color)
 
             result = await session.execute(stmt)
-            variant = result.scalars().first()
+            variants = result.scalars().all()
 
-            if variant:
-                return {
-                    "available": variant.stock > 0,
-                    "size": variant.size,
-                    "color": variant.color,
-                    "stock": variant.stock,
-                }
-            return {"available": False, "size": size, "color": color, "stock": 0}
+            return [
+                ProductVariant(
+                    id=str(v.id),
+                    size=v.size,
+                    color=v.color,
+                    stock=v.stock,
+                    available=v.stock > 0,
+                )
+                for v in variants
+            ]
+
     except Exception as e:
         logger.error(f"Variant check error: {e}")
-        return {
-            "available": False,
-            "size": size,
-            "color": color,
-            "stock": 0,
-            "error": str(e),
-        }
+        return []
 
 
 async def process_order(order_id: uuid.UUID, action: str, store: str):

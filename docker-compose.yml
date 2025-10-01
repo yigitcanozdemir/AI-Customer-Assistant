@@ -25,18 +25,13 @@ services:
     depends_on:
       - db
 
-
-  node:
-    image: node:20.19.3
-    container_name: node-dev
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-
+  redis:
+    image: redis:alpine
+    container_name: redis
     ports:
-      - "3000:3000" 
-    stdin_open: true
-    tty: true
+      - "6379:6379"
+    restart: unless-stopped
+
 
 
 

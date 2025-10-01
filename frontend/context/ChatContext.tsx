@@ -155,9 +155,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!currentStore) return
 
-    console.log("[v0] Store changed to:", currentStore)
+    console.log("Store changed to:", currentStore)
     const storeState = storeSessionMap[currentStore]
-    console.log("[v0] Store state found:", storeState)
+    console.log("Store state found:", storeState)
 
     if (storeState) {
       console.log(
@@ -172,17 +172,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSelectedProduct(storeState.selectedProduct)
 
       if (storeState.messages.length > 0) {
-        console.log("[v0] Setting connection to connected - has messages")
+        console.log("Setting connection to connected - has messages")
         setConnectionStatus("connected")
       } else if (storeState.isAssistantOpen) {
-        console.log("[v0] Setting connection to connecting - chat open but no messages")
+        console.log("Setting connection to connecting - chat open but no messages")
         setConnectionStatus("connecting")
       } else {
-        console.log("[v0] Setting connection to disconnected - no messages and chat closed")
+        console.log("Setting connection to disconnected - no messages and chat closed")
         setConnectionStatus("disconnected")
       }
     } else {
-      console.log("[v0] Creating new store state")
+      console.log("Creating new store state")
       const newSessionId = uuidv4()
       setSessionId(newSessionId)
       setMessages([])

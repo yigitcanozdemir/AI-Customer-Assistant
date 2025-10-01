@@ -142,7 +142,10 @@ async def handle_chat_event(
             - Suggest styling tips and complementary items
             - Never include images, prices, or detailed product information in your text response
             - When using variant_check, always use id from recent_products
-            - For list_orders tool, do NOT include any parameters - the system will handle user identification automatically
+            When using list_orders:
+            - Never include any order IDs, product names, or details in the text.
+            - Only respond with a generic confirmation like "Here are your recent orders".
+            - Do not copy any information from the tool output into your text response.
             
             IMPORTANT: Always use the store name exactly as provided by the user when calling any tool or API. Do not correct spelling.
 
@@ -191,18 +194,22 @@ async def handle_chat_event(
                     tool_result, list
                 ):
                     products = tool_result
+                    input_list.append(
+                        {
+                            "type": "function_call_output",
+                            "call_id": output_item.call_id,
+                            "output": json.dumps(jsonable_encoder(tool_result)),
+                        }
+                    )
 
-                elif output_item.name == "variant_check" and isinstance(
-                    tool_result, dict
-                ):
-                    for p in products:
-                        for v in p.variants:
-                            if v.size == tool_result.get(
-                                "size"
-                            ) and v.color == tool_result.get("color"):
-                                v.stock = tool_result.get("stock", v.stock)
-                                v.available = tool_result.get("available", v.available)
-                                p.inStock = any(var.available for var in p.variants)
+                elif output_item.name == "variant_check":
+                    input_list.append(
+                        {
+                            "type": "function_call_output",
+                            "call_id": output_item.call_id,
+                            "output": json.dumps(jsonable_encoder(tool_result)),
+                        }
+                    )
 
                 elif output_item.name == "list_orders" and isinstance(
                     tool_result, ListOrdersResponse
@@ -212,7 +219,7 @@ async def handle_chat_event(
                         {
                             "type": "function_call_output",
                             "call_id": output_item.call_id,
-                            "output": json.dumps(jsonable_encoder(tool_result)),
+                            "output": json.dumps({"success": True}),
                         }
                     )
 
@@ -225,6 +232,14 @@ async def handle_chat_event(
                         }
                     )
 
+                elif output_item.name == "faq_search":
+                    input_list.append(
+                        {
+                            "type": "function_call_output",
+                            "call_id": output_item.call_id,
+                            "output": json.dumps(jsonable_encoder(tool_result)),
+                        }
+                    )
         if tool_calls_found:
             followup = await client.responses.create(
                 model="gpt-4o-mini",

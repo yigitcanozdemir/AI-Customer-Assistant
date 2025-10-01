@@ -26,7 +26,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from backend.api.helper import format_products
 import uuid
+import logging
+from backend.services.cache import cache_manager
 
+
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -45,9 +49,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 user_name = event.event_data.user_name
                 order_data = event.event_data.order
 
-                product_context = (
-                    ProductContext(**product_data) if product_data else None
-                )
+                product_context = product_data
                 order_context = order_data if order_data else None
                 message_history = get_message_history(session_id)
                 if order_context:
@@ -122,35 +124,71 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
 
 @router.get("/products")
 async def list_products(store: str = "default", limit: int = 30):
-    async with get_session() as session:
-        stmt = (
-            select(Product)
-            .options(joinedload(Product.variants), joinedload(Product.images))
-            .where(Product.store == store)
-            .limit(limit)
-        )
-        result = await session.execute(stmt)
-        products = result.unique().scalars().all()
-        formatted_result = format_products(products)
-        print(json.dumps([p.model_dump() for p in formatted_result], indent=2))
-        return formatted_result
+    try:
+        cached_products = await cache_manager.get_product_list(store, limit)
+        if cached_products:
+            logger.info(f"Cache hit for product list: {store}")
+            return cached_products
+
+        logger.info(f"Cache miss for product list: {store}")
+
+        async with get_session() as session:
+            stmt = (
+                select(Product)
+                .options(joinedload(Product.variants), joinedload(Product.images))
+                .where(Product.store == store)
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            products = result.unique().scalars().all()
+            formatted_result = format_products(products)
+
+            await cache_manager.set_product_list(store, limit, formatted_result)
+
+            return formatted_result
+
+    except Exception as e:
+        logger.error(f"List products error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/products/{product_id}")
 async def get_product(product_id: str):
-    async with get_session() as session:
-        stmt = (
-            select(Product)
-            .options(joinedload(Product.variants), joinedload(Product.images))
-            .where(Product.id == product_id)
-        )
-        result = await session.execute(stmt)
-        product = result.unique().scalar_one_or_none()
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
-        formatted_result = format_products([product])[0]
-        print(json.dumps(jsonable_encoder(formatted_result), indent=2))
-        return formatted_result
+    try:
+        cache_key = f"product:{product_id}"
+        cached = await cache_manager.redis.get(cache_key)
+
+        if cached:
+            logger.info(f"Cache hit for product: {product_id}")
+            return json.loads(cached)
+
+        logger.info(f"Cache miss for product: {product_id}")
+
+        async with get_session() as session:
+            stmt = (
+                select(Product)
+                .options(joinedload(Product.variants), joinedload(Product.images))
+                .where(Product.id == product_id)
+            )
+            result = await session.execute(stmt)
+            product = result.unique().scalar_one_or_none()
+
+            if not product:
+                raise HTTPException(status_code=404, detail="Product not found")
+
+            formatted_result = format_products([product])[0]
+
+            await cache_manager.redis.setex(
+                cache_key, 600, json.dumps(jsonable_encoder(formatted_result))
+            )
+
+            return formatted_result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get product error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/orders", response_model=CreateOrderResponse)
