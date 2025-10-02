@@ -4,17 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import {
-  ShoppingBag,
-  ArrowLeft,
-  Star,
-  Truck,
-  Shield,
-  RotateCcw,
-  MessageCircle,
-  AlertCircle,
-} from "lucide-react"
+import { ShoppingBag, ArrowLeft, Star, Truck, Shield, RotateCcw, MessageCircle,ChevronLeft, ChevronRight } from "lucide-react"
 import { useParams, useRouter } from "next/navigation"
 import { useStore } from "@/context/StoreContext"
 import { useCart } from "@/lib/cart-context"
@@ -45,8 +35,6 @@ interface Product {
   sizes: string[]
   colors: string[]
 }
-
-
 
 const formatCurrency = (price: number, currency: string): string => {
   switch (currency) {
@@ -79,8 +67,7 @@ export default function ProductPage() {
   const getImagesForColor = useCallback(
     (color: string) => {
       if (!product) return []
-      if (!color || product.colors.length <= 1) return product.images
-      return product.images.filter((img) => img.includes(color.toLowerCase()))
+      return product.images && product.images.length > 0 ? product.images : [product.image]
     },
     [product],
   )
@@ -157,13 +144,10 @@ export default function ProductPage() {
   }, [product, getAvailableSizesForColor])
 
   useEffect(() => {
-    if (selectedColor) {
-      const colorImages = getImagesForColor(selectedColor)
-      if (colorImages.length > 0) {
-        setSelectedImage(0)
-      }
+    if (product) {
+      setSelectedImage(0)
     }
-  }, [selectedColor, getImagesForColor])
+  }, [product])
 
   const handleAskQuestion = () => {
     if (!product) return
@@ -201,7 +185,7 @@ export default function ProductPage() {
           <Button
             onClick={() => {
               if (window.history.length > 1) {
-                router.back() // browser geri tuşu gibi
+                router.back()
               } else {
                 const urlParams = new URLSearchParams(window.location.search)
                 const storeParam = urlParams.get("store") || currentStore
@@ -233,7 +217,7 @@ export default function ProductPage() {
       color: selectedColor,
       inStock: selectedVariant.available,
       quantity,
-      variantId: selectedVariant.id
+      variantId: selectedVariant.id,
     })
 
     openCart()
@@ -244,20 +228,28 @@ export default function ProductPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 lg:px-6">
-          <div className="flex h-16 items-center justify-between">
+      <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-all duration-300 ease-in-out" style={{
+          paddingLeft: '1.5rem',
+          paddingRight: isAssistantOpen && state.isOpen ? 'calc(900px + 1.5rem)' :
+                        isAssistantOpen ? 'calc(450px + 1.5rem)' :
+                        state.isOpen ? 'calc(450px + 1.5rem)' : '1.5rem'
+        }}>
+          <div className="max-w-[2000px] mx-auto">
+            <div className="flex h-16 items-center justify-between">
             <div className="flex items-center space-x-4">
-              <Button   onClick={() => {
-                if (window.history.length > 1) {
-                  router.back() 
-                } else {const urlParams = new URLSearchParams(window.location.search)
-                  const storeParam = urlParams.get("store") || currentStore
-                  router.push(`/?store=${encodeURIComponent(storeParam)}`)
-                }
-              }}
-              variant="ghost"
-              size="sm">
+              <Button
+                onClick={() => {
+                  if (window.history.length > 1) {
+                    router.back()
+                  } else {
+                    const urlParams = new URLSearchParams(window.location.search)
+                    const storeParam = urlParams.get("store") || currentStore
+                    router.push(`/?store=${encodeURIComponent(storeParam)}`)
+                  }
+                }}
+                variant="ghost"
+                size="sm"
+              >
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to Store
               </Button>
@@ -286,50 +278,56 @@ export default function ProductPage() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 lg:px-6 py-8">
-        {isUsingMockData && (
-          <Alert className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Currently showing demo product data. Connect your backend at localhost:8000 to see live product details.
-            </AlertDescription>
-          </Alert>
-        )}
+        <main className="py-8 transition-all duration-300 ease-in-out" style={{
+          paddingLeft: '1.5rem',
+          paddingRight: isAssistantOpen && state.isOpen ? 'calc(900px + 1.5rem)' :
+                        isAssistantOpen ? 'calc(450px + 1.5rem)' :
+                        state.isOpen ? 'calc(450px + 1.5rem)' : '1.5rem'
+        }}>
 
-        <div className={`transition-all duration-500 ease-in-out ${isAssistantOpen ? "lg:mr-[400px]" : ""}`}>
-          <div
-            className={`grid grid-cols-1 lg:grid-cols-2 gap-12 transition-all duration-500 ease-in-out ${
-              isAssistantOpen ? "lg:grid-cols-1 xl:grid-cols-2" : ""
-            }`}
-          >
-            <div className="space-y-4">
-              <div className="aspect-[3/4] overflow-hidden rounded-lg bg-muted/20">
+          <div className="max-w-[2000px] mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <div className="space-y-4 max-w-[800px]">
+              <div className="aspect-[3/4] overflow-hidden rounded-lg bg-muted/20 relative group">
                 <img
                   src={currentImages[selectedImage] || product.image || "/placeholder.svg"}
                   alt={product.name}
                   className="w-full h-full object-cover"
                 />
+                
+                {currentImages.length > 1 && (
+                  <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 p-0 bg-black/70 hover:bg-black/90 shadow-lg border-0"
+                    onClick={() => setSelectedImage((selectedImage - 1 + currentImages.length) % currentImages.length)}
+                  >
+                    <ChevronLeft className="w-5 h-5 text-white" />
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 p-0 bg-black/70 hover:bg-black/90 shadow-lg border-0"
+                    onClick={() => setSelectedImage((selectedImage + 1) % currentImages.length)}
+                  >
+                    <ChevronRight className="w-5 h-5 text-white" />
+                  </Button>
+                    
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2">
+                      {currentImages.map((_, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setSelectedImage(index)}
+                          className={`w-2 h-2 rounded-full transition-all ${
+                            selectedImage === index ? "bg-black w-8" : "bg-black/60"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
-
-              {currentImages.length > 1 && (
-                <div className="flex space-x-2 overflow-x-auto">
-                  {currentImages.map((image, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setSelectedImage(index)}
-                      className={`flex-shrink-0 w-20 h-24 rounded-md overflow-hidden border-2 transition-colors ${
-                        selectedImage === index ? "border-primary" : "border-transparent"
-                      }`}
-                    >
-                      <img
-                        src={image || "/placeholder.svg"}
-                        alt={`${product.name} ${index + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             <div className="space-y-6">

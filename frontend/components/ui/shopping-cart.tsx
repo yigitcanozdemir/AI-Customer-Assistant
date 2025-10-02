@@ -140,9 +140,8 @@ export function ShoppingCart() {
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-black/50" onClick={closeCart}>
-        <div
-          className="fixed right-0 top-0 h-full w-full max-w-md bg-background border-l shadow-xl"
+        <div 
+          className="fixed right-0 top-0 h-full w-full max-w-md bg-background border-l shadow-xl z-50"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex flex-col h-full">
@@ -286,7 +285,6 @@ export function ShoppingCart() {
             )}
           </div>
         </div>
-      </div>
 
       <CheckoutModal
         isOpen={isCheckoutOpen}

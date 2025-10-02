@@ -1,7 +1,6 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-import { UserEntryModal } from "@/components/ui/user-entry-modal"
 import type React from "react"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -213,9 +212,13 @@ export default function Store() {
 
   return (
     <div className="min-h-screen bg-background">
-      <UserEntryModal />
-      <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 lg:px-6">
+      <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-all duration-300 ease-in-out" style={{
+        paddingLeft: '1.5rem',
+        paddingRight: isAssistantOpen && state.isOpen ? 'calc(900px + 1.5rem)' :
+                      isAssistantOpen ? 'calc(450px + 1.5rem)' :
+                      state.isOpen ? 'calc(450px + 1.5rem)' : '1.5rem'
+      }}>
+        <div className="max-w-[2000px] mx-auto">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center space-x-8">
               <div className="flex items-center space-x-2">
@@ -283,8 +286,13 @@ export default function Store() {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 lg:px-6 py-8">
-        <div className={`transition-all duration-500 ease-in-out ${isAssistantOpen ? "lg:mr-[400px]" : ""}`}>
+        <main className="py-8 transition-all duration-300 ease-in-out" style={{
+          paddingLeft: '1.5rem',
+          paddingRight: isAssistantOpen && state.isOpen ? 'calc(900px + 1.5rem)' :
+                        isAssistantOpen ? 'calc(450px + 1.5rem)' :
+                        state.isOpen ? 'calc(450px + 1.5rem)' : '1.5rem'
+        }}>
+          <div className="max-w-[2000px] mx-auto">
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
@@ -293,13 +301,8 @@ export default function Store() {
               </div>
             </div>
           ) : (
-            <div
-              className={`grid gap-6 transition-all duration-500 ease-in-out ${
-                isAssistantOpen
-                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3"
-                  : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
-              }`}
-            >
+            <div className={`grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5
+            }`}>
               {filteredDresses.map((dress) => (
                 <Card
                   key={dress.id}
@@ -322,24 +325,24 @@ export default function Store() {
                         <Button
                           variant="secondary"
                           size="sm"
-                          className="absolute left-2 top-1/2 transform -translate-y-1/2 w-8 h-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 hover:bg-black/40 border-0"
+                          className="absolute left-2 top-1/2 transform -translate-y-1/2 w-8 h-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 hover:bg-black/90 border-0"
                           onClick={(e) => {
                             e.stopPropagation()
                             prevImage(dress.id, dress.images)
                           }}
                         >
-                          <ChevronLeft className="w-4 h-4 text-white" />
+                          <ChevronLeft className="w-5 h-5 text-white" />
                         </Button>
                         <Button
                           variant="secondary"
                           size="sm"
-                          className="absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 hover:bg-black/40 border-0"
+                          className="absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 hover:bg-black/90 border-0"
                           onClick={(e) => {
                             e.stopPropagation()
                             nextImage(dress.id, dress.images)
                           }}
                         >
-                          <ChevronRight className="w-4 h-4 text-white" />
+                          <ChevronRight className="w-5 h-5 text-white" />
                         </Button>
 
                         <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -347,7 +350,7 @@ export default function Store() {
                             <div
                               key={index}
                               className={`w-1.5 h-1.5 rounded-full ${
-                                index === (currentImageIndex[dress.id] || 0) ? "bg-white" : "bg-white/50"
+                                index === (currentImageIndex[dress.id] || 0) ? "bg-black w-8" : "bg-black/60"
                               }`}
                             />
                           ))}

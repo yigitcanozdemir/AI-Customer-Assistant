@@ -161,7 +161,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (storeState) {
       console.log(
-        "[v0] Restoring store state - messages:",
+        "Restoring store state - messages:",
         storeState.messages.length,
         "isAssistantOpen:",
         storeState.isAssistantOpen,

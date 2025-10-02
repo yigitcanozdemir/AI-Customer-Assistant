@@ -1,7 +1,6 @@
 import type React from "react"
 import { Inter } from "next/font/google"
 import { Suspense } from "react"
-import { Analytics } from "@vercel/analytics/next"
 import { Providers } from "@/components/providers"
 import "./globals.css"
 
@@ -21,7 +20,6 @@ export default function RootLayout({
         <Suspense fallback={null}>
           <Providers>{children}</Providers>
         </Suspense>
-        <Analytics />
       </body>
     </html>
   )

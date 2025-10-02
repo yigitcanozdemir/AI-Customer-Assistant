@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from "uuid"
 import { useStore } from "@/context/StoreContext"
 import { useChat } from "@/context/ChatContext"
 import { useUser } from "@/context/UserContext"
-
+import { useCart } from "@/lib/cart-context"
 interface ProductVariant {
   color?: string
   size?: string
@@ -70,7 +70,7 @@ export function ChatSidebar() {
     selectedOrder,
     setSelectedOrder,
   } = useChat()
-
+  const { state } = useCart()
   useEffect(() => {
     if (!isAssistantOpen) return
 
@@ -308,7 +308,12 @@ export function ChatSidebar() {
   if (!isAssistantOpen) return null
 
   return (
-    <div className="fixed top-0 right-0 w-full lg:w-[400px] h-full bg-background border-l z-50 shadow-xl">
+    <div 
+      className={`fixed top-0 h-full bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out
+        w-full lg:w-[450px]
+        ${isAssistantOpen ? 'right-0' : '-right-full'}
+        ${state.isOpen ? 'lg:right-[450px]' : 'lg:right-0'}`}
+    >
       <div className="flex flex-col h-full">
         <div className="p-4 border-b bg-muted/30">
           <div className="flex items-center justify-between">
@@ -317,7 +322,7 @@ export function ChatSidebar() {
                 <AvatarFallback className="text-primary font-medium text-sm">AI</AvatarFallback>
               </Avatar>
               <div>
-                <h3 className="font-medium text-sm text-foreground font-modern-heading">Style Assistant</h3>
+                <h3 className="font-medium text-sm text-foreground font-modern-heading">Customer Assistant</h3>
                 <div className="flex items-center mt-0.5">
                   <div
                     className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
