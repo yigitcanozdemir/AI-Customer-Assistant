@@ -17,7 +17,7 @@ from typing import List
 logger = logging.getLogger(__name__)
 
 
-async def product_search(query: str, store=str, top_k: int = 3):
+async def product_search(query: str, store=str, top_k: int = 1):
     try:
         embedding_vector = await create_embedding(query)
 

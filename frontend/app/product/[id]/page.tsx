@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -58,7 +59,6 @@ export default function ProductPage() {
   const [selectedColor, setSelectedColor] = useState<string>("")
   const [quantity, setQuantity] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
-  const [isUsingMockData, setIsUsingMockData] = useState(false)
   const { store: currentStore, setStore } = useStore()
   const { addItem, openCart, state, toggleCart } = useCart()
 
@@ -100,7 +100,6 @@ export default function ProductPage() {
     const fetchProduct = async () => {
       try {
         setIsLoading(true)
-        setIsUsingMockData(false)
         const res = await fetch(`http://localhost:8000/events/products/${params.id}`, {
           headers: {
             Authorization: "Bearer your-secret-token",
@@ -289,12 +288,15 @@ export default function ProductPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
             <div className="space-y-4 max-w-[800px]">
               <div className="aspect-[3/4] overflow-hidden rounded-lg bg-muted/20 relative group">
-                <img
+                <Image
                   src={currentImages[selectedImage] || product.image || "/placeholder.svg"}
-                  alt={product.name}
-                  className="w-full h-full object-cover"
-                />
-                
+                    alt={product.name}
+                    width={400}
+                    height={600}
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                    unoptimized={true}
+                    />
                 {currentImages.length > 1 && (
                   <>
                   <Button

@@ -6,3 +6,9 @@ ENV/
 env.bak/
 venv.bak/
 __pycache__/
+alembic.ini
+migration.log
+script.py.mako
+logs/
+prometheus_data/
+grafana_data/

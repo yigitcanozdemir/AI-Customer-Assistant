@@ -49,15 +49,3 @@ async def delete_rows(
 
     await session.commit()
     return total_deleted
-
-
-async def delete_all_table(session: AsyncSession, models: List[Type]):
-    dropped_tables = []
-    for model in models:
-        table_name = model.__tablename__
-        stmt = text(f"DROP TABLE IF EXISTS {table_name} CASCADE;")
-        await session.execute(stmt)
-        dropped_tables.append(table_name)
-
-    await session.commit()
-    return f"Dropped tables: {', '.join(dropped_tables)}"

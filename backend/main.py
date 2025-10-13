@@ -12,6 +12,8 @@ from contextlib import asynccontextmanager
 from backend.services.cache import cache_manager
 import logging
 from sqlalchemy import text
+from backend.api.middleware import catch_exceptions_middleware
+from prometheus_fastapi_instrumentator import Instrumentator
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(debug=settings.debug, lifespan=lifespan)
+instrumentator = Instrumentator(should_group_status_codes=False)
+instrumentator.instrument(app).expose(app, endpoint="/metrics")
+app.middleware("http")(catch_exceptions_middleware)
 
 app.add_middleware(
     CORSMiddleware,

@@ -140,11 +140,13 @@ export function ShoppingCart() {
 
   return (
     <>
-        <div 
-          className="fixed right-0 top-0 h-full w-full max-w-md bg-background border-l shadow-xl z-50"
+        <div
+          className={`fixed top-0 right-0 h-full w-full lg:w-[450px] bg-background border-l shadow-xl z-50 transition-transform duration-300 ${
+            state.isOpen ? "translate-x-0" : "translate-x-full"
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-full overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b">
               <div className="flex items-center space-x-2">
                 <ShoppingBag className="w-5 h-5" />

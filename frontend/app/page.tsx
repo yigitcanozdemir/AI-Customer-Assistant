@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import type React from "react"
 import { useState, useEffect } from "react"
@@ -9,7 +10,6 @@ import { Card, CardContent } from "@/components/ui/card"
 import {
   Search,
   ShoppingBag,
-  Star,
   ChevronLeft,
   ChevronRight,
   MessageCircle,
@@ -61,6 +61,9 @@ const formatCurrency = (price: number, currency: string): string => {
 }
 
 export default function Store() {
+  const [windowWidth, setWindowWidth] = useState(
+  typeof window !== "undefined" ? window.innerWidth : 1200
+);
   const [searchQuery, setSearchQuery] = useState("")
   const { store: selectedStore, setStore } = useStore()
   const [products, setProducts] = useState<Product[] | null>(null)
@@ -71,7 +74,11 @@ export default function Store() {
   const { addItem, openCart, toggleCart, state } = useCart()
 
   const { isAssistantOpen, setIsAssistantOpen, setMessages, setSelectedProduct } = useChat()
-
+  useEffect(() => {
+  const handleResize = () => setWindowWidth(window.innerWidth);
+  window.addEventListener("resize", handleResize);
+  return () => window.removeEventListener("resize", handleResize);
+}, []);
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
     const storeFromUrl = urlParams.get("store")
@@ -209,15 +216,21 @@ export default function Store() {
 
     openCart()
   }
+  const sideWidth = 450; // Sidebar veya Cart genişliği
+  const totalOffset =
+  windowWidth >= 1024
+    ? (isAssistantOpen ? sideWidth : 0) + (state.isOpen ? sideWidth : 0)
+    : 0;
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-all duration-300 ease-in-out" style={{
-        paddingLeft: '1.5rem',
-        paddingRight: isAssistantOpen && state.isOpen ? 'calc(900px + 1.5rem)' :
-                      isAssistantOpen ? 'calc(450px + 1.5rem)' :
-                      state.isOpen ? 'calc(450px + 1.5rem)' : '1.5rem'
-      }}>
+        <header
+          className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-all duration-300 ease-in-out"
+          style={{
+            paddingLeft: '1.5rem',
+            paddingRight: `calc(${totalOffset}px + 1.5rem)`,
+          }}
+        >
         <div className="max-w-[2000px] mx-auto">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center space-x-8">
@@ -238,7 +251,7 @@ export default function Store() {
                   window.history.replaceState({}, "", url.toString())
                 }}
               >
-                <SelectTrigger className="w-[160px] h-9 text-sm">
+                <SelectTrigger className="w-50 h-9 text-sm">
                   <SelectValue placeholder="Select store" />
                 </SelectTrigger>
                 <SelectContent>
@@ -286,13 +299,14 @@ export default function Store() {
       </header>
 
       {/* Main Content */}
-        <main className="py-8 transition-all duration-300 ease-in-out" style={{
-          paddingLeft: '1.5rem',
-          paddingRight: isAssistantOpen && state.isOpen ? 'calc(900px + 1.5rem)' :
-                        isAssistantOpen ? 'calc(450px + 1.5rem)' :
-                        state.isOpen ? 'calc(450px + 1.5rem)' : '1.5rem'
-        }}>
-          <div className="max-w-[2000px] mx-auto">
+        <main
+          className="py-8 transition-all duration-300 ease-in-out"
+          style={{
+            paddingLeft: '1.5rem',
+            paddingRight: `calc(${totalOffset}px + 1.5rem)`,
+          }}
+        >
+          <div className="max-w-full px-4 sm:px-6 md:px-8 mx-auto">
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
@@ -310,14 +324,18 @@ export default function Store() {
                   onClick={() => openProductPage(dress.id)}
                 >
                   <div className="aspect-[3/4] overflow-hidden bg-muted/20 relative">
-                    <img
+                    <Image
                       src={
                         dress.images && dress.images.length > 0
                           ? dress.images[currentImageIndex[dress.id] || 0]
                           : dress.image || "/placeholder.svg"
                       }
                       alt={dress.name}
+                      width={400}
+                      height={800}
+                      loading="lazy"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      unoptimized={true}
                     />
 
                     {dress.images && dress.images.length > 1 && (
@@ -363,13 +381,6 @@ export default function Store() {
                       <h3 className="font-medium text-sm text-card-foreground line-clamp-2 font-modern-body">
                         {dress.name}
                       </h3>
-
-                      <div className="flex items-center space-x-1">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className="w-3 h-3 fill-current text-secondary" />
-                        ))}
-                        <span className="text-xs text-muted-foreground ml-1">(4.8)</span>
-                      </div>
 
                       <div className="flex items-center justify-between">
                         <div className="space-x-2">

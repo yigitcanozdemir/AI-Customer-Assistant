@@ -24,12 +24,12 @@ from typing import List, Dict, Any
 import asyncio
 from backend.db.session import get_session, engine
 from sqlalchemy.ext.asyncio import AsyncSession
-from services.database_logic import (
+from backend.db.services.database_logic import (
     process_faq_embeddings,
     process_product_embeddings,
 )
-from utils.doc_converter import json_to_plain_text, converter
-from utils.helper_funcs import directory_exists, prettify
+from backend.db.utils.doc_converter import json_to_plain_text, converter
+from backend.db.utils.helper_funcs import directory_exists, prettify
 from batcher import process_products_batch
 import nest_asyncio
 

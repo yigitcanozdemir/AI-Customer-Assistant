@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     text,
+    desc,
 )
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY, UUID
@@ -169,4 +170,6 @@ class Order(Base):
     __table_args__ = (
         Index("ix_orders_user_id", "user_id"),
         Index("ix_orders_status", "status"),
+        Index("ix_orders_store", "store"),
+        Index("ix_orders_user_store_created", "user_id", "store", desc("created_at")),
     )

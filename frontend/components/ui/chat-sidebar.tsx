@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,6 +13,9 @@ import { useStore } from "@/context/StoreContext"
 import { useChat } from "@/context/ChatContext"
 import { useUser } from "@/context/UserContext"
 import { useCart } from "@/lib/cart-context"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+
 interface ProductVariant {
   color?: string
   size?: string
@@ -308,12 +312,14 @@ export function ChatSidebar() {
   if (!isAssistantOpen) return null
 
   return (
-    <div 
-      className={`fixed top-0 h-full bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out
-        w-full lg:w-[450px]
-        ${isAssistantOpen ? 'right-0' : '-right-full'}
-        ${state.isOpen ? 'lg:right-[450px]' : 'lg:right-0'}`}
-    >
+      <div
+        className={`
+          fixed top-0 h-full bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out
+          w-full lg:w-[450px]
+          ${isAssistantOpen ? 'right-0' : '-right-full'}
+          lg:${state.isOpen ? 'right-[450px]' : 'right-0'}
+        `}
+      >
       <div className="flex flex-col h-full">
         <div className="p-4 border-b bg-muted/30">
           <div className="flex items-center justify-between">
@@ -360,7 +366,14 @@ export function ChatSidebar() {
                         message.type === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
                       }`}
                     >
-                      <p className="leading-relaxed font-modern-body">{message.content}</p>
+                      <div className="prose prose-sm dark:prose-invert max-w-none font-modern-body">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        // Artık 'className' burada yok!
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
                     </div>
                   </div>
 
@@ -370,10 +383,13 @@ export function ChatSidebar() {
                         <Card key={product.id} className="border-0 shadow-sm bg-card">
                           <CardContent className="p-3">
                             <div className="flex space-x-3">
-                              <img
+                              <Image
                                 src={product.image || "/placeholder.svg"}
                                 alt={product.name}
+                                width={400}
+                                height={800}
                                 className="w-12 h-16 object-cover rounded"
+                                unoptimized={false}
                               />
                               <div className="flex-1 min-w-0">
                                 <h4 className="font-medium text-sm text-card-foreground mb-1 line-clamp-2 font-modern-body">
@@ -411,10 +427,13 @@ export function ChatSidebar() {
                         >
                           <CardContent className="p-3">
                             <div className="flex space-x-3">
-                              <img
+                              <Image
                                 src={order.product.image || "/placeholder.svg"}
                                 alt={order.product.name}
+                                width={400}
+                                height={800}
                                 className="w-12 h-16 object-cover rounded"
+                                unoptimized={false}
                               />
                               <div className="flex-1 min-w-0">
                                 <h4 className="font-medium text-sm text-card-foreground mb-1 line-clamp-2 font-modern-body">

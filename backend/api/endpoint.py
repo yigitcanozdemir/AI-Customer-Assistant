@@ -28,10 +28,35 @@ from backend.api.helper import format_products
 import uuid
 import logging
 from backend.services.cache import cache_manager
+from prometheus_client import Counter
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+websocket_messages_total = Counter(
+    "websocket_messages_total",
+    "Total number of WebSocket messages processed",
+    ["direction"],
+)
+
+
+@router.get("/health", tags=["health"])
+async def health_check():
+    try:
+        async with get_session() as session:
+            await session.execute("SELECT 1")
+    except Exception as e:
+        return {"status": "fail", "db": str(e)}
+
+    try:
+        pong = await cache_manager.redis.ping()
+        if not pong:
+            return {"status": "fail", "redis": "ping failed"}
+    except Exception as e:
+        return {"status": "fail", "redis": str(e)}
+
+    return {"status": "ok"}
 
 
 @router.websocket("/ws/chat/{session_id}")
@@ -40,6 +65,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
     try:
         while True:
             data = await websocket.receive_text()
+            websocket_messages_total.labels(direction="inbound").inc()
             try:
                 event = EventSchema.model_validate_json(data)
                 question = event.event_data.question
@@ -104,6 +130,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 add_message(session_id, assistant_message)
 
                 await websocket.send_json(jsonable_encoder(response))
+                websocket_messages_total.labels(direction="outbound").inc()
 
             except Exception as e:
                 print("Error processing message:", e)
@@ -179,7 +206,7 @@ async def get_product(product_id: str):
             formatted_result = format_products([product])[0]
 
             await cache_manager.redis.setex(
-                cache_key, 600, json.dumps(jsonable_encoder(formatted_result))
+                cache_key, 1200, json.dumps(jsonable_encoder(formatted_result))
             )
 
             return formatted_result

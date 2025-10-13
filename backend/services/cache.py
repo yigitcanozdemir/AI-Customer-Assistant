@@ -83,7 +83,6 @@ class CacheManager:
             logger.error(f"Cache invalidate error: {e}")
 
     async def get_product_list(self, store: str, limit: int) -> Optional[List]:
-        """Product list cache'den al"""
         try:
             key = f"products:{store}:{limit}"
             cached = await self.redis.get(key)
@@ -94,15 +93,13 @@ class CacheManager:
         return None
 
     async def set_product_list(self, store: str, limit: int, products: List):
-        """Product list cache'e kaydet"""
         try:
             key = f"products:{store}:{limit}"
-            await self.redis.setex(key, 300, pickle.dumps(products))
+            await self.redis.setex(key, 1200, pickle.dumps(products))
         except Exception as e:
             logger.error(f"Cache set product list error: {e}")
 
     async def invalidate_product_list(self, store: str):
-        """Store'un tüm product list cache'ini temizle"""
         try:
             pattern = f"products:{store}:*"
             async for key in self.redis.scan_iter(match=pattern):
