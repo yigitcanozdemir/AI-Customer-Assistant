@@ -12,3 +12,4 @@ script.py.mako
 logs/
 prometheus_data/
 grafana_data/
+loki_data/

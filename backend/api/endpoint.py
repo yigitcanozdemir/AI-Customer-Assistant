@@ -40,6 +40,11 @@ websocket_messages_total = Counter(
     ["direction"],
 )
 
+websocket_disconnects_total = Counter(
+    "websocket_disconnects_total",
+    "Total number of WebSocket disconnections",
+)
+
 
 @router.get("/health", tags=["health"])
 async def health_check():
@@ -146,6 +151,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 )
 
     except WebSocketDisconnect:
+        websocket_disconnects_total.inc()
         print(f"[WebSocket] Client disconnected: {session_id}")
 
 

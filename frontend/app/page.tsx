@@ -331,11 +331,11 @@ export default function Store() {
                           : dress.image || "/placeholder.svg"
                       }
                       alt={dress.name}
-                      width={400}
-                      height={800}
+                      width={600}
+                      height={1200}
                       loading="lazy"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      unoptimized={true}
+                      unoptimized={false}
                     />
 
                     {dress.images && dress.images.length > 1 && (

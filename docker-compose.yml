@@ -17,6 +17,7 @@ services:
     container_name: redis
     ports:
       - "6379:6379"
+    command: ["redis-server", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
     restart: unless-stopped
 
   fastapi:
@@ -32,6 +33,10 @@ services:
       - db
       - redis
     restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+    environment:
+      - APP_NAME=fastapi-service
 
   prometheus:
     image: prom/prometheus:latest
@@ -54,5 +59,28 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
     volumes:
       - ./grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis_exporter
+    environment:
+      - REDIS_ADDR=redis:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
+
+  postgres-exporter:
+    image: wrouesnel/postgres_exporter:latest
+    container_name: postgres_exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://user:password@db:5432/ecommerce?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      - db
