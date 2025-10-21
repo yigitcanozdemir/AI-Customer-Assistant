@@ -40,5 +40,5 @@ def format_products(products):
             colors=list({v.color for v in variants if v.color}),
         )
         formatted_products.append(product_obj)
-    print(json.dumps([p.model_dump() for p in formatted_products], indent=2))
+    # print(json.dumps([p.model_dump() for p in formatted_products], indent=2))
     return formatted_products

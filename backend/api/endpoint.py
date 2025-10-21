@@ -29,8 +29,17 @@ import uuid
 import logging
 from backend.services.cache import cache_manager
 from prometheus_client import Counter
+from opentelemetry import trace
+from backend.utility.utils import (
+    REQUESTS,
+    RESPONSES,
+    REQUESTS_PROCESSING_TIME,
+    REQUESTS_IN_PROGRESS,
+    EXCEPTIONS,
+)
+from backend.config import settings
 
-
+tracer = trace.get_tracer(__name__)
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -67,10 +76,33 @@ async def health_check():
 @router.websocket("/ws/chat/{session_id}")
 async def websocket_chat(websocket: WebSocket, session_id: str):
     await websocket.accept()
+
+    path = "/ws/chat"
+    method = "WS"
+    app_name = settings.app_name
+
+    REQUESTS_IN_PROGRESS.labels(method=method, path=path, app_name=app_name).inc()
+    REQUESTS.labels(method=method, path=path, app_name=app_name).inc()
+    start_total = time.perf_counter()
     try:
+        trace_id = tracer.start_as_current_span("websocket_chat")
+        logger.info(
+            "WebSocket connected",
+            extra={
+                "event": "websocket_connected",
+                "session_id": session_id,
+                "trace_id": str(trace_id),
+            },
+        )
         while True:
+            msg_start = time.perf_counter()
             data = await websocket.receive_text()
             websocket_messages_total.labels(direction="inbound").inc()
+
+            logger.debug(
+                "Incoming WebSocket message",
+                extra={"session_id": session_id, "data_preview": data[:200]},
+            )
             try:
                 event = EventSchema.model_validate_json(data)
                 question = event.event_data.question
@@ -122,7 +154,18 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 response: MessageResponse = await handle_chat_event(
                     question, store, message_history, user_id, user_name
                 )
-                print("Response:", json.dumps(jsonable_encoder(response), indent=2))
+
+                logger.info(
+                    "Chat response generated",
+                    extra={
+                        "event": "chat_response",
+                        "session_id": session_id,
+                        "user_id": user_id,
+                        "response_length": len(response.content),
+                    },
+                )
+
+                # print("Response:", json.dumps(jsonable_encoder(response), indent=2))
 
                 assistant_message = Message(
                     id=str(len(message_history) + 2),
@@ -136,10 +179,33 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
 
                 await websocket.send_json(jsonable_encoder(response))
                 websocket_messages_total.labels(direction="outbound").inc()
+                duration = time.perf_counter() - msg_start
+                span_ctx = trace.get_current_span().get_span_context()
+                trace_id_val = (
+                    trace.format_trace_id(span_ctx.trace_id) if span_ctx else "N/A"
+                )
+                REQUESTS_PROCESSING_TIME.labels(
+                    method=method, path=path, app_name=app_name
+                ).observe(duration, exemplar={"TraceID": trace_id_val})
+                RESPONSES.labels(
+                    method=method, path=path, status_code=200, app_name=app_name
+                ).inc()
 
             except Exception as e:
-                print("Error processing message:", e)
-                traceback.print_exc()
+                EXCEPTIONS.labels(
+                    method=method,
+                    path=path,
+                    exception_type=type(e).__name__,
+                    app_name=app_name,
+                ).inc()
+                logger.exception(
+                    "Error processing WebSocket message",
+                    extra={
+                        "event": "websocket_message_error",
+                        "session_id": session_id,
+                        "error": str(e),
+                    },
+                )
                 await websocket.send_json(
                     {
                         "type": "assistant",
@@ -149,10 +215,34 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         "suggestions": [],
                     }
                 )
+                RESPONSES.labels(
+                    method=method, path=path, status_code=500, app_name=app_name
+                ).inc()
 
     except WebSocketDisconnect:
         websocket_disconnects_total.inc()
-        print(f"[WebSocket] Client disconnected: {session_id}")
+        logger.warning(
+            "WebSocket disconnected",
+            extra={"event": "websocket_disconnected", "session_id": session_id},
+        )
+
+    except Exception as e:
+        EXCEPTIONS.labels(
+            method=method, path=path, exception_type=type(e).__name__, app_name=app_name
+        ).inc()
+        logger.exception(
+            "Unhandled WebSocket exception",
+            extra={
+                "event": "websocket_unhandled_exception",
+                "session_id": session_id,
+                "error": str(e),
+            },
+        )
+
+    finally:
+        REQUESTS_IN_PROGRESS.labels(method=method, path=path, app_name=app_name).dec()
+        total_duration = time.perf_counter() - start_total
+        logger.info(f"WebSocket session ended, total duration: {total_duration:.2f}s")
 
 
 @router.get("/products")

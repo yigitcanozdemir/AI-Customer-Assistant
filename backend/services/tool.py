@@ -99,7 +99,7 @@ async def faq_search(query: str, store: str, top_k: int = 1):
         return [{"id": faq.id, "content": faq.content} for faq in faqs_with_distance]
 
     except Exception as e:
-        print(f"FAQ search error: {e}")
+        logger.error(f"FAQ search error: {e}")
         return []
 
 
@@ -185,7 +185,7 @@ async def list_orders(user_id: str, store: str) -> ListOrdersResponse:
             result = await session.execute(stmt)
             orders = result.unique().scalars().all()
 
-            print(f"Found {len(orders)} orders for user {user_id}")
+            logger.info(f"Found {len(orders)} orders for user {user_id}")
 
             orders_list = []
             for order in orders:
@@ -194,7 +194,7 @@ async def list_orders(user_id: str, store: str) -> ListOrdersResponse:
                     variant = order.variant
 
                     if not product:
-                        print(f"Warning: Order {order.order_id} has no product")
+                        logger.warning(f"Order {order.order_id} has no product")
                         continue
 
                     primary_image = (
@@ -226,18 +226,18 @@ async def list_orders(user_id: str, store: str) -> ListOrdersResponse:
                     orders_list.append(order_status)
 
                 except Exception as order_error:
-                    print(f"Error processing order {order.order_id}: {order_error}")
+                    logger.error(
+                        f"Error processing order {order.order_id}: {order_error}",
+                        exc_info=True,
+                    )
                     continue
 
-            print(f"Successfully processed {len(orders_list)} orders")
+            logger.info(f"Successfully processed {len(orders_list)} orders")
             return ListOrdersResponse(orders=orders_list)
 
     except Exception as e:
         logger.error(f"List orders error: {e}")
-        print(f"List orders detailed error: {e}")
-        import traceback
 
-        traceback.print_exc()
         return ListOrdersResponse(orders=[])
 
 

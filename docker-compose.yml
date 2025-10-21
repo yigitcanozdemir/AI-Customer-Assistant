@@ -1,3 +1,13 @@
+x-logging: &default-logging
+  driver: loki
+  options:
+    loki-url: 'http://localhost:3100/loki/api/v1/push'
+    labels: "job"
+    loki-relabel-config: |
+      - action: labelmap
+        regex: compose_service
+        replacement: job
+
 services:
   db:
     image: ankane/pgvector
@@ -11,6 +21,21 @@ services:
     volumes:
       - ./backend/db/data:/var/lib/postgresql/data
     restart: unless-stopped
+    networks:
+      - ecommerce-network
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://user:password@db:5432/ecommerce?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks:
+      - ecommerce-network
 
   redis:
     image: redis:alpine
@@ -19,6 +44,89 @@ services:
       - "6379:6379"
     command: ["redis-server", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
     restart: unless-stopped
+    networks:
+      - ecommerce-network
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - ecommerce-network
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+    restart: unless-stopped
+    networks:
+      - ecommerce-network
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    command: [ "-config.file=/etc/tempo/tempo.yaml" ]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml
+      - tempo_data:/tmp/tempo
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+    restart: unless-stopped
+    networks:
+      - ecommerce-network
+    user: "0:0"
+    logging: *default-logging
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-remote-write-receiver'
+      - '--web.enable-lifecycle'
+      - '--enable-feature=native-histograms'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    networks:
+      - ecommerce-network
+    logging: *default-logging
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy
+    command: ["run", "/etc/alloy/config.alloy", "--server.http.listen-addr=0.0.0.0:12345"]
+    ports:
+      - "12345:12345"
+      - "4318:4318"
+      - "4320:4317"
+    depends_on:
+      - loki
+      - tempo
+      - prometheus
+      - redis-exporter
+      - postgres-exporter
+    restart: unless-stopped
+    networks:
+      - ecommerce-network
+    logging: *default-logging
 
   fastapi:
     build:
@@ -32,55 +140,52 @@ services:
     depends_on:
       - db
       - redis
+      - alloy
+      - loki
     restart: unless-stopped
-    volumes:
-      - ./logs:/app/logs
     environment:
-      - APP_NAME=fastapi-service
-
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./prometheus_data:/prometheus
-    ports:
-      - "9090:9090"
-    restart: unless-stopped
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
+      - OTEL_SERVICE_NAME=fastapi-service
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production,service.version=1.0.0
+      - LOG_FORMAT=text 
+    labels:
+      job: "fastapi"
+    networks:
+      - ecommerce-network
+    logging: *default-logging
 
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
-      - "3001:3000"
-    restart: unless-stopped
+      - "3002:3000"
     depends_on:
+      - loki
+      - tempo
       - prometheus
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=false
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
     volumes:
-      - ./grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    restart: unless-stopped
+    networks:
+      - ecommerce-network
 
-  redis-exporter:
-    image: oliver006/redis_exporter:latest
-    container_name: redis_exporter
-    environment:
-      - REDIS_ADDR=redis:6379
-    ports:
-      - "9121:9121"
-    depends_on:
-      - redis
+networks:
+  ecommerce-network:
+    driver: bridge
 
-  postgres-exporter:
-    image: wrouesnel/postgres_exporter:latest
-    container_name: postgres_exporter
-    environment:
-      DATA_SOURCE_NAME: "postgresql://user:password@db:5432/ecommerce?sslmode=disable"
-    ports:
-      - "9187:9187"
-    depends_on:
-      - db
+volumes:
+  postgres_data:
+  loki_data:
+  tempo_data:
+  prometheus_data:
+  grafana_data:

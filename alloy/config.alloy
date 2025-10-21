@@ -1,0 +1,117 @@
+// ============================================
+// OTLP RECEIVER - Receives telemetry from FastAPI
+// ============================================
+otelcol.receiver.otlp "from_fastapi" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    // Only send traces and logs through OTLP, not metrics
+    logs    = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+  }
+}
+
+// ============================================
+// PROMETHEUS SCRAPING - Scrape exporters
+// ============================================
+
+// Scrape Redis Exporter
+prometheus.scrape "redis" {
+  targets = [
+    {"__address__" = "redis-exporter:9121"},
+  ]
+  forward_to = [prometheus.remote_write.local.receiver]
+  scrape_interval = "15s"
+  job_name = "redis"
+}
+
+// Scrape Postgres Exporter
+prometheus.scrape "postgres" {
+  targets = [
+    {"__address__" = "postgres-exporter:9187"},
+  ]
+  forward_to = [prometheus.remote_write.local.receiver]
+  scrape_interval = "15s"
+  job_name = "postgresql"
+}
+
+// Scrape FastAPI /metrics endpoint (ONLY source of FastAPI metrics)
+prometheus.scrape "fastapi" {
+  targets = [
+    {"__address__" = "fastapi:8000"},
+  ]
+  forward_to = [prometheus.remote_write.local.receiver]
+  scrape_interval = "10s"
+  job_name = "fastapi"
+  metrics_path = "/metrics"
+}
+
+// ============================================
+// BATCH PROCESSOR
+// ============================================
+otelcol.processor.batch "default" {
+  timeout = "10s"
+  send_batch_size = 1024
+  send_batch_max_size = 2048
+
+  output {
+    logs    = [otelcol.processor.attributes.add_labels.input]
+    traces  = [otelcol.processor.attributes.add_labels.input]
+  }
+}
+
+// ============================================
+// ATTRIBUTES PROCESSOR
+// ============================================
+otelcol.processor.attributes "add_labels" {
+  action {
+    key = "cluster"
+    value = "ecommerce-local"
+    action = "insert"
+  }
+  
+  action {
+    key = "environment"
+    value = "production"
+    action = "insert"
+  }
+
+  output {
+    logs    = [otelcol.exporter.loki.to_loki.input]
+    traces  = [otelcol.exporter.otlp.to_tempo.input]
+  }
+}
+
+// ============================================
+// EXPORTERS
+// ============================================
+prometheus.remote_write "local" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
+otelcol.exporter.loki "to_loki" {
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+otelcol.exporter.otlp "to_tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}

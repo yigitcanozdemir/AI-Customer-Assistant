@@ -13,9 +13,11 @@ from backend.services.cache import cache_manager
 import logging
 from sqlalchemy import text
 from backend.api.middleware import catch_exceptions_middleware
-from prometheus_fastapi_instrumentator import Instrumentator
+from backend.utility.utils import PrometheusMiddleware, metrics, setup_otlp
 
 logger = logging.getLogger(__name__)
+
+APP_NAME = settings.app_name
 
 
 async def clear_expired_orders():
@@ -28,33 +30,37 @@ async def clear_expired_orders():
             )
             await session.commit()
             logger.info(
-                "Orders older than 10 minutes cleared. Deleted rows: %s",
-                result.rowcount,
+                "Old orders cleared",
+                extra={"deleted_rows": result.rowcount, "job": "clear_expired_orders"},
             )
         await asyncio.sleep(600)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Connecting to Redis...")
+    setup_logging()
+
+    logger.info("Connecting to Redis", extra={"service": "redis"})
     await cache_manager.connect()
-    logger.info("Redis connected successfully")
+    logger.info("Redis connected", extra={"service": "redis"})
 
     task = asyncio.create_task(clear_expired_orders())
-    logger.info("Clear expired orders task started.")
+    logger.info("Background task started", extra={"task": "clear_expired_orders"})
 
     yield
 
     task.cancel()
-    logger.info("Clear expired orders task stopped.")
+    logger.info("Background task stopped", extra={"task": "clear_expired_orders"})
 
     await cache_manager.close()
-    logger.info("Redis connection closed.")
+    logger.info("Redis connection closed", extra={"service": "redis"})
 
 
 app = FastAPI(debug=settings.debug, lifespan=lifespan)
-instrumentator = Instrumentator(should_group_status_codes=False)
-instrumentator.instrument(app).expose(app, endpoint="/metrics")
+app.add_middleware(PrometheusMiddleware, app_name=APP_NAME)
+app.add_route("/metrics", metrics)
+setup_otlp(app, APP_NAME, endpoint="tempo:4317")
+
 app.middleware("http")(catch_exceptions_middleware)
 
 app.add_middleware(

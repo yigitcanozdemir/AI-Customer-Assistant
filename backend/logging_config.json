@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "json": {
+      "()": "backend.logging.JsonFormatter"
+    }
+  },
+  "handlers": {
+    "console": {
+      "class": "logging.StreamHandler",
+      "formatter": "json",
+      "stream": "ext://sys.stdout"
+    },
+    "file": {
+      "class": "logging.handlers.RotatingFileHandler",
+      "formatter": "json",
+      "filename": "logs/app.log",
+      "maxBytes": 10000000,
+      "backupCount": 5
+    }
+  },
+  "root": {
+    "level": "INFO",
+    "handlers": ["console", "file"]
+  },
+  "loggers": {
+    "uvicorn": {
+      "level": "INFO",
+      "handlers": ["console", "file"],
+      "propagate": false
+    },
+    "uvicorn.access": {
+      "level": "WARNING",
+      "handlers": ["console", "file"],
+      "propagate": false
+    },
+    "uvicorn.error": {
+      "level": "INFO",
+      "handlers": ["console", "file"],
+      "propagate": false
+    }
+  }
+}
