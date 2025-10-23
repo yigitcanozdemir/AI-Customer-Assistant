@@ -99,6 +99,10 @@ class ChatEventData(BaseModel):
     user_id: uuid.UUID
     product: Optional[ProductContext] = None
     order: Optional[OrderStatus] = None
+    is_initial_message: Optional[bool] = False
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class EventSchema(BaseModel):

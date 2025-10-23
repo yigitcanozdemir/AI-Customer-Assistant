@@ -1,8 +1,11 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, X, Package, Clock, User } from "lucide-react"
+import { useCart } from "@/lib/cart-context"
+import { useChat } from "@/context/ChatContext"
 
 interface OrderStatus {
   order_id: string
@@ -23,15 +26,63 @@ interface OrderSuccessModalProps {
 }
 
 export function OrderSuccessModal({ isOpen, onClose, orderData }: OrderSuccessModalProps) {
+  const { state } = useCart()
+  const { isAssistantOpen } = useChat()
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1200
+  )
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
+
   if (!isOpen || !orderData) return null
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString()
   }
 
+  const MAX_SIDE_WIDTH = 450
+  const bothPanelsOpen = isAssistantOpen && state.isOpen
+
+  let sideWidth
+  if (windowWidth < 1024) {
+    sideWidth = windowWidth
+  } else if (bothPanelsOpen && windowWidth >= 1024 && windowWidth < 1400) {
+    sideWidth = windowWidth / 2
+  } else {
+    sideWidth = MAX_SIDE_WIDTH
+  }
+
+  const totalOffset =
+    windowWidth >= 1024
+      ? (isAssistantOpen ? sideWidth : 0) + (state.isOpen ? sideWidth : 0)
+      : 0
+
+  const shouldShowFullScreen = bothPanelsOpen && windowWidth >= 1024 && windowWidth < 1400
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-background rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div 
+      className="fixed inset-0 bg-black/50 flex items-center justify-center"
+      style={{ 
+        zIndex: 60,
+        paddingLeft: shouldShowFullScreen ? '0' : '1rem',
+        paddingRight: shouldShowFullScreen ? '0' : (windowWidth >= 1024 ? `calc(${totalOffset}px + 1rem)` : '1rem'),
+        paddingTop: shouldShowFullScreen ? '0' : '1rem',
+        paddingBottom: shouldShowFullScreen ? '0' : '1rem',
+      }}
+    >
+      <div 
+        className="bg-background rounded-lg shadow-xl w-full overflow-y-auto"
+        style={{
+          maxWidth: shouldShowFullScreen ? '100%' : '32rem',
+          maxHeight: shouldShowFullScreen ? '100%' : '90vh',
+          height: shouldShowFullScreen ? '100%' : 'auto',
+          borderRadius: shouldShowFullScreen ? '0' : undefined,
+        }}
+      >
         <div className="flex items-center justify-between p-6 border-b">
           <div className="flex items-center space-x-3">
             <CheckCircle className="w-8 h-8 text-green-600" />

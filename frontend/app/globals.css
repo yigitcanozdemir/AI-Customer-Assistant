@@ -5,80 +5,79 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Updated to modern Shopify-inspired color palette */
   --background: #ffffff;
-  --foreground: #4b5563;
-  --card: #f9fafb;
-  --card-foreground: #374151;
+  --foreground: #1e293b;
+  --card: #f8fafc;
+  --card-foreground: #334155;
   --popover: #ffffff;
-  --popover-foreground: #4b5563;
+  --popover-foreground: #1e293b;
   --primary: #0891b2;
   --primary-foreground: #ffffff;
-  --secondary: #10b981;
+  --secondary: #0891b2;
   --secondary-foreground: #ffffff;
-  --muted: #f9fafb;
+  --muted: #f1f5f9;
   --muted-foreground: #4b5563;
-  --accent: #10b981;
+  --accent: #0891b2;
   --accent-foreground: #ffffff;
-  --destructive: #dc2626;
+  --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #e5e7eb;
+  --border: #e2e8f0;
   --input: #ffffff;
   --ring: rgba(8, 145, 178, 0.5);
-  --chart-1: #059669;
-  --chart-2: #10b981;
+  --chart-1: #0891b2;
+  --chart-2: #0891b2;
   --chart-3: #0891b2;
-  --chart-4: #dc2626;
-  --chart-5: #f59e0b;
+  --chart-4: #0891b2;
+  --chart-5: #0891b2;
   --radius: 0.5rem;
-  --sidebar: #f9fafb;
-  --sidebar-foreground: #4b5563;
+  --sidebar: #f8fafc;
+  --sidebar-foreground: #1e293b;
   --sidebar-primary: #ffffff;
-  --sidebar-primary-foreground: #4b5563;
-  --sidebar-accent: #10b981;
+  --sidebar-primary-foreground: #1e293b;
+  --sidebar-accent: #0891b2;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #e5e7eb;
-  --sidebar-ring: rgba(16, 185, 129, 0.5);
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: rgba(8, 145, 178, 0.5);
+  --scroll: rgba(0, 0, 0, 0.7);
+  --scroll-hover: rgba(0, 0, 0, 0.9);
 }
 
 .dark {
-  /* Updated dark mode colors for modern aesthetic */
-  --background: #111827;
-  --foreground: #f9fafb;
-  --card: #1f2937;
-  --card-foreground: #f9fafb;
-  --popover: #1f2937;
-  --popover-foreground: #f9fafb;
-  --primary: #06b6d4;
+  --background: #0f172a;
+  --foreground: #f8fafc;
+  --card: #1e293b;
+  --card-foreground: #e2e8f0;
+  --popover: #1e293b;
+  --popover-foreground: #f8fafc;
+  --primary: #0891b2;
   --primary-foreground: #ffffff;
-  --secondary: #10b981;
+  --secondary: #0891b2;
   --secondary-foreground: #ffffff;
-  --muted: #374151;
-  --muted-foreground: #9ca3af;
-  --accent: #10b981;
+  --muted: #334155;
+  --muted-foreground: #94a3b8;
+  --accent: #0891b2;
   --accent-foreground: #ffffff;
-  --destructive: #dc2626;
+  --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #374151;
-  --input: #1f2937;
-  --ring: rgba(6, 182, 212, 0.5);
-  --chart-1: #059669;
-  --chart-2: #10b981;
-  --chart-3: #06b6d4;
-  --chart-4: #dc2626;
-  --chart-5: #f59e0b;
-  --sidebar: #1f2937;
-  --sidebar-foreground: #f9fafb;
-  --sidebar-primary: #111827;
-  --sidebar-primary-foreground: #f9fafb;
-  --sidebar-accent: #10b981;
+  --border: #334155;
+  --input: #1e293b;
+  --ring: rgba(8, 145, 178, 0.5);
+  --chart-1: #0891b2;
+  --chart-2: #0891b2;
+  --chart-3: #0891b2;
+  --chart-4: #0891b2;
+  --chart-5: #0891b2;
+  --sidebar: #1e293b;
+  --sidebar-foreground: #f8fafc;
+  --sidebar-primary: #0f172a;
+  --sidebar-primary-foreground: #f8fafc;
+  --sidebar-accent: #0891b2;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #374151;
-  --sidebar-ring: rgba(16, 185, 129, 0.5);
+  --sidebar-border: #334155;
+  --sidebar-ring: rgba(8, 145, 178, 0.5);
 }
 
 @theme inline {
-  /* Updated typography for modern Shopify-like aesthetic */
   --font-sans: "Inter", system-ui, sans-serif;
   --font-serif: "Work Sans", Georgia, serif;
   --font-mono: var(--font-geist-mono);
@@ -128,7 +127,6 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 
-  /* Updated typography classes for modern aesthetic */
   .font-modern-heading {
     font-family: "Work Sans", Georgia, serif;
     font-weight: 600;
@@ -138,4 +136,76 @@
     font-family: "Inter", system-ui, sans-serif;
     font-weight: 400;
   }
+
+  .icon-button {
+    @apply h-10 w-10 p-0 text-foreground hover:text-primary bg-transparent hover:bg-transparent transition-colors;
+  }
+
+  .hover-primary-light:hover {
+    background-color: rgba(8, 145, 178, 0.1);
+  }
+
+  .hover-primary-medium:hover {
+    background-color: rgba(8, 145, 178, 0.2);
+  }
+
+  .hover-primary-strong:hover {
+    background-color: rgba(8, 145, 178, 0.3);
+  }
+
+  .border-primary-light {
+    border-color: rgba(8, 145, 178, 0.3);
+  }
+
+  .border-primary-medium {
+    border-color: rgba(8, 145, 178, 0.5);
+  }
+
+  .bg-primary-light {
+    background-color: rgba(8, 145, 178, 0.1);
+  }
+
+  .bg-primary-medium {
+    background-color: rgba(8, 145, 178, 0.2);
+  }
+
+  .text-primary-light {
+    color: rgba(8, 145, 178, 0.8);
+  }
+
+  .frosted-header {
+    background-color: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .dark .frosted-header {
+    background-color: rgba(15, 23, 42, 0.8);
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-lg;
+  }
+
+  .smooth-transition {
+    @apply transition-colors duration-200;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--muted);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scroll);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-hover);
 }

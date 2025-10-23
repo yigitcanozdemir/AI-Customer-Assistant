@@ -1,3 +1,4 @@
+// File: frontend/app/product/[id]/page.tsx
 "use client"
 
 import Image from "next/image"
@@ -5,7 +6,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { ShoppingBag, ArrowLeft, Star, Truck, Shield, RotateCcw, MessageCircle,ChevronLeft, ChevronRight } from "lucide-react"
+import { ShoppingBag, ArrowLeft, Truck, Shield, RotateCcw, MessageCircle,ChevronLeft, ChevronRight } from "lucide-react"
 import { useParams, useRouter } from "next/navigation"
 import { useStore } from "@/context/StoreContext"
 import { useCart } from "@/lib/cart-context"
@@ -51,6 +52,9 @@ const formatCurrency = (price: number, currency: string): string => {
 }
 
 export default function ProductPage() {
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1200
+  );
   const params = useParams()
   const router = useRouter()
   const [product, setProduct] = useState<Product | null>(null)
@@ -62,7 +66,7 @@ export default function ProductPage() {
   const { store: currentStore, setStore } = useStore()
   const { addItem, openCart, state, toggleCart } = useCart()
 
-  const { setIsAssistantOpen, setMessages, setSelectedProduct, isAssistantOpen } = useChat()
+  const { messages, setMessages, setIsAssistantOpen, setSelectedProduct, isAssistantOpen } = useChat()
 
   const getImagesForColor = useCallback(
     (color: string) => {
@@ -95,7 +99,11 @@ export default function ProductPage() {
     },
     [product],
   )
-
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
   useEffect(() => {
     const fetchProduct = async () => {
       try {
@@ -142,38 +150,111 @@ export default function ProductPage() {
     }
   }, [product, getAvailableSizesForColor])
 
+  const sortSizes = (sizes: string[]): string[] => {
+    const clothingSizeOrder: { [key: string]: number } = {
+      'XXS': 1, 'XS': 2, 'S': 3, 'M': 4, 'L': 5, 'XL': 6, 'XXL': 7, 'XXXL': 8,
+      '2XS': 1, '3XS': 0,
+      '2XL': 7, '3XL': 8, '4XL': 9, '5XL': 10
+    }
+
+    return [...sizes].sort((a, b) => {
+      const aUpper = a.toUpperCase()
+      const bUpper = b.toUpperCase()
+      
+      if (clothingSizeOrder[aUpper] !== undefined && clothingSizeOrder[bUpper] !== undefined) {
+        return clothingSizeOrder[aUpper] - clothingSizeOrder[bUpper]
+      }
+      
+      const aNum = parseFloat(a)
+      const bNum = parseFloat(b)
+      
+      if (!isNaN(aNum) && !isNaN(bNum)) {
+        return aNum - bNum
+      }
+      
+      return a.localeCompare(b)
+    })
+  }
+
+  const sortedSizes = product ? sortSizes(product.sizes) : []
+
   useEffect(() => {
     if (product) {
       setSelectedImage(0)
     }
   }, [product])
 
+  const handleChatOpen = () => {
+    setSelectedProduct(null)
+    
+    if (messages.length === 0) {
+      setMessages([
+        {
+          id: "1",
+          type: "assistant",
+          content: `Hello! Welcome to ${currentStore}. How can I help you today?`,
+          timestamp: new Date(),
+          suggestions: [
+            "Show me your latest products",
+            "I'm looking for a dress",
+            "Help me track my order",
+          ],
+        },
+      ])
+    }
+    
+    setIsAssistantOpen(prev => !prev);
+  }
+
   const handleAskQuestion = () => {
     if (!product) return
 
     setSelectedProduct(product)
-    setIsAssistantOpen(true)
-    setMessages([
-      {
-        id: "1",
-        type: "assistant",
-        content: `Hello! I see you're interested in the ${product.name}. I can help with sizing, colors, or styling tips.`,
-        timestamp: new Date(),
-        products: [product],
-        suggestions: ["What sizes are available?", "How does this dress fit?", "Show similar products"],
-      },
-    ])
+    
+    const productMessage = {
+      id: Date.now().toString(),
+      type: "assistant" as const,
+      content: `I see you're interested in the ${product.name}. I can help with sizing, colors, or styling tips.`,
+      timestamp: new Date(),
+      products: [product],
+      suggestions: ["What sizes are available?", "How does this dress fit?", "Show similar products"],
+    }
+    
+    if (messages.length === 0) {
+      setMessages([
+        {
+          id: "0",
+          type: "assistant" as const,
+          content: `Hello! Welcome to ${currentStore}. How can I help you today?`,
+          timestamp: new Date(),
+        },
+        productMessage
+      ])
+    } else {
+      setMessages(prev => [...prev, productMessage])
+    }
+    
+    setIsAssistantOpen(prev => !prev);
   }
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading product...</p>
-        </div>
+      <div className="min-h-screen bg-background">
+        <main
+          className="transition-all duration-300 ease-in-out flex items-center justify-center"
+          style={{
+            minHeight: "calc(100vh - 4rem)",
+            paddingLeft: "1.5rem",
+            paddingRight: "1.5rem",
+          }}
+        >
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading product...</p>
+          </div>
+        </main>
       </div>
-    )
+    );
   }
 
   if (!product) {
@@ -222,100 +303,146 @@ export default function ProductPage() {
     openCart()
   }
 
-  const currentImages = getImagesForColor(selectedColor)
-  const currentVariant = getCurrentVariant()
+  const MAX_SIDE_WIDTH = 450;
+  const bothPanelsOpen = isAssistantOpen && state.isOpen;
 
+  let sideWidth;
+
+  if (windowWidth < 1024) {
+    sideWidth = windowWidth;
+  } else if (bothPanelsOpen && windowWidth >= 1024 && windowWidth < 1400) {
+    sideWidth = windowWidth / 2;
+  } else {
+    sideWidth = MAX_SIDE_WIDTH;
+  }
+
+  const totalOffset =
+    windowWidth >= 1024
+      ? (isAssistantOpen ? sideWidth : 0) + (state.isOpen ? sideWidth : 0)
+      : 0;
+
+  const cartRight = state.isOpen ? 0 : -sideWidth;
+  const sidebarRight = isAssistantOpen ? (state.isOpen ? sideWidth : 0) : -sideWidth;
+
+  const shouldShowContent =
+    !(bothPanelsOpen && windowWidth >= 1024 && windowWidth < 1400);
+
+  const currentImages = getImagesForColor(selectedColor);
+  const currentVariant = getCurrentVariant();
+
+  
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-all duration-300 ease-in-out" style={{
-          paddingLeft: '1.5rem',
-          paddingRight: isAssistantOpen && state.isOpen ? 'calc(900px + 1.5rem)' :
-                        isAssistantOpen ? 'calc(450px + 1.5rem)' :
-                        state.isOpen ? 'calc(450px + 1.5rem)' : '1.5rem'
-        }}>
-          <div className="max-w-[2000px] mx-auto">
-            <div className="flex h-16 items-center justify-between">
-            <div className="flex items-center space-x-4">
+      {shouldShowContent && (
+        <>
+      <header
+        className="sticky top-0 z-40 w-full border-b bg-background backdrop-blur-xl transition-all duration-300 ease-in-out"
+        style={{
+          paddingLeft: "1.5rem",
+          paddingRight: `calc(${totalOffset}px + 1.5rem)`,
+          backgroundColor: 'rgba(255, 255, 255, 0.8)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+        }}
+      >
+        <div className="max-w-[2000px] mx-auto">
+          <div className="flex h-16 items-center justify-between">
+            <div className="flex items-center space-x-2">
               <Button
                 onClick={() => {
                   if (window.history.length > 1) {
-                    router.back()
+                    router.back();
                   } else {
-                    const urlParams = new URLSearchParams(window.location.search)
-                    const storeParam = urlParams.get("store") || currentStore
-                    router.push(`/?store=${encodeURIComponent(storeParam)}`)
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const storeParam = urlParams.get("store") || currentStore;
+                    router.push(`/?store=${encodeURIComponent(storeParam)}`);
                   }
                 }}
                 variant="ghost"
                 size="sm"
+                className="h-10 w-10 p-0 bg-transparent hover:bg-transparent text-foreground hover:text-primary transition-colors"
               >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Store
+                <ArrowLeft className="w-6 h-6 mr-2" />
+                Back
               </Button>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <Button onClick={toggleCart} variant="outline" size="sm" className="relative bg-transparent">
-                <ShoppingBag className="w-4 h-4 mr-2" />
-                Cart
+            <div className="flex items-center space-x-1">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleChatOpen}
+                className="h-10 w-10 p-0 text-foreground hover:text-primary bg-transparent hover:bg-transparent transition-colors"
+              >
+                <MessageCircle className="w-6 h-6" />
+              </Button>
+              
+              <Button
+                onClick={toggleCart}
+                variant="ghost"
+                size="sm"
+                className="h-10 w-10 p-0 relative text-foreground hover:text-primary bg-transparent hover:bg-transparent transition-colors"
+              >
+                <ShoppingBag className="w-6 h-6" />
                 {state.totalItems > 0 && (
                   <Badge
                     variant="destructive"
-                    className="absolute -top-2 -right-2 w-5 h-5 p-0 flex items-center justify-center text-xs"
+                    className="absolute -top-1 -right-1 w-4 h-4 p-0 flex items-center justify-center text-[10px]"
                   >
                     {state.totalItems}
                   </Badge>
                 )}
-              </Button>
-
-              <Button variant="outline" size="sm" onClick={handleAskQuestion}>
-                <MessageCircle className="w-4 h-4 mr-2" />
-                Ask Assistant
               </Button>
             </div>
           </div>
         </div>
       </header>
 
-        <main className="py-8 transition-all duration-300 ease-in-out" style={{
-          paddingLeft: '1.5rem',
-          paddingRight: isAssistantOpen && state.isOpen ? 'calc(900px + 1.5rem)' :
-                        isAssistantOpen ? 'calc(450px + 1.5rem)' :
-                        state.isOpen ? 'calc(450px + 1.5rem)' : '1.5rem'
-        }}>
-
-          <div className="max-w-[2000px] mx-auto">
+      <main
+        className="py-8 transition-all duration-300 ease-in-out"
+        style={{
+          paddingLeft: "1.5rem",
+          paddingRight: `calc(${totalOffset}px + 1.5rem)`,
+        }}
+      >
+        <div className="max-w-[2000px] mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
             <div className="space-y-4 max-w-[800px]">
               <div className="aspect-[3/4] overflow-hidden rounded-lg bg-muted/20 relative group">
                 <Image
                   src={currentImages[selectedImage] || product.image || "/placeholder.svg"}
-                    alt={product.name}
-                    width={400}
-                    height={600}
-                    loading="lazy"
-                    className="w-full h-full object-cover"
-                    unoptimized={true}
-                    />
+                  alt={product.name}
+                  width={400}
+                  height={600}
+                  priority
+                  className="w-full h-full object-cover"
+                  unoptimized={true}
+                />
                 {currentImages.length > 1 && (
                   <>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 p-0 bg-black/70 hover:bg-black/90 shadow-lg border-0"
-                    onClick={() => setSelectedImage((selectedImage - 1 + currentImages.length) % currentImages.length)}
-                  >
-                    <ChevronLeft className="w-5 h-5 text-white" />
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 p-0 bg-black/70 hover:bg-black/90 shadow-lg border-0"
-                    onClick={() => setSelectedImage((selectedImage + 1) % currentImages.length)}
-                  >
-                    <ChevronRight className="w-5 h-5 text-white" />
-                  </Button>
-                    
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 p-0 bg-black/70 hover:bg-black/90 shadow-lg border-0"
+                      onClick={() =>
+                        setSelectedImage(
+                          (selectedImage - 1 + currentImages.length) % currentImages.length
+                        )
+                      }
+                    >
+                      <ChevronLeft className="w-5 h-5 text-white" />
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 p-0 bg-black/70 hover:bg-black/90 shadow-lg border-0"
+                      onClick={() =>
+                        setSelectedImage((selectedImage + 1) % currentImages.length)
+                      }
+                    >
+                      <ChevronRight className="w-5 h-5 text-white" />
+                    </Button>
+
                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2">
                       {currentImages.map((_, index) => (
                         <button
@@ -337,16 +464,10 @@ export default function ProductPage() {
                 <h1 className="text-3xl font-bold text-foreground mb-2 font-modern-heading">{product.name}</h1>
 
                 <div className="flex items-center space-x-4 mb-4">
-                  <div className="flex items-center space-x-1">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="w-4 h-4 fill-current text-secondary" />
-                    ))}
-                    <span className="text-sm text-muted-foreground ml-2">(4.8) • 127 reviews</span>
-                  </div>
                 </div>
 
                 <div className="flex items-center space-x-4 mb-6">
-                  <span className="text-3xl font-bold text-foreground">
+                  <span className="text-3xl font-semibold text-foreground">
                     {formatCurrency(product.price, product.currency)}
                   </span>
                   {product.originalPrice && (
@@ -365,67 +486,77 @@ export default function ProductPage() {
               </div>
 
               <div className="mt-4">
-                <Button variant="outline" size="sm" onClick={handleAskQuestion}>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleAskQuestion} 
+                  className="border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
+                  >
                   <MessageCircle className="w-4 h-4 mr-2" />
                   Ask Question About This Product
                 </Button>
               </div>
               <Separator />
-
               {product.colors.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="font-medium text-foreground">Color: {selectedColor}</h3>
                   <div className="flex flex-wrap gap-2">
-                    {product.colors.map((color) => (
-                      <Button
-                        key={color}
-                        variant={selectedColor === color ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => {
-                          setSelectedColor(color)
-                          const availableSizes = getAvailableSizesForColor(color)
-                          if (availableSizes.length > 0) {
-                            setSelectedSize(availableSizes[0] || "")
-                          } else {
-                            setSelectedSize("")
-                          }
-                        }}
-                        className="min-w-[80px]"
-                      >
-                        {color}
-                      </Button>
-                    ))}
+                    {product.colors.map((color) => {
+                      const isSelected = selectedColor === color;
+                      return (
+                        <Button
+                          key={color}
+                          variant={isSelected ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            setSelectedColor(color);
+                            const availableSizes = getAvailableSizesForColor(color);
+                            setSelectedSize(availableSizes[0] || "");
+                          }}
+                          className={`
+                            min-w-[80px]
+                            ${isSelected ? "bg-primary text-primary-foreground hover:opacity-100" : "hover:bg-primary/10 hover:text-primary hover:border-primary/50"}
+                          `}
+                        >
+                          {color}
+                        </Button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
-
               {product.sizes.length > 0 && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="font-medium text-foreground">Size: {selectedSize}</h3>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {product.sizes.map((size) => {
-                      const sizeVariant = product.variants.find((v) => v.color === selectedColor && v.size === size)
-                      const isAvailable = sizeVariant ? sizeVariant.available && sizeVariant.stock > 0 : false
+                    {sortedSizes.map((size) => {
+                      const sizeVariant = product.variants.find((v) => v.color === selectedColor && v.size === size);
+                      const isAvailable = sizeVariant ? sizeVariant.available && sizeVariant.stock > 0 : false;
+                      const isSelected = selectedSize === size;
+                      const isLongSize = size.length > 4;
 
                       return (
                         <Button
                           key={size}
-                          variant={selectedSize === size ? "default" : "outline"}
+                          variant={isSelected ? "default" : "outline"}
                           size="sm"
                           onClick={() => setSelectedSize(size)}
                           disabled={!isAvailable}
-                          className={`w-12 h-12 ${!isAvailable ? "opacity-50 cursor-not-allowed" : ""}`}
+                          className={`
+                            h-12 ${isLongSize ? "px-4 min-w-[100px]" : "w-12"}
+                            ${!isAvailable ? "opacity-50 cursor-not-allowed" : ""}
+                            ${isSelected ? "bg-primary text-primary-foreground hover:opacity-100" : "hover:bg-primary/10 hover:text-primary hover:border-primary/50"}
+                          `}
                         >
-                          {size}
+                          <span className={isLongSize ? "text-xs" : ""}>{size}</span>
                         </Button>
-                      )
+                      );
                     })}
                   </div>
                 </div>
               )}
-
               <Separator />
 
               <div className="space-y-4">
@@ -478,43 +609,16 @@ export default function ProductPage() {
                   <div className="text-sm text-muted-foreground">{currentVariant.stock} items in stock</div>
                 )}
               </div>
-
-              <Separator />
-
               <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="flex items-center space-x-3 p-3 rounded-lg bg-muted/30">
-                    <Truck className="w-5 h-5 text-primary" />
-                    <div>
-                      <p className="text-sm font-medium">Free Shipping</p>
-                      <p className="text-xs text-muted-foreground">On orders over $100</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-3 p-3 rounded-lg bg-muted/30">
-                    <RotateCcw className="w-5 h-5 text-primary" />
-                    <div>
-                      <p className="text-sm font-medium">Easy Returns</p>
-                      <p className="text-xs text-muted-foreground">30-day return policy</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-3 p-3 rounded-lg bg-muted/30">
-                    <Shield className="w-5 h-5 text-primary" />
-                    <div>
-                      <p className="text-sm font-medium">Secure Payment</p>
-                      <p className="text-xs text-muted-foreground">SSL encrypted</p>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
         </div>
       </main>
-
-      <ShoppingCart />
-      <ChatSidebar />
+    </>
+  )}
+      <ShoppingCart right={cartRight} sideWidth={sideWidth} />
+      <ChatSidebar right={sidebarRight} sideWidth={sideWidth} />
     </div>
   )
 }

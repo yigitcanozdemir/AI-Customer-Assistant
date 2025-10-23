@@ -12,32 +12,21 @@ import { v4 as uuidv4 } from "uuid"
 import { useStore } from "@/context/StoreContext"
 import { useChat } from "@/context/ChatContext"
 import { useUser } from "@/context/UserContext"
-import { useCart } from "@/lib/cart-context"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
-interface ProductVariant {
-  color?: string
-  size?: string
-  stock: number
-  available: boolean
+interface Order {
+  order_id: string
+  status: string
+  created_at: Date
+  product: {
+    id: string
+    name: string
+    price: number
+    currency: string
+    image?: string | null
+  }
 }
-
-interface Product {
-  id: string
-  name: string
-  description: string
-  price: number
-  originalPrice?: number
-  currency: string
-  inStock: boolean
-  image: string
-  images: string[]
-  variants: ProductVariant[]
-  sizes: string[]
-  colors: string[]
-}
-
 const formatCurrency = (price: number, currency: string): string => {
   switch (currency) {
     case "USD":
@@ -50,13 +39,17 @@ const formatCurrency = (price: number, currency: string): string => {
       return `${currency} ${price.toFixed(2)}`
   }
 }
-
-export function ChatSidebar() {
+interface ChatSidebarProps {
+  right: number
+  sideWidth: number
+}
+export function ChatSidebar({ right , sideWidth}: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { store: selectedStore } = useStore()
   const { store: selectedStoreForProduct } = useStore()
   const { userId, userName } = useUser()
+  const hasSentInitialMessage = useRef(false)
   const {
     messages,
     setMessages,
@@ -71,10 +64,11 @@ export function ChatSidebar() {
     setIsTyping,
     wsRef,
     selectedProduct,
+    setSelectedProduct,
     selectedOrder,
     setSelectedOrder,
   } = useChat()
-  const { state } = useCart()
+
   useEffect(() => {
     if (!isAssistantOpen) return
 
@@ -84,10 +78,26 @@ export function ChatSidebar() {
     }
     setWs(null)
     wsRef.current = null
+    hasSentInitialMessage.current = false
 
     connectWebSocket()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStore, sessionId, isAssistantOpen])
+
+  useEffect(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    if (messages.length === 0) return
+    if (hasSentInitialMessage.current) return
+
+    const assistantMessages = messages.filter(msg => msg.type === "assistant")
+    
+    if (assistantMessages.length > 0) {
+      console.log("Sending initial assistant messages to backend:", assistantMessages.length)
+      assistantMessages.forEach((message) => {
+        sendInitialMessageToBackend(message, ws)
+      })
+      hasSentInitialMessage.current = true
+    }
+  }, [messages, ws])
 
   const connectWebSocket = () => {
     try {
@@ -100,6 +110,17 @@ export function ChatSidebar() {
         setConnectionStatus("connected")
         setWs(websocket)
         wsRef.current = websocket
+
+        if (messages.length > 0 && !hasSentInitialMessage.current) {
+          const assistantMessages = messages.filter(msg => msg.type === "assistant")
+          if (assistantMessages.length > 0) {
+            console.log("Sending initial assistant messages to backend on connect:", assistantMessages.length)
+            assistantMessages.forEach((message) => {
+              sendInitialMessageToBackend(message, websocket)
+            })
+            hasSentInitialMessage.current = true
+          }
+        }
       }
 
       websocket.onmessage = (event) => {
@@ -131,6 +152,7 @@ export function ChatSidebar() {
         setWs(null)
         wsRef.current = null
         setIsTyping(false)
+        hasSentInitialMessage.current = false
       }
 
       websocket.onerror = (error) => {
@@ -153,6 +175,36 @@ export function ChatSidebar() {
     } catch (error) {
       console.error("Error creating WebSocket connection:", error)
       setConnectionStatus("disconnected")
+    }
+  }
+
+  const sendInitialMessageToBackend = (message: any, websocket: WebSocket) => {
+    try {
+      const initialPayload = {
+        event_id: sessionId,
+        event_data: {
+          question: `[SYSTEM_INIT] ${message.content}`,
+          store: selectedStore,
+          user_name: userName || "Anonymous User",
+          user_id: userId || "00000000-0000-0000-0000-000000000000",
+          product: selectedProduct
+            ? {
+                id: selectedProduct.id,
+                name: selectedProduct.name,
+                price: selectedProduct.price,
+                currency: selectedProduct.currency,
+              }
+            : undefined,
+          is_initial_message: true,
+        },
+      }
+
+      if (websocket.readyState === WebSocket.OPEN) {
+        websocket.send(JSON.stringify(initialPayload))
+        console.log("Sent initial message to backend:", initialPayload)
+      }
+    } catch (error) {
+      console.error("Error sending initial message to backend:", error)
     }
   }
 
@@ -252,7 +304,12 @@ export function ChatSidebar() {
     ])
   }
 
-  const handleSuggestionClick = (suggestion: string) => {
+  const handleSuggestionClick = (suggestion: string, messageProducts?: any[]) => {
+    if (messageProducts && messageProducts.length > 0) {
+      setSelectedProduct(messageProducts[0])
+      console.log("Updated selected product from suggestion:", messageProducts[0].name)
+    }
+    
     sendMessage(suggestion)
   }
 
@@ -260,7 +317,7 @@ export function ChatSidebar() {
     window.location.href = `/product/${productId}?store=${encodeURIComponent(selectedStoreForProduct)}`
   }
 
-  const handleOrderSelect = (order: any) => {
+  const handleOrderSelect = (order: Order) => {
     const userMessage = {
       id: Date.now().toString(),
       type: "user" as const,
@@ -271,7 +328,6 @@ export function ChatSidebar() {
     setMessages((prev) => [...prev, userMessage])
     setIsTyping(true)
 
-    // Send WebSocket message with the order data directly
     const eventPayload = {
       event_id: sessionId,
       event_data: {
@@ -313,12 +369,8 @@ export function ChatSidebar() {
 
   return (
       <div
-        className={`
-          fixed top-0 h-full bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out
-          w-full lg:w-[450px]
-          ${isAssistantOpen ? 'right-0' : '-right-full'}
-          lg:${state.isOpen ? 'right-[450px]' : 'right-0'}
-        `}
+      className="fixed top-0 h-full bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out"
+      style={{ right, width: sideWidth }}
       >
       <div className="flex flex-col h-full">
         <div className="p-4 border-b bg-muted/30">
@@ -369,7 +421,6 @@ export function ChatSidebar() {
                       <div className="prose prose-sm dark:prose-invert max-w-none font-modern-body">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
-                        // Artık 'className' burada yok!
                       >
                         {message.content}
                       </ReactMarkdown>
@@ -463,7 +514,7 @@ export function ChatSidebar() {
                           key={index}
                           variant="outline"
                           size="sm"
-                          onClick={() => handleSuggestionClick(suggestion)}
+                          onClick={() => handleSuggestionClick(suggestion, message.products)}
                           className="text-xs h-7 px-2 rounded-full border-border/50 hover:border-primary/50"
                         >
                           {suggestion}

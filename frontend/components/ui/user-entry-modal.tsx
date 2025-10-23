@@ -28,9 +28,7 @@ export function UserEntryModal() {
     if (!firstName.trim() || !lastName.trim()) return
 
     setIsSubmitting(true)
-
     setUser(firstName.trim(), lastName.trim())
-
     setIsSubmitting(false)
   }
 
@@ -41,16 +39,21 @@ export function UserEntryModal() {
           <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
             <User className="w-6 h-6 text-primary" />
           </div>
-          <CardTitle className="text-xl font-modern-heading">Welcome to Our Store</CardTitle>
-          <p className="text-sm text-muted-foreground mt-2">Please enter your name to continue shopping</p>
+          <CardTitle className="text-xl font-modern-heading">Welcome</CardTitle>
+          <p className="text-sm text-muted-foreground mt-2">
+            Please enter your name to continue.
+          </p>
         </CardHeader>
 
         <CardContent className="space-y-4">
           <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-start space-x-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
             <div className="text-xs text-amber-800 dark:text-amber-200">
-              <p className="font-medium mb-1">Demo System Notice</p>
-              <p>This is a demonstration system. All data will be automatically deleted after 10 minutes.</p>
+              <p className="font-medium mb-1">Demo Environment Notice</p>
+              <p>
+                This system is a demonstration of a Retrieval-Augmented Generation (RAG) e-commerce experience. 
+                It does not represent a real store, and any personal data you enter will be automatically deleted within 10 minutes.
+              </p>
             </div>
           </div>
 
@@ -91,7 +94,7 @@ export function UserEntryModal() {
               className="w-full h-10"
               disabled={!firstName.trim() || !lastName.trim() || isSubmitting}
             >
-              {isSubmitting ? "Setting up..." : "Continue Shopping"}
+              {isSubmitting ? "Setting up..." : "Continue"}
             </Button>
           </form>
         </CardContent>

@@ -112,9 +112,45 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 user_name = event.event_data.user_name
                 order_data = event.event_data.order
 
+                is_initial_message = getattr(
+                    event.event_data, "is_initial_message", False
+                )
+
                 product_context = product_data
                 order_context = order_data if order_data else None
                 message_history = get_message_history(session_id)
+
+                if is_initial_message:
+                    logger.info(
+                        "Received initial assistant message",
+                        extra={
+                            "session_id": session_id,
+                            "question": question,
+                            "has_product": product_context is not None,
+                        },
+                    )
+
+                    initial_content = question.replace("[SYSTEM_INIT] ", "")
+
+                    initial_message = Message(
+                        id="1",
+                        type="assistant",
+                        content=initial_content,
+                        timestamp=datetime.utcnow(),
+                        products=[product_context] if product_context else None,
+                    )
+                    add_message(session_id, initial_message)
+
+                    logger.info(
+                        "Stored initial assistant message in session",
+                        extra={
+                            "session_id": session_id,
+                            "message_count": len(get_message_history(session_id)),
+                        },
+                    )
+
+                    continue
+
                 if order_context:
                     add_message(
                         session_id,
@@ -164,8 +200,6 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         "response_length": len(response.content),
                     },
                 )
-
-                # print("Response:", json.dumps(jsonable_encoder(response), indent=2))
 
                 assistant_message = Message(
                     id=str(len(message_history) + 2),

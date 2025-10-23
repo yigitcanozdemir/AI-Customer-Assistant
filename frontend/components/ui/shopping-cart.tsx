@@ -12,7 +12,6 @@ import { useUser } from "@/context/UserContext"
 import { CheckoutModal } from "./checkout-modal"
 import { OrderSuccessModal } from "./order-success-modal"
 import { useStore } from "@/context/StoreContext"
-import { log } from "console"
 interface CreateOrderRequest {
   user_id: string
   user_name: string
@@ -34,12 +33,23 @@ interface CreateOrderRequest {
   }[]
 }
 
+interface Product {
+  id: string
+  variant_id: string
+  name: string
+  price: number
+  currency: string
+  image?: string | null
+  variant: string | null
+  variant_text: string | null
+}
+
 interface OrderStatus {
   order_id: string
   status: string
   user_name: string
   created_at: string
-  product: any
+  product: Product
 }
 
 interface CreateOrderResponse {
@@ -59,7 +69,12 @@ const formatCurrency = (price: number, currency: string): string => {
   }
 }
 
-export function ShoppingCart() {
+interface ShoppingCartProps {
+  right: number
+  sideWidth: number
+}
+
+export function ShoppingCart({ right , sideWidth}: ShoppingCartProps) {
   const { state, updateQuantity, removeItem, closeCart, clearCart } = useCart()
   const { userId, userName } = useUser()
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
@@ -141,9 +156,8 @@ export function ShoppingCart() {
   return (
     <>
         <div
-          className={`fixed top-0 right-0 h-full w-full lg:w-[450px] bg-background border-l shadow-xl z-50 transition-transform duration-300 ${
-            state.isOpen ? "translate-x-0" : "translate-x-full"
-          }`}
+          className="fixed top-0 h-full bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out"
+          style={{ right, width: sideWidth }}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex flex-col h-full overflow-hidden">
