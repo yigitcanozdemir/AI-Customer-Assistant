@@ -49,10 +49,10 @@ export function UserEntryModal() {
           <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-start space-x-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
             <div className="text-xs text-amber-800 dark:text-amber-200">
-              <p className="font-medium mb-1">Demo Environment Notice</p>
+              <p className="font-medium mb-1">Demonstration Platform Notice</p>
               <p>
                 This system is a demonstration of a Retrieval-Augmented Generation (RAG) e-commerce experience. 
-                It does not represent a real store, and any personal data you enter will be automatically deleted within 10 minutes.
+                It does not represent a real store, and any personal data you enter will be automatically deleted when you close your browser tab.
               </p>
             </div>
           </div>

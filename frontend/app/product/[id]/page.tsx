@@ -6,10 +6,10 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { ShoppingBag, ArrowLeft, Truck, Shield, RotateCcw, MessageCircle,ChevronLeft, ChevronRight } from "lucide-react"
+import { ShoppingBag, ArrowLeft, MessageCircle,ChevronLeft, ChevronRight } from "lucide-react"
 import { useParams, useRouter } from "next/navigation"
 import { useStore } from "@/context/StoreContext"
-import { useCart } from "@/lib/cart-context"
+import { useCart } from "@/context/CartContext"
 import { ShoppingCart } from "@/components/ui/shopping-cart"
 import { ChatSidebar } from "@/components/ui/chat-sidebar"
 import { useChat } from "@/context/ChatContext"
@@ -69,6 +69,7 @@ export default function ProductPage() {
   const { messages, setMessages, setIsAssistantOpen, setSelectedProduct, isAssistantOpen } = useChat()
 
   const getImagesForColor = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     (color: string) => {
       if (!product) return []
       return product.images && product.images.length > 0 ? product.images : [product.image]

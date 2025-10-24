@@ -4,7 +4,7 @@
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -17,7 +17,7 @@ import {
   Store as StoreIcon
 } from "lucide-react"
 import { useStore } from "@/context/StoreContext"
-import { useCart } from "@/lib/cart-context"
+import { useCart } from "@/context/CartContext"
 import { ShoppingCart } from "@/components/ui/shopping-cart"
 import { ChatSidebar } from "@/components/ui/chat-sidebar"
 import { useChat } from "@/context/ChatContext"
@@ -61,9 +61,7 @@ const formatCurrency = (price: number, currency: string): string => {
 }
 
 export default function Store() {
-  const [windowWidth, setWindowWidth] = useState(
-    typeof window !== "undefined" ? window.innerWidth : 1200
-  );
+  const [windowWidth, setWindowWidth] = useState(1200);
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const { store: selectedStore, setStore } = useStore()
@@ -75,12 +73,30 @@ export default function Store() {
   const { addItem, openCart, toggleCart, state } = useCart()
 
   const { messages, isAssistantOpen, setIsAssistantOpen, setMessages, setSelectedProduct } = useChat()
-  
+  const storePopoverRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
+    setWindowWidth(window.innerWidth);
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (storePopoverRef.current && !storePopoverRef.current.contains(event.target as Node)) {
+        setStorePopoverOpen(false)
+      }
+    }
+
+    if (storePopoverOpen) {
+      document.addEventListener("mousedown", handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [storePopoverOpen])
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
@@ -90,6 +106,7 @@ export default function Store() {
       setStore(storeFromUrl)
     }
     setHasProcessedUrlStore(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -315,7 +332,7 @@ export default function Store() {
             <div className="max-w-[2000px] mx-auto">
               <div className="flex h-16 items-center justify-center space-x-2">
                 <div className="flex items-center space-x-2">
-                  <div className="relative">
+                  <div className="relative" ref={storePopoverRef}>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -326,7 +343,7 @@ export default function Store() {
                     </Button>
 
                     {storePopoverOpen && (
-                      <div className="absolute top-full mt-2 left-0 w-48 bg-background border border-border rounded-lg shadow-lg z-50">
+                      <div className="absolute top-full mt-2 left-0 w-48 bg-background border border-border rounded-lg shadow-lg z-50 animate-in fade-in slide-in-from-top-2 duration-200">
                         {stores.map((store) => (
                           <button
                             key={store}
@@ -337,7 +354,7 @@ export default function Store() {
                               window.history.replaceState({}, "", url.toString());
                               setStorePopoverOpen(false);
                             }}
-                            className="block w-full text-left px-4 py-3 text-sm hover:text-primary bg-transparent transition-colors first:rounded-t-lg last:rounded-b-lg"
+                            className="block w-full text-left px-4 py-3 text-sm hover:text-primary hover:bg-muted/50 bg-transparent transition-colors first:rounded-t-lg last:rounded-b-lg"
                           >
                             {store}
                           </button>
@@ -352,7 +369,7 @@ export default function Store() {
                     onClick={() => setIsSearchOpen(!isSearchOpen)}
                     variant="ghost"
                     size="sm"
-                   className="h-10 w-10 p-0 text-foreground hover:text-primary bg-transparent hover:bg-transparent transition-colors"
+                    className="h-10 w-10 p-0 text-foreground hover:text-primary bg-transparent hover:bg-transparent transition-colors"
                   >
                     <Search className="w-6 h-6" />
                   </Button>
@@ -385,8 +402,14 @@ export default function Store() {
                 </div>
               </div>
 
-              {isSearchOpen && (
-                <div className="pb-3 pt-1 animate-in slide-in-from-top-2 duration-200">
+              <div 
+                className="overflow-hidden transition-all duration-300 ease-in-out"
+                style={{
+                  maxHeight: isSearchOpen ? '60px' : '0px',
+                  opacity: isSearchOpen ? 1 : 0,
+                }}
+              >
+                <div className="pb-3 pt-1">
                   <div className="relative w-full">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                     <Input
@@ -395,11 +418,11 @@ export default function Store() {
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10 h-9 text-sm bg-muted/30 border-0 focus-visible:ring-1"
-                      autoFocus
+                      autoFocus={isSearchOpen}
                     />
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           </header>
 
@@ -491,7 +514,7 @@ export default function Store() {
 
                       <CardContent className="p-4">
                         <div className="space-y-2">
-                          <h3 className="font-medium text-sm text-card-foreground line-clamp-2 leading-snug">
+                          <h3 className="font-medium text-sm text-card-foreground line-clamp-2 leading-snug sm:h-auto h-[2.5rem]">
                             {dress.name}
                           </h3>
 

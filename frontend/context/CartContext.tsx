@@ -178,23 +178,32 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { store } = useStore()
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+
     const cartKey = `fashion-cart-${store}`
-    const savedCart = localStorage.getItem(cartKey)
-    if (savedCart) {
-      try {
+    try {
+      const savedCart = sessionStorage.getItem(cartKey)
+      if (savedCart) {
         const cartItems = JSON.parse(savedCart)
         dispatch({ type: "LOAD_CART", payload: cartItems })
-      } catch (error) {
-        console.error("Error loading cart from localStorage:", error)
+      } else {
+        dispatch({ type: "CLEAR_CART" })
       }
-    } else {
+    } catch (error) {
+      console.error("Error loading cart from sessionStorage:", error)
       dispatch({ type: "CLEAR_CART" })
     }
   }, [store])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+
     const cartKey = `fashion-cart-${store}`
-    localStorage.setItem(cartKey, JSON.stringify(state.items))
+    try {
+      sessionStorage.setItem(cartKey, JSON.stringify(state.items))
+    } catch (error) {
+      console.error("Error saving cart to sessionStorage:", error)
+    }
   }, [state.items, store])
 
   const addItem = (item: Omit<CartItem, "quantity" | "id"> & { quantity?: number }) => {

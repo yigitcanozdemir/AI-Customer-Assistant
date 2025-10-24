@@ -37,7 +37,7 @@ interface ProductVariant {
   available: boolean
 }
 
-interface Product {
+export interface Product {
   id: string
   name: string
   description: string
@@ -94,30 +94,33 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<OrderStatus | null>(null)
+  const [isMounted, setIsMounted] = useState(false)
 
-  const [storeSessionMap, setStoreSessionMap] = useState<
-    Record<
-      string,
-      {
-        sessionId: string
-        messages: Message[]
-        isAssistantOpen: boolean
-        selectedProduct: Product | null
-      }
-    >
-  >(() => {
+  type StoreSession = {
+    sessionId: string
+    messages: Message[]
+    isAssistantOpen: boolean
+    selectedProduct: Product | null
+  }
+
+  const [storeSessionMap, setStoreSessionMap] = useState<Record<string, StoreSession>>({})
+
+  useEffect(() => {
+    setIsMounted(true)
     if (typeof window !== "undefined") {
       try {
         const saved = sessionStorage.getItem("chatSessions")
-        return saved ? JSON.parse(saved) : {}
-      } catch {
-        return {}
+        if (saved) {
+          setStoreSessionMap(JSON.parse(saved))
+        }
+      } catch (error) {
+        console.error("Failed to load chat sessions:", error)
       }
     }
-    return {}
-  })
+  }, [])
 
   useEffect(() => {
+    if (!isMounted) return
     if (typeof window !== "undefined") {
       try {
         sessionStorage.setItem("chatSessions", JSON.stringify(storeSessionMap))
@@ -125,7 +128,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error("Failed to save chat sessions:", error)
       }
     }
-  }, [storeSessionMap])
+  }, [storeSessionMap, isMounted])
 
   const resetChatForStore = useCallback(() => {
     const newSessionId = uuidv4()
@@ -153,7 +156,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentStore])
 
   useEffect(() => {
-    if (!currentStore) return
+    if (!currentStore || !isMounted) return
 
     console.log("Store changed to:", currentStore)
     const storeState = storeSessionMap[currentStore]
@@ -200,9 +203,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       }))
     }
-  }, [currentStore])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStore, isMounted])
 
   useEffect(() => {
+    if (!isMounted) return
     if (currentStore && storeSessionMap[currentStore]) {
       const timeoutId = setTimeout(() => {
         setStoreSessionMap((prev) => ({
@@ -218,7 +223,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return () => clearTimeout(timeoutId)
     }
-  }, [currentStore, sessionId, messages, isAssistantOpen, selectedProduct])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStore, sessionId, messages, isAssistantOpen, selectedProduct, isMounted])
 
   const value: ChatContextType = {
     messages,

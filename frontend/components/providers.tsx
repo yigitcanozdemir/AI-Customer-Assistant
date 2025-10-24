@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { CartProvider } from "@/lib/cart-context"
+import { CartProvider } from "@/context/CartContext"
 import { StoreProvider } from "@/context/StoreContext"
 import { ChatProvider } from "@/context/ChatContext"
 import { UserProvider } from "@/context/UserContext"

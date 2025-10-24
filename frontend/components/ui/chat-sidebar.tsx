@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Send, Package, RotateCcw, Sparkles, X } from "lucide-react"
 import { v4 as uuidv4 } from "uuid"
 import { useStore } from "@/context/StoreContext"
-import { useChat } from "@/context/ChatContext"
+import { useChat, type Message, type Product } from "@/context/ChatContext" // Import types here
 import { useUser } from "@/context/UserContext"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -27,6 +27,7 @@ interface Order {
     image?: string | null
   }
 }
+
 const formatCurrency = (price: number, currency: string): string => {
   switch (currency) {
     case "USD":
@@ -39,13 +40,16 @@ const formatCurrency = (price: number, currency: string): string => {
       return `${currency} ${price.toFixed(2)}`
   }
 }
+
 interface ChatSidebarProps {
   right: number
   sideWidth: number
 }
-export function ChatSidebar({ right , sideWidth}: ChatSidebarProps) {
+
+export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [isMounted, setIsMounted] = useState(false)
   const { store: selectedStore } = useStore()
   const { store: selectedStoreForProduct } = useStore()
   const { userId, userName } = useUser()
@@ -70,49 +74,60 @@ export function ChatSidebar({ right , sideWidth}: ChatSidebarProps) {
   } = useChat()
 
   useEffect(() => {
-    if (!isAssistantOpen) return
+    setIsMounted(true)
+  }, [])
 
-    console.log("Store changed, reconnecting WebSocket for new session...")
-    if (wsRef.current) {
-      wsRef.current.close()
-    }
-    setWs(null)
-    wsRef.current = null
-    hasSentInitialMessage.current = false
+  const sendInitialMessageToBackend = useCallback(
+    (message: Message, websocket: WebSocket) => {
+      try {
+        const initialPayload = {
+          event_id: sessionId,
+          event_data: {
+            question: `[SYSTEM_INIT] ${message.content}`,
+            store: selectedStore,
+            user_name: userName || "Anonymous User",
+            user_id: userId || "00000000-0000-0000-0000-000000000000",
+            product: selectedProduct
+              ? {
+                  id: selectedProduct.id,
+                  name: selectedProduct.name,
+                  price: selectedProduct.price,
+                  currency: selectedProduct.currency,
+                }
+              : undefined,
+            is_initial_message: true,
+          },
+        }
 
-    connectWebSocket()
-  }, [selectedStore, sessionId, isAssistantOpen])
+        if (websocket.readyState === WebSocket.OPEN) {
+          websocket.send(JSON.stringify(initialPayload))
+          console.log("Sent initial message to backend:", initialPayload)
+        }
+      } catch (error) {
+        console.error("Error sending initial message to backend:", error)
+      }
+    },
+    [sessionId, selectedStore, userName, userId, selectedProduct]
+  )
 
-  useEffect(() => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
-    if (messages.length === 0) return
-    if (hasSentInitialMessage.current) return
-
-    const assistantMessages = messages.filter(msg => msg.type === "assistant")
-    
-    if (assistantMessages.length > 0) {
-      console.log("Sending initial assistant messages to backend:", assistantMessages.length)
-      assistantMessages.forEach((message) => {
-        sendInitialMessageToBackend(message, ws)
-      })
-      hasSentInitialMessage.current = true
-    }
-  }, [messages, ws])
-
-  const connectWebSocket = () => {
+  const connectWebSocket = useCallback(() => {
     try {
-      setConnectionStatus("connecting")
+      const connectingTimer = setTimeout(() => {
+        setConnectionStatus("connecting")
+      }, 200)
+
       console.log("Attempting WebSocket connection...")
       const websocket = new WebSocket(`ws://localhost:8000/events/ws/chat/${sessionId}`)
 
       websocket.onopen = () => {
+        clearTimeout(connectingTimer)
         console.log("WebSocket connected successfully")
         setConnectionStatus("connected")
         setWs(websocket)
         wsRef.current = websocket
 
         if (messages.length > 0 && !hasSentInitialMessage.current) {
-          const assistantMessages = messages.filter(msg => msg.type === "assistant")
+          const assistantMessages = messages.filter((msg) => msg.type === "assistant")
           if (assistantMessages.length > 0) {
             console.log("Sending initial assistant messages to backend on connect:", assistantMessages.length)
             assistantMessages.forEach((message) => {
@@ -147,8 +162,15 @@ export function ChatSidebar({ right , sideWidth}: ChatSidebarProps) {
       }
 
       websocket.onclose = (event) => {
+        clearTimeout(connectingTimer)
         console.log("WebSocket disconnected:", event.code, event.reason)
-        setConnectionStatus("disconnected")
+
+        setTimeout(() => {
+          if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+            setConnectionStatus("disconnected")
+          }
+        }, 300)
+
         setWs(null)
         wsRef.current = null
         setIsTyping(false)
@@ -156,6 +178,7 @@ export function ChatSidebar({ right , sideWidth}: ChatSidebarProps) {
       }
 
       websocket.onerror = (error) => {
+        clearTimeout(connectingTimer)
         console.error("WebSocket error:", error)
         setConnectionStatus("disconnected")
         setIsTyping(false)
@@ -176,37 +199,57 @@ export function ChatSidebar({ right , sideWidth}: ChatSidebarProps) {
       console.error("Error creating WebSocket connection:", error)
       setConnectionStatus("disconnected")
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, messages, setConnectionStatus, setWs, setIsTyping, setMessages, sendInitialMessageToBackend])
 
-  const sendInitialMessageToBackend = (message: any, websocket: WebSocket) => {
-    try {
-      const initialPayload = {
-        event_id: sessionId,
-        event_data: {
-          question: `[SYSTEM_INIT] ${message.content}`,
-          store: selectedStore,
-          user_name: userName || "Anonymous User",
-          user_id: userId || "00000000-0000-0000-0000-000000000000",
-          product: selectedProduct
-            ? {
-                id: selectedProduct.id,
-                name: selectedProduct.name,
-                price: selectedProduct.price,
-                currency: selectedProduct.currency,
-              }
-            : undefined,
-          is_initial_message: true,
-        },
-      }
+  useEffect(() => {
+    if (!isAssistantOpen) return
 
-      if (websocket.readyState === WebSocket.OPEN) {
-        websocket.send(JSON.stringify(initialPayload))
-        console.log("Sent initial message to backend:", initialPayload)
-      }
-    } catch (error) {
-      console.error("Error sending initial message to backend:", error)
+    console.log("Store changed, reconnecting WebSocket for new session...")
+
+    if (wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
     }
-  }
+    setWs(null)
+    hasSentInitialMessage.current = false
+
+    const timer = setTimeout(() => {
+      connectWebSocket()
+    }, 100)
+
+    return () => {
+      clearTimeout(timer)
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.close()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStore, sessionId, isAssistantOpen])
+
+  useEffect(() => {
+    if (isAssistantOpen && !ws && !wsRef.current) {
+      console.log("Sidebar opened, establishing WebSocket connection...")
+      connectWebSocket()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAssistantOpen, ws])
+
+  useEffect(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    if (messages.length === 0) return
+    if (hasSentInitialMessage.current) return
+
+    const assistantMessages = messages.filter((msg) => msg.type === "assistant")
+
+    if (assistantMessages.length > 0) {
+      console.log("Sending initial assistant messages to backend:", assistantMessages.length)
+      assistantMessages.forEach((message) => {
+        sendInitialMessageToBackend(message, ws)
+      })
+      hasSentInitialMessage.current = true
+    }
+  }, [messages, ws, sendInitialMessageToBackend])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -304,7 +347,7 @@ export function ChatSidebar({ right , sideWidth}: ChatSidebarProps) {
     ])
   }
 
-  const handleSuggestionClick = (suggestion: string, messageProducts?: any[]) => {
+  const handleSuggestionClick = (suggestion: string, messageProducts?: Product[]) => {
     if (messageProducts && messageProducts.length > 0) {
       setSelectedProduct(messageProducts[0])
       console.log("Updated selected product from suggestion:", messageProducts[0].name)
@@ -365,12 +408,15 @@ export function ChatSidebar({ right , sideWidth}: ChatSidebarProps) {
     }
   }
 
-  if (!isAssistantOpen) return null
-
   return (
       <div
-      className="fixed top-0 h-full bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out"
-      style={{ right, width: sideWidth }}
+      className={`fixed top-0 h-full bg-background border-l z-50 shadow-xl transition-transform duration-300 ease-in-out ${
+        isAssistantOpen ? 'translate-x-0' : 'translate-x-full'
+      }`}
+      style={{ 
+        right: isMounted ? right : -450, 
+        width: isMounted ? sideWidth : 450,
+        transition: 'right 300ms ease-in-out, width 300ms ease-in-out, transform 300ms ease-in-out'}}
       >
       <div className="flex flex-col h-full">
         <div className="p-4 border-b bg-muted/30">

@@ -4,15 +4,24 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, X, Package, Clock, User } from "lucide-react"
-import { useCart } from "@/lib/cart-context"
+import { useCart } from "@/context/CartContext"
 import { useChat } from "@/context/ChatContext"
+
+interface OrderProduct {
+  id: string
+  name: string
+  price: number
+  currency: string
+  image?: string | null
+  variant?: string | null
+}
 
 interface OrderStatus {
   order_id: string
   status: string
   user_name: string
   created_at: string
-  product: any
+  product: OrderProduct
 }
 
 interface CreateOrderResponse {
@@ -28,11 +37,10 @@ interface OrderSuccessModalProps {
 export function OrderSuccessModal({ isOpen, onClose, orderData }: OrderSuccessModalProps) {
   const { state } = useCart()
   const { isAssistantOpen } = useChat()
-  const [windowWidth, setWindowWidth] = useState(
-    typeof window !== "undefined" ? window.innerWidth : 1200
-  )
+  const [windowWidth, setWindowWidth] = useState(1200)
 
   useEffect(() => {
+    setWindowWidth(window.innerWidth)
     const handleResize = () => setWindowWidth(window.innerWidth)
     window.addEventListener("resize", handleResize)
     return () => window.removeEventListener("resize", handleResize)
@@ -99,7 +107,7 @@ export function OrderSuccessModal({ isOpen, onClose, orderData }: OrderSuccessMo
           </div>
 
           <div className="space-y-4">
-            {orderData.orders.map((order, index) => (
+            {orderData.orders.map((order) => (
               <Card key={order.order_id} className="border-green-200 bg-green-50/50 dark:bg-green-950/20">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg flex items-center space-x-2">

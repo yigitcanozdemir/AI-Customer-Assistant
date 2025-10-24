@@ -1,13 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { X, Plus, Minus, ShoppingBag, Trash2 } from "lucide-react"
 import Image from "next/image"
-import { useCart } from "@/lib/cart-context"
+import { useCart } from "@/context/CartContext"
 import { useUser } from "@/context/UserContext"
 import { CheckoutModal } from "./checkout-modal"
 import { OrderSuccessModal } from "./order-success-modal"
@@ -79,10 +79,13 @@ export function ShoppingCart({ right , sideWidth}: ShoppingCartProps) {
   const { userId, userName } = useUser()
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
   const { store: selectedStore } = useStore()
   const [isOrderSuccessOpen, setIsOrderSuccessOpen] = useState(false)
   const [orderData, setOrderData] = useState<CreateOrderResponse | null>(null)
-
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
   const handleCheckout = async () => {
     if (!state.items.length || !userId || !userName) return
 
@@ -157,7 +160,9 @@ export function ShoppingCart({ right , sideWidth}: ShoppingCartProps) {
     <>
         <div
           className="fixed top-0 h-full bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out"
-          style={{ right, width: sideWidth }}
+          style={{             
+            right: isMounted ? right : -450, 
+            width: isMounted ? sideWidth : 450  }}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex flex-col h-full overflow-hidden">
@@ -181,7 +186,7 @@ export function ShoppingCart({ right , sideWidth}: ShoppingCartProps) {
                 <ShoppingBag className="w-16 h-16 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium text-foreground mb-2">Your cart is empty</h3>
                 <p className="text-muted-foreground mb-6">Add some items to get started</p>
-                <Button onClick={closeCart} className="w-full">
+                <Button onClick={closeCart} className="w-full ">
                   Continue Shopping
                 </Button>
               </div>
@@ -292,7 +297,7 @@ export function ShoppingCart({ right , sideWidth}: ShoppingCartProps) {
                     <Button className="w-full" size="lg" onClick={() => openCheckoutModal()}>
                       Checkout
                     </Button>
-                    <Button variant="outline" onClick={closeCart} className="w-full bg-transparent">
+                    <Button variant="outline" onClick={closeCart} className="w-full border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors">
                       Continue Shopping
                     </Button>
                   </div>

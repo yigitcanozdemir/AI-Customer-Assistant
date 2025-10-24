@@ -1,12 +1,39 @@
 import { createContext, useContext, useState, ReactNode } from "react"
 
+interface OrderProduct {
+  id: string
+  name: string
+  price: number
+  currency: string
+  image?: string | null
+  variant?: string | null
+}
+
+interface Order {
+  order_id: string
+  status: string
+  created_at: Date
+  product: OrderProduct
+}
+
+interface Product {
+  id: string
+  name: string
+  description?: string
+  price: number
+  currency: string
+  image?: string
+  images?: string[]
+}
+
+
 export interface Message {
   id: string
   type: "user" | "assistant"
   content: string
   timestamp: Date
-  products?: any[]
-  order?: any[]
+  products?: Product[]
+  orders?: Order[]
   suggestions?: string[]
 }
 
