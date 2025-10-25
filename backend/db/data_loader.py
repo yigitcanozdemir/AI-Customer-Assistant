@@ -15,10 +15,12 @@ while True:
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-print(sys.path)
+from backend.logging import setup_logging
+
+setup_logging()
+
 import json
 import logging
-
 from pathlib import Path
 from typing import List, Dict, Any
 import asyncio
@@ -32,12 +34,11 @@ from backend.db.utils.doc_converter import json_to_plain_text, converter
 from backend.db.utils.helper_funcs import directory_exists, prettify
 from batcher import process_products_batch
 import nest_asyncio
+from sqlalchemy import select, func
+from backend.db.schema import Product
 
 nest_asyncio.apply()
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
 BATCH_SIZE = 100
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,23 @@ logger = logging.getLogger(__name__)
 
 async def main():
     try:
+        # ✅ CHECK IF DATA ALREADY EXISTS
+        async with get_session() as session:
+            result = await session.execute(select(func.count(Product.id)))
+            product_count = result.scalar()
+
+            if product_count > 0:
+                logger.info(
+                    "Data already exists, skipping data load",
+                    extra={"product_count": product_count, "action": "skip_data_load"},
+                )
+                return
+
+            logger.info(
+                "No data found, loading initial data",
+                extra={"action": "start_data_load"},
+            )
+
         json_folder = Path("jsons")
         json_files = list(json_folder.glob("*.json"))
 
@@ -62,12 +80,17 @@ async def main():
                 stores.setdefault(store_name, {})["products"] = file
 
         if not stores:
-            logger.error("No JSON files found in folder.")
+            logger.error(
+                "No JSON files found in folder", extra={"json_folder": str(json_folder)}
+            )
             return
 
         async with get_session() as session:
             for store_name, files in stores.items():
-                logger.info(f"Processing store: {store_name}")
+                logger.info(
+                    "Processing store",
+                    extra={"store": store_name, "action": "process_store"},
+                )
 
                 faq_file = files.get("faq")
                 if faq_file and faq_file.exists():
@@ -79,28 +102,58 @@ async def main():
                     with open(md_file, "w", encoding="utf-8") as f:
                         f.write(plain_text)
                     result = converter.convert(md_file)
-                    store_name = prettify(store_name)
-                    await process_faq_embeddings(session, result, store_name)
+                    store_name_pretty = prettify(store_name)
+                    await process_faq_embeddings(session, result, store_name_pretty)
+                    logger.info(
+                        "FAQ processed successfully",
+                        extra={"store": store_name, "action": "faq_processed"},
+                    )
                 else:
-                    logger.warning(f"FAQ file missing for {store_name}")
+                    logger.warning(
+                        "FAQ file missing", extra={"store": store_name, "file": "faq"}
+                    )
 
                 products_file = files.get("products")
                 if products_file and products_file.exists():
                     with open(products_file, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     products = data
-                    logger.info(f"Loaded {len(products)} products for {store_name}")
-                    store_name = prettify(store_name)
+                    logger.info(
+                        "Loaded products from file",
+                        extra={
+                            "store": store_name,
+                            "product_count": len(products),
+                            "action": "products_loaded",
+                        },
+                    )
+                    store_name_pretty = prettify(store_name)
                     await process_products_batch(
-                        session, products, store_name, BATCH_SIZE
+                        session, products, store_name_pretty, BATCH_SIZE
+                    )
+                    logger.info(
+                        "Products processed successfully",
+                        extra={
+                            "store": store_name,
+                            "product_count": len(products),
+                            "action": "products_processed",
+                        },
                     )
                 else:
-                    logger.warning(f"Products file missing for {store_name}")
+                    logger.warning(
+                        "Products file missing",
+                        extra={"store": store_name, "file": "products"},
+                    )
 
-        logger.info("All stores processed successfully!")
+        logger.info(
+            "All stores processed successfully", extra={"action": "data_load_complete"}
+        )
 
     except Exception as e:
-        logger.error(f"Critical error in main process: {e}")
+        logger.error(
+            "Critical error in main process (Data Loader)",
+            extra={"error": str(e), "action": "data_load_failed"},
+            exc_info=True,
+        )
         raise
     finally:
         await engine.dispose()
