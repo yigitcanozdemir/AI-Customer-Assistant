@@ -26,4 +26,4 @@ ENV PYTHONDONTWRITEBYTECODE=1
 EXPOSE 8000
 
 # Run migration + dataloader + FastAPI
-CMD ["/bin/sh", "-c", "uv run alembic -c /app/alembic.ini upgrade head && uv run python backend/db/dataloader.py && uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000 --no-access-log --log-level warning"]
+CMD ["/bin/sh", "-c", "uv run alembic -c /app/alembic.ini upgrade head && uv run python /app/backend/db/dataloader.py && uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000 --no-access-log --log-level warning"]
