@@ -47,7 +47,6 @@ async def lifespan(app: FastAPI):
 
     async def load_data_if_needed():
         try:
-            from backend.db.session import get_session
             from sqlalchemy import select, func
             from backend.db.schema import Product
 
@@ -56,15 +55,17 @@ async def lifespan(app: FastAPI):
                 product_count = result.scalar()
 
                 if product_count == 0:
-                    logger.info("Loading initial data in background...")
-                    import subprocess
+                    logger.info("Loading initial data...")
 
-                    subprocess.run(
-                        ["uv", "run", "python", "/app/backend/db/data_loader.py"]
-                    )
+                    from backend.db.data_loader import main as load_data
+
+                    await load_data()
+
                     logger.info("Data loading complete!")
+                else:
+                    logger.info(f"Data exists ({product_count} products), skipping")
         except Exception as e:
-            logger.error(f"Background data loading failed: {e}")
+            logger.error(f"Background data loading failed: {e}", exc_info=True)
 
     data_task = asyncio.create_task(load_data_if_needed())
 
