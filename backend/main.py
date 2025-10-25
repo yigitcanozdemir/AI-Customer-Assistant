@@ -14,6 +14,7 @@ import logging
 from sqlalchemy import text
 from backend.api.middleware import catch_exceptions_middleware
 from backend.utility.utils import PrometheusMiddleware, metrics, setup_otlp
+from backend.api.healt import router as health_router
 
 logger = logging.getLogger(__name__)
 
@@ -65,15 +66,11 @@ app.middleware("http")(catch_exceptions_middleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-    ],
+    allow_origins=[settings.frontend_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(process_router)
+app.include_router(health_router)

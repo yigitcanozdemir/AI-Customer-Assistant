@@ -5,6 +5,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
+    frontend_url: str
     openai_api_key: str
     debug: bool = False
     port: int = 8000
