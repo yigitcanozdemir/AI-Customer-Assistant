@@ -49,7 +49,6 @@ logger = logging.getLogger(__name__)
 
 async def main():
     try:
-        # ✅ CHECK IF DATA ALREADY EXISTS
         async with get_session() as session:
             result = await session.execute(select(func.count(Product.id)))
             product_count = result.scalar()
@@ -66,7 +65,7 @@ async def main():
                 extra={"action": "start_data_load"},
             )
 
-        json_folder = Path("jsons")
+        json_folder = Path(__file__).parent / "jsons"
         json_files = list(json_folder.glob("*.json"))
 
         stores = {}

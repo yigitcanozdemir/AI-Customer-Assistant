@@ -45,37 +45,12 @@ async def lifespan(app: FastAPI):
     await cache_manager.connect()
     logger.info("Redis connected", extra={"service": "redis"})
 
-    async def load_data_if_needed():
-        try:
-            from sqlalchemy import select, func
-            from backend.db.schema import Product
-
-            async with get_session() as session:
-                result = await session.execute(select(func.count(Product.id)))
-                product_count = result.scalar()
-
-                if product_count == 0:
-                    logger.info("Loading initial data...")
-
-                    from backend.db.data_loader import main as load_data
-
-                    await load_data()
-
-                    logger.info("Data loading complete!")
-                else:
-                    logger.info(f"Data exists ({product_count} products), skipping")
-        except Exception as e:
-            logger.error(f"Background data loading failed: {e}", exc_info=True)
-
-    data_task = asyncio.create_task(load_data_if_needed())
-
     task = asyncio.create_task(clear_expired_orders())
     logger.info("Background task started", extra={"task": "clear_expired_orders"})
 
     yield
 
     task.cancel()
-    data_task.cancel()
     logger.info("Background task stopped", extra={"task": "clear_expired_orders"})
 
     await cache_manager.close()
