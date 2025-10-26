@@ -14,6 +14,7 @@ import { useChat, type Message, type Product } from "@/context/ChatContext" // I
 import { useUser } from "@/context/UserContext"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+const wsBase = process.env.NEXT_PUBLIC_WS_URL;
 
 interface Order {
   order_id: string
@@ -117,7 +118,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       }, 200)
 
       console.log("Attempting WebSocket connection...")
-      const websocket = new WebSocket(`ws://localhost:8000/events/ws/chat/${sessionId}`)
+      const websocket = new WebSocket(`${wsBase}/events/ws/chat/${sessionId}`)
 
       websocket.onopen = () => {
         clearTimeout(connectingTimer)

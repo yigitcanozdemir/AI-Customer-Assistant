@@ -12,6 +12,9 @@ import { useUser } from "@/context/UserContext"
 import { CheckoutModal } from "./checkout-modal"
 import { OrderSuccessModal } from "./order-success-modal"
 import { useStore } from "@/context/StoreContext"
+
+const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+
 interface CreateOrderRequest {
   user_id: string
   user_name: string
@@ -114,10 +117,8 @@ export function ShoppingCart({ right , sideWidth}: ShoppingCartProps) {
       }
       console.log("Selected Store in Cart:", selectedStore)
 
-      console.log("Sending request to:", "http://localhost:8000/events/orders")
       console.log("Payload:", JSON.stringify(payload, null, 2))
-
-      const res = await fetch("http://localhost:8000/events/orders", {
+      const res = await fetch(`"${apiUrl}/events/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

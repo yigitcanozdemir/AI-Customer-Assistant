@@ -15,6 +15,8 @@ import { ChatSidebar } from "@/components/ui/chat-sidebar"
 import { useChat } from "@/context/ChatContext"
 import { useCallback } from "react"
 
+const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+
 interface ProductVariant {
   id: string
   color?: string
@@ -109,7 +111,7 @@ export default function ProductPage() {
     const fetchProduct = async () => {
       try {
         setIsLoading(true)
-        const res = await fetch(`http://localhost:8000/events/products/${params.id}`, {
+        const res = await fetch(`${apiUrl}/events/products/${params.id}`, {
           headers: {
             Authorization: "Bearer your-secret-token",
           },

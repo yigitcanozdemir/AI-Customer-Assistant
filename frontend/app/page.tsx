@@ -22,6 +22,8 @@ import { ShoppingCart } from "@/components/ui/shopping-cart"
 import { ChatSidebar } from "@/components/ui/chat-sidebar"
 import { useChat } from "@/context/ChatContext"
 
+const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+
 interface ProductVariant {
   id: string
   color?: string
@@ -115,7 +117,7 @@ export default function Store() {
     const fetchProducts = async () => {
       try {
         setIsLoading(true)
-        const res = await fetch(`http://localhost:8000/events/products?store=${selectedStore}`, {
+        const res = await fetch(`${apiUrl}/events/products?store=${selectedStore}`, {
           headers: {
             Authorization: "Bearer your-secret-token",
           },
@@ -143,7 +145,7 @@ export default function Store() {
 
   const fetchProductById = async (id: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/events/products/${id}`, {
+      const res = await fetch(`${apiUrl}/events/products/${id}`, {
         headers: {
           Authorization: "Bearer your-secret-token",
         },
