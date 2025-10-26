@@ -118,7 +118,7 @@ export function ShoppingCart({ right , sideWidth}: ShoppingCartProps) {
       console.log("Selected Store in Cart:", selectedStore)
 
       console.log("Payload:", JSON.stringify(payload, null, 2))
-      const res = await fetch(`"${apiUrl}/events/orders`, {
+      const res = await fetch(`${apiUrl}/events/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
