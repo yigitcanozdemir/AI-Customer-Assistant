@@ -1,148 +1,163 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { createContext, useContext, useState, useRef, useEffect, useCallback } from "react"
-import { v4 as uuidv4 } from "uuid"
-import { useStore } from "@/context/StoreContext"
+import type React from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+} from "react";
+import { v4 as uuidv4 } from "uuid";
+import { useStore } from "@/context/StoreContext";
 
 export interface Message {
-  id: string
-  type: "user" | "assistant"
-  content: string
-  timestamp: Date
-  products?: Product[]
-  orders?: OrderStatus[]
-  suggestions?: string[]
-  warning_message?: string
-  requires_human?: boolean
-  confidence_score?: number
+  id: string;
+  type: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+  products?: Product[];
+  orders?: OrderStatus[];
+  suggestions?: string[];
+  warning_message?: string;
+  requires_human?: boolean;
+  confidence_score?: number;
 }
 
 interface OrderProduct {
-  id: string
-  name: string
-  price: number
-  currency: string
-  image?: string | null
-  variant?: string | null
+  id: string;
+  name: string;
+  price: number;
+  currency: string;
+  image?: string | null;
+  variant?: string | null;
 }
 
 interface OrderStatus {
-  order_id: string
-  status: string
-  created_at: Date
-  product: OrderProduct
+  order_id: string;
+  status: string;
+  created_at: Date;
+  product: OrderProduct;
 }
 interface ProductVariant {
-  color?: string
-  size?: string
-  stock: number
-  available: boolean
+  color?: string;
+  size?: string;
+  stock: number;
+  available: boolean;
 }
 
 export interface Product {
-  id: string
-  name: string
-  description: string
-  price: number
-  originalPrice?: number
-  currency: string
-  inStock: boolean
-  image: string
-  images: string[]
-  variants: ProductVariant[]
-  sizes: string[]
-  colors: string[]
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  originalPrice?: number;
+  currency: string;
+  inStock: boolean;
+  image: string;
+  images: string[];
+  variants: ProductVariant[];
+  sizes: string[];
+  colors: string[];
 }
 
 interface ChatContextType {
-  messages: Message[]
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>
-  isAssistantOpen: boolean
-  setIsAssistantOpen: React.Dispatch<React.SetStateAction<boolean>>
-  sessionId: string
-  ws: WebSocket | null
-  setWs: React.Dispatch<React.SetStateAction<WebSocket | null>>
-  connectionStatus: "connecting" | "connected" | "disconnected"
-  setConnectionStatus: React.Dispatch<React.SetStateAction<"connecting" | "connected" | "disconnected">>
-  isTyping: boolean
-  setIsTyping: React.Dispatch<React.SetStateAction<boolean>>
-  wsRef: React.MutableRefObject<WebSocket | null>
-  selectedProduct: Product | null
-  setSelectedProduct: React.Dispatch<React.SetStateAction<Product | null>>
+  messages: Message[];
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+  isAssistantOpen: boolean;
+  setIsAssistantOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  sessionId: string;
+  ws: WebSocket | null;
+  setWs: React.Dispatch<React.SetStateAction<WebSocket | null>>;
+  connectionStatus: "connecting" | "connected" | "disconnected";
+  setConnectionStatus: React.Dispatch<
+    React.SetStateAction<"connecting" | "connected" | "disconnected">
+  >;
+  isTyping: boolean;
+  setIsTyping: React.Dispatch<React.SetStateAction<boolean>>;
+  wsRef: React.MutableRefObject<WebSocket | null>;
+  selectedProduct: Product | null;
+  setSelectedProduct: React.Dispatch<React.SetStateAction<Product | null>>;
 
-  selectedOrder: OrderStatus | null
-  setSelectedOrder: React.Dispatch<React.SetStateAction<OrderStatus | null>>
-  resetChatForStore: () => void
+  selectedOrder: OrderStatus | null;
+  setSelectedOrder: React.Dispatch<React.SetStateAction<OrderStatus | null>>;
+  resetChatForStore: () => void;
 }
 
-const ChatContext = createContext<ChatContextType | undefined>(undefined)
+const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export const useChat = () => {
-  const context = useContext(ChatContext)
+  const context = useContext(ChatContext);
   if (!context) {
-    throw new Error("useChat must be used within a ChatProvider")
+    throw new Error("useChat must be used within a ChatProvider");
   }
-  return context
-}
+  return context;
+};
 
-export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { store: currentStore } = useStore()
-  const [messages, setMessages] = useState<Message[]>([])
-  const [isAssistantOpen, setIsAssistantOpen] = useState(false)
-  const [sessionId, setSessionId] = useState<string>(() => uuidv4())
-  const [ws, setWs] = useState<WebSocket | null>(null)
-  const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("disconnected")
-  const [isTyping, setIsTyping] = useState(false)
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
-  const [selectedOrder, setSelectedOrder] = useState<OrderStatus | null>(null)
-  const [isMounted, setIsMounted] = useState(false)
+export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const { store: currentStore } = useStore();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [sessionId, setSessionId] = useState<string>(() => uuidv4());
+  const [ws, setWs] = useState<WebSocket | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<
+    "connecting" | "connected" | "disconnected"
+  >("disconnected");
+  const [isTyping, setIsTyping] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<OrderStatus | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   type StoreSession = {
-    sessionId: string
-    messages: Message[]
-    isAssistantOpen: boolean
-    selectedProduct: Product | null
-  }
+    sessionId: string;
+    messages: Message[];
+    isAssistantOpen: boolean;
+    selectedProduct: Product | null;
+  };
 
-  const [storeSessionMap, setStoreSessionMap] = useState<Record<string, StoreSession>>({})
+  const [storeSessionMap, setStoreSessionMap] = useState<
+    Record<string, StoreSession>
+  >({});
 
   useEffect(() => {
-    setIsMounted(true)
+    setIsMounted(true);
     if (typeof window !== "undefined") {
       try {
-        const saved = sessionStorage.getItem("chatSessions")
+        const saved = sessionStorage.getItem("chatSessions");
         if (saved) {
-          setStoreSessionMap(JSON.parse(saved))
+          setStoreSessionMap(JSON.parse(saved));
         }
       } catch (error) {
-        console.error("Failed to load chat sessions:", error)
+        console.error("Failed to load chat sessions:", error);
       }
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    if (!isMounted) return
+    if (!isMounted) return;
     if (typeof window !== "undefined") {
       try {
-        sessionStorage.setItem("chatSessions", JSON.stringify(storeSessionMap))
+        sessionStorage.setItem("chatSessions", JSON.stringify(storeSessionMap));
       } catch (error) {
-        console.error("Failed to save chat sessions:", error)
+        console.error("Failed to save chat sessions:", error);
       }
     }
-  }, [storeSessionMap, isMounted])
+  }, [storeSessionMap, isMounted]);
 
   const resetChatForStore = useCallback(() => {
-    const newSessionId = uuidv4()
-    setSessionId(newSessionId)
-    setMessages([])
-    setSelectedProduct(null)
-    setConnectionStatus("disconnected")
+    const newSessionId = uuidv4();
+    setSessionId(newSessionId);
+    setMessages([]);
+    setSelectedProduct(null);
+    setConnectionStatus("disconnected");
     if (wsRef.current) {
-      wsRef.current.close()
-      setWs(null)
-      wsRef.current = null
+      wsRef.current.close();
+      setWs(null);
+      wsRef.current = null;
     }
 
     if (currentStore) {
@@ -154,47 +169,51 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isAssistantOpen: false,
           selectedProduct: null,
         },
-      }))
+      }));
     }
-  }, [currentStore])
+  }, [currentStore]);
 
   useEffect(() => {
-    if (!currentStore || !isMounted) return
+    if (!currentStore || !isMounted) return;
 
-    console.log("Store changed to:", currentStore)
-    const storeState = storeSessionMap[currentStore]
-    console.log("Store state found:", storeState)
+    console.log("Store changed to:", currentStore);
+    const storeState = storeSessionMap[currentStore];
+    console.log("Store state found:", storeState);
 
     if (storeState) {
       console.log(
         "Restoring store state - messages:",
         storeState.messages.length,
         "isAssistantOpen:",
-        storeState.isAssistantOpen,
-      )
-      setSessionId(storeState.sessionId)
-      setMessages(storeState.messages)
-      setIsAssistantOpen(storeState.isAssistantOpen)
-      setSelectedProduct(storeState.selectedProduct)
+        storeState.isAssistantOpen
+      );
+      setSessionId(storeState.sessionId);
+      setMessages(storeState.messages);
+      setIsAssistantOpen(storeState.isAssistantOpen);
+      setSelectedProduct(storeState.selectedProduct);
 
       if (storeState.messages.length > 0) {
-        console.log("Setting connection to connected - has messages")
-        setConnectionStatus("connected")
+        console.log("Setting connection to connected - has messages");
+        setConnectionStatus("connected");
       } else if (storeState.isAssistantOpen) {
-        console.log("Setting connection to connecting - chat open but no messages")
-        setConnectionStatus("connecting")
+        console.log(
+          "Setting connection to connecting - chat open but no messages"
+        );
+        setConnectionStatus("connecting");
       } else {
-        console.log("Setting connection to disconnected - no messages and chat closed")
-        setConnectionStatus("disconnected")
+        console.log(
+          "Setting connection to disconnected - no messages and chat closed"
+        );
+        setConnectionStatus("disconnected");
       }
     } else {
-      console.log("Creating new store state")
-      const newSessionId = uuidv4()
-      setSessionId(newSessionId)
-      setMessages([])
-      setIsAssistantOpen(false)
-      setSelectedProduct(null)
-      setConnectionStatus("disconnected")
+      console.log("Creating new store state");
+      const newSessionId = uuidv4();
+      setSessionId(newSessionId);
+      setMessages([]);
+      setIsAssistantOpen(false);
+      setSelectedProduct(null);
+      setConnectionStatus("disconnected");
 
       setStoreSessionMap((prev) => ({
         ...prev,
@@ -204,13 +223,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isAssistantOpen: false,
           selectedProduct: null,
         },
-      }))
+      }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStore, isMounted])
+  }, [currentStore, isMounted]);
 
   useEffect(() => {
-    if (!isMounted) return
+    if (!isMounted) return;
     if (currentStore && storeSessionMap[currentStore]) {
       const timeoutId = setTimeout(() => {
         setStoreSessionMap((prev) => ({
@@ -221,13 +240,20 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isAssistantOpen,
             selectedProduct,
           },
-        }))
-      }, 300)
+        }));
+      }, 300);
 
-      return () => clearTimeout(timeoutId)
+      return () => clearTimeout(timeoutId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStore, sessionId, messages, isAssistantOpen, selectedProduct, isMounted])
+  }, [
+    currentStore,
+    sessionId,
+    messages,
+    isAssistantOpen,
+    selectedProduct,
+    isMounted,
+  ]);
 
   const value: ChatContextType = {
     messages,
@@ -247,7 +273,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     selectedOrder,
     setSelectedOrder,
     resetChatForStore,
-  }
+  };
 
-  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
-}
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
+};

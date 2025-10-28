@@ -1,36 +1,36 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertTriangle, User } from "lucide-react"
-import { useUser } from "@/context/UserContext"
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertTriangle, User } from "lucide-react";
+import { useUser } from "@/context/UserContext";
 
 export function UserEntryModal() {
-  const { isUserSet, setUser } = useUser()
-  const [firstName, setFirstName] = useState("")
-  const [lastName, setLastName] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [mounted, setMounted] = useState(false)
+  const { isUserSet, setUser } = useUser();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true)
-  }, [])
+    setMounted(true);
+  }, []);
 
-  if (!mounted || isUserSet) return null
+  if (!mounted || isUserSet) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!firstName.trim() || !lastName.trim()) return
+    e.preventDefault();
+    if (!firstName.trim() || !lastName.trim()) return;
 
-    setIsSubmitting(true)
-    setUser(firstName.trim(), lastName.trim())
-    setIsSubmitting(false)
-  }
+    setIsSubmitting(true);
+    setUser(firstName.trim(), lastName.trim());
+    setIsSubmitting(false);
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
@@ -51,8 +51,10 @@ export function UserEntryModal() {
             <div className="text-xs text-amber-800 dark:text-amber-200">
               <p className="font-medium mb-1">Demonstration Platform Notice</p>
               <p>
-                This system is a demonstration of a Retrieval-Augmented Generation (RAG) e-commerce experience. 
-                It does not represent a real store, and any personal data you enter will be automatically deleted when you close your browser tab.
+                This system is a demonstration of a Retrieval-Augmented
+                Generation (RAG) e-commerce experience. It does not represent a
+                real store, and any personal data you enter will be
+                automatically deleted when you close your browser tab.
               </p>
             </div>
           </div>
@@ -100,5 +102,5 @@ export function UserEntryModal() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

@@ -1,12 +1,12 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { CartProvider } from "@/context/CartContext"
-import { StoreProvider } from "@/context/StoreContext"
-import { ChatProvider } from "@/context/ChatContext"
-import { UserProvider } from "@/context/UserContext"
-import { Analytics } from "@vercel/analytics/next"
-import { UserEntryModal } from "@/components/ui/user-entry-modal"
+import type React from "react";
+import { CartProvider } from "@/context/CartContext";
+import { StoreProvider } from "@/context/StoreContext";
+import { ChatProvider } from "@/context/ChatContext";
+import { UserProvider } from "@/context/UserContext";
+import { Analytics } from "@vercel/analytics/next";
+import { UserEntryModal } from "@/components/ui/user-entry-modal";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -15,11 +15,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <ChatProvider>
           <CartProvider>
             <UserEntryModal />
-              {children}
+            {children}
             <Analytics />
           </CartProvider>
         </ChatProvider>
       </StoreProvider>
     </UserProvider>
-  )
+  );
 }

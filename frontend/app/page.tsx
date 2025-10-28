@@ -1,81 +1,94 @@
 // File: frontend/app/page.tsx
-"use client"
+"use client";
 
-import Image from "next/image"
-import { Badge } from "@/components/ui/badge"
-import type React from "react"
-import { useState, useEffect, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
+import Image from "next/image";
+import { Badge } from "@/components/ui/badge";
+import type React from "react";
+import { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Search,
   ShoppingBag,
   ChevronLeft,
   ChevronRight,
   MessageCircle,
-  Store as StoreIcon
-} from "lucide-react"
-import { useStore } from "@/context/StoreContext"
-import { useCart } from "@/context/CartContext"
-import { ShoppingCart } from "@/components/ui/shopping-cart"
-import { ChatSidebar } from "@/components/ui/chat-sidebar"
-import { useChat } from "@/context/ChatContext"
+  Store as StoreIcon,
+} from "lucide-react";
+import { useStore } from "@/context/StoreContext";
+import { useCart } from "@/context/CartContext";
+import { ShoppingCart } from "@/components/ui/shopping-cart";
+import { ChatSidebar } from "@/components/ui/chat-sidebar";
+import { useChat } from "@/context/ChatContext";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
 interface ProductVariant {
-  id: string
-  color?: string
-  size?: string
-  stock: number
-  available: boolean
+  id: string;
+  color?: string;
+  size?: string;
+  stock: number;
+  available: boolean;
 }
 
 interface Product {
-  id: string
-  name: string
-  description: string
-  price: number
-  originalPrice?: number
-  currency: string
-  inStock: boolean
-  image: string
-  images: string[]
-  variants: ProductVariant[]
-  sizes: string[]
-  colors: string[]
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  originalPrice?: number;
+  currency: string;
+  inStock: boolean;
+  image: string;
+  images: string[];
+  variants: ProductVariant[];
+  sizes: string[];
+  colors: string[];
 }
 
-const stores = ["Aurora Style", "Luna Apperal", "Celeste Wear", "Dayifuse Fashion"]
+const stores = [
+  "Aurora Style",
+  "Luna Apperal",
+  "Celeste Wear",
+  "Dayifuse Fashion",
+];
 
 const formatCurrency = (price: number, currency: string): string => {
   switch (currency) {
     case "USD":
-      return `$${price.toFixed(2)}`
+      return `$${price.toFixed(2)}`;
     case "EURO":
-      return `€${price.toFixed(2)}`
+      return `€${price.toFixed(2)}`;
     case "TRY":
-      return `₺${price.toFixed(2)}`
+      return `₺${price.toFixed(2)}`;
     default:
-      return `${currency} ${price.toFixed(2)}`
+      return `${currency} ${price.toFixed(2)}`;
   }
-}
+};
 
 export default function Store() {
   const [windowWidth, setWindowWidth] = useState(1200);
-  const [searchQuery, setSearchQuery] = useState("")
-  const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const { store: selectedStore, setStore } = useStore()
-  const [products, setProducts] = useState<Product[] | null>(null)
-  const [currentImageIndex, setCurrentImageIndex] = useState<{ [key: string]: number }>({})
-  const [isLoading, setIsLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const { store: selectedStore, setStore } = useStore();
+  const [products, setProducts] = useState<Product[] | null>(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState<{
+    [key: string]: number;
+  }>({});
+  const [isLoading, setIsLoading] = useState(true);
   const [storePopoverOpen, setStorePopoverOpen] = useState(false);
-  const [hasProcessedUrlStore, setHasProcessedUrlStore] = useState(false)
-  const { addItem, openCart, toggleCart, state } = useCart()
+  const [hasProcessedUrlStore, setHasProcessedUrlStore] = useState(false);
+  const { addItem, openCart, toggleCart, state } = useCart();
 
-  const { messages, isAssistantOpen, setIsAssistantOpen, setMessages, setSelectedProduct } = useChat()
-  const storePopoverRef = useRef<HTMLDivElement>(null)
+  const {
+    messages,
+    isAssistantOpen,
+    setIsAssistantOpen,
+    setMessages,
+    setSelectedProduct,
+  } = useChat();
+  const storePopoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -86,62 +99,71 @@ export default function Store() {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (storePopoverRef.current && !storePopoverRef.current.contains(event.target as Node)) {
-        setStorePopoverOpen(false)
+      if (
+        storePopoverRef.current &&
+        !storePopoverRef.current.contains(event.target as Node)
+      ) {
+        setStorePopoverOpen(false);
       }
-    }
+    };
 
     if (storePopoverOpen) {
-      document.addEventListener("mousedown", handleClickOutside)
+      document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-    }
-  }, [storePopoverOpen])
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [storePopoverOpen]);
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const storeFromUrl = urlParams.get("store")
+    const urlParams = new URLSearchParams(window.location.search);
+    const storeFromUrl = urlParams.get("store");
 
-    if (storeFromUrl && stores.includes(storeFromUrl) && storeFromUrl !== selectedStore) {
-      setStore(storeFromUrl)
+    if (
+      storeFromUrl &&
+      stores.includes(storeFromUrl) &&
+      storeFromUrl !== selectedStore
+    ) {
+      setStore(storeFromUrl);
     }
-    setHasProcessedUrlStore(true)
+    setHasProcessedUrlStore(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []);
 
   useEffect(() => {
-    if (!hasProcessedUrlStore) return
+    if (!hasProcessedUrlStore) return;
 
     const fetchProducts = async () => {
       try {
-        setIsLoading(true)
-        const res = await fetch(`${apiUrl}/events/products?store=${selectedStore}`, {
-          headers: {
-            Authorization: "Bearer your-secret-token",
-          },
-        })
+        setIsLoading(true);
+        const res = await fetch(
+          `${apiUrl}/events/products?store=${selectedStore}`,
+          {
+            headers: {
+              Authorization: "Bearer your-secret-token",
+            },
+          }
+        );
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-        const data: Product[] = await res.json()
-        setProducts(data)
-
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const data: Product[] = await res.json();
+        setProducts(data);
       } catch (err) {
-        console.error("Error fetching products from backend:", err)
+        console.error("Error fetching products from backend:", err);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-    }
+    };
 
-    fetchProducts()
-  }, [selectedStore, hasProcessedUrlStore])
+    fetchProducts();
+  }, [selectedStore, hasProcessedUrlStore]);
 
   const filteredDresses = (products ?? []).filter(
     (dress) =>
       dress.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      dress.description.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+      dress.description.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const fetchProductById = async (id: string) => {
     try {
@@ -149,22 +171,22 @@ export default function Store() {
         headers: {
           Authorization: "Bearer your-secret-token",
         },
-      })
-      if (!res.ok) throw new Error("Failed to fetch product details")
-      const data: Product = await res.json()
-      setSelectedProduct(data)
+      });
+      if (!res.ok) throw new Error("Failed to fetch product details");
+      const data: Product = await res.json();
+      setSelectedProduct(data);
     } catch (err) {
-      console.error("Error fetching product details", err)
-      const localProduct = products?.find((p) => p.id === id)
+      console.error("Error fetching product details", err);
+      const localProduct = products?.find((p) => p.id === id);
       if (localProduct) {
-        setSelectedProduct(localProduct)
+        setSelectedProduct(localProduct);
       }
     }
-  }
+  };
 
   const openGeneralChat = () => {
-    setSelectedProduct(null)
-    
+    setSelectedProduct(null);
+
     if (messages.length === 0) {
       setMessages([
         {
@@ -178,15 +200,15 @@ export default function Store() {
             "Help me track my order",
           ],
         },
-      ])
+      ]);
     }
-    
-    setIsAssistantOpen(prev => !prev);
-  }
+
+    setIsAssistantOpen((prev) => !prev);
+  };
 
   const openProductChat = (product: Product) => {
-    setSelectedProduct(product)
-    fetchProductById(product.id)
+    setSelectedProduct(product);
+    fetchProductById(product.id);
 
     const productMessage = {
       id: Date.now().toString(),
@@ -200,8 +222,8 @@ export default function Store() {
         "What occasions is this perfect for?",
         "Show me similar products",
       ],
-    }
-    
+    };
+
     if (messages.length === 0) {
       setMessages([
         {
@@ -210,45 +232,46 @@ export default function Store() {
           content: `Hello! Welcome to ${selectedStore}. How can I help you today?`,
           timestamp: new Date(),
         },
-        productMessage
-      ])
+        productMessage,
+      ]);
     } else {
-      setMessages(prev => [...prev, productMessage])
+      setMessages((prev) => [...prev, productMessage]);
     }
-    
-    setIsAssistantOpen(prev => !prev);
-  }
+
+    setIsAssistantOpen((prev) => !prev);
+  };
 
   const openProductPage = (productId: string) => {
-    const url = new URL(`/product/${productId}`, window.location.origin)
-    url.searchParams.set("store", selectedStore)
-    url.searchParams.delete("product")
-    url.searchParams.delete("chat")
-    window.location.href = url.toString()
-  }
+    const url = new URL(`/product/${productId}`, window.location.origin);
+    url.searchParams.set("store", selectedStore);
+    url.searchParams.delete("product");
+    url.searchParams.delete("chat");
+    window.location.href = url.toString();
+  };
 
   const nextImage = (productId: string, images: string[]) => {
     setCurrentImageIndex((prev) => ({
       ...prev,
       [productId]: ((prev[productId] || 0) + 1) % images.length,
-    }))
-  }
+    }));
+  };
 
   const prevImage = (productId: string, images: string[]) => {
     setCurrentImageIndex((prev) => ({
       ...prev,
       [productId]: ((prev[productId] || 0) - 1 + images.length) % images.length,
-    }))
-  }
+    }));
+  };
 
   const handleAddToCart = (dress: Product, e: React.MouseEvent) => {
-    e.stopPropagation()
-    const firstAvailableColor = dress.colors[0] || "Default"
-    const firstAvailableSize = dress.variants.find(v => v.color === firstAvailableColor)?.size || "M"
+    e.stopPropagation();
+    const firstAvailableColor = dress.colors[0] || "Default";
+    const firstAvailableSize =
+      dress.variants.find((v) => v.color === firstAvailableColor)?.size || "M";
     const selectedVariant = dress.variants.find(
       (v) => v.color === firstAvailableColor && v.size === firstAvailableSize
-    )
-    if (!selectedVariant) return
+    );
+    if (!selectedVariant) return;
 
     addItem({
       productId: dress.id,
@@ -259,11 +282,11 @@ export default function Store() {
       size: firstAvailableSize,
       color: firstAvailableColor,
       inStock: dress.inStock,
-      variantId: selectedVariant.id
-    })
+      variantId: selectedVariant.id,
+    });
 
-    openCart()
-  }
+    openCart();
+  };
 
   const MAX_SIDE_WIDTH = 450;
   const bothPanelsOpen = isAssistantOpen && state.isOpen;
@@ -284,7 +307,11 @@ export default function Store() {
       : 0;
 
   const cartRight = state.isOpen ? 0 : -sideWidth;
-  const sidebarRight = isAssistantOpen ? (state.isOpen ? sideWidth : 0) : -sideWidth;
+  const sidebarRight = isAssistantOpen
+    ? state.isOpen
+      ? sideWidth
+      : 0
+    : -sideWidth;
 
   const HORIZONTAL_PADDING = 24 * 2;
   const MAX_COLUMNS = 4;
@@ -292,7 +319,10 @@ export default function Store() {
   const MIN_CARD_TABLET = 220;
   const MIN_CARD_DESKTOP = 250;
 
-  const availableContentWidth = Math.max(0, windowWidth - totalOffset - HORIZONTAL_PADDING);
+  const availableContentWidth = Math.max(
+    0,
+    windowWidth - totalOffset - HORIZONTAL_PADDING
+  );
 
   const minCardWidth =
     windowWidth < 640
@@ -326,9 +356,9 @@ export default function Store() {
             style={{
               paddingLeft: "1.5rem",
               paddingRight: `calc(${totalOffset}px + 1.5rem)`,
-              backgroundColor: 'rgba(255, 255, 255, 0.8)',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
+              backgroundColor: "rgba(255, 255, 255, 0.8)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
             }}
           >
             <div className="max-w-[2000px] mx-auto">
@@ -353,7 +383,11 @@ export default function Store() {
                               setStore(store);
                               const url = new URL(window.location.href);
                               url.searchParams.set("store", store);
-                              window.history.replaceState({}, "", url.toString());
+                              window.history.replaceState(
+                                {},
+                                "",
+                                url.toString()
+                              );
                               setStorePopoverOpen(false);
                             }}
                             className="block w-full text-left px-4 py-3 text-sm hover:text-primary hover:bg-muted/50 bg-transparent transition-colors first:rounded-t-lg last:rounded-b-lg"
@@ -404,10 +438,10 @@ export default function Store() {
                 </div>
               </div>
 
-              <div 
+              <div
                 className="overflow-hidden transition-all duration-300 ease-in-out"
                 style={{
-                  maxHeight: isSearchOpen ? '60px' : '0px',
+                  maxHeight: isSearchOpen ? "60px" : "0px",
                   opacity: isSearchOpen ? 1 : 0,
                 }}
               >
@@ -527,7 +561,10 @@ export default function Store() {
                               </span>
                               {dress.originalPrice && (
                                 <span className="text-sm text-muted-foreground line-through">
-                                  {formatCurrency(dress.originalPrice, dress.currency)}
+                                  {formatCurrency(
+                                    dress.originalPrice,
+                                    dress.currency
+                                  )}
                                 </span>
                               )}
                             </div>
@@ -540,7 +577,9 @@ export default function Store() {
                               onClick={(e) => handleAddToCart(dress, e)}
                             >
                               <ShoppingBag className="w-3 h-3 flex-shrink-0" />
-                              <span className="hidden sm:inline ml-1 truncate">Add to Cart</span>
+                              <span className="hidden sm:inline ml-1 truncate">
+                                Add to Cart
+                              </span>
                             </Button>
 
                             <Button
@@ -568,8 +607,8 @@ export default function Store() {
                   <p className="text-lg text-muted-foreground mb-4">
                     No products found matching your search.
                   </p>
-                  <Button 
-                    onClick={() => setSearchQuery("")} 
+                  <Button
+                    onClick={() => setSearchQuery("")}
                     variant="outline"
                     className="hover:bg-primary/10 hover:text-primary transition-colors"
                   >
