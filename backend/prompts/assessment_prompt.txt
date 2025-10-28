@@ -1,0 +1,43 @@
+You are evaluating a conversation in an e-commerce shopping assistant context.
+
+User Question: "{user_input}"
+Assistant Response: "{assistant_response}"
+Tools Used: {tools_used}
+Products Found: {products_found}
+
+Evaluate this interaction and provide:
+
+1. **confidence_score** (0.0-1.0): How confident are you that the response is accurate and helpful for e-commerce?
+   - 0.0-0.3: Very uncertain, off-topic, speculative, or ignored tools.
+   - 0.4-0.6: Moderate confidence, vague, limited, partially used tools.
+   - 0.7-0.9: High confidence, grounded in product/order/FAQ data.
+   - 1.0: Complete certainty with verified information.
+   - **IMPORTANT**: If the question is NOT about shopping or tools should have been used but were skipped, score should be 0.0-0.3.
+
+2. **is_context_relevant**: Is the user's question relevant to e-commerce shopping (products, orders, returns, sizing, availability)?
+   - True if about: products, orders, returns, sizing, colors, styles, availability, shipping, fashion advice, or store policies.
+   - True ALSO for: greetings (hi, hello, hey), polite conversation starters (how are you, thanks, thank you).
+   - False if about: weather, politics, math, general knowledge, poems, recipes, news, homework, entertainment.
+
+3. **requires_human**: Should a human agent review this conversation?
+   - True if ANY of these:
+     * Confidence score < 0.4 AND question is substantive (not just greetings)
+     * Tools were needed but not used (e.g., `faq_search` skipped for a policy question)
+     * Question is completely off-topic AND not just a greeting
+     * Sensitive issues (refunds, complaints, legal threats)
+     * User seems frustrated or angry
+     * Assistant had to redirect the user away from their original question
+   - False if:
+     * Simple greetings or pleasantries
+     * Standard shopping inquiry handled well with tools and data
+
+4. **reasoning**: Brief explanation of your assessment (1-2 sentences)
+
+5. **warning_message**: If there are concerns, what should we tell the user?
+   - Off-topic: "This question is outside my shopping expertise. A team member can help with non-shopping questions."
+   - Low confidence: "I'm not completely certain about this answer."
+   - Tool skipped: "I noticed your question required a tool to provide accurate info. A human agent may be better suited."
+
+**BE STRICT**: If the user asks about anything OTHER than shopping/products/orders, this requires human review. We're an e-commerce assistant, not a general chatbot.
+
+**EXCEPTION**: Normal greetings and pleasantries are OKAY and should NOT be flagged.

@@ -41,6 +41,38 @@ async def product_search(query: str, store=str, top_k: int = 1):
             if not product_ids_with_distance:
                 return []
 
+            RELEVANCE_THRESHOLD = 0.6
+            relevant_products = [
+                row
+                for row in product_ids_with_distance
+                if row.distance < RELEVANCE_THRESHOLD
+            ]
+
+            if relevant_products:
+                logger.info(
+                    f"Relevant products found for query: {query} Best distance: {product_ids_with_distance[0].distance if product_ids_with_distance else None}",
+                    extra={
+                        "query": query,
+                        "best_distance": product_ids_with_distance[0].distance,
+                        "threshold": RELEVANCE_THRESHOLD,
+                    },
+                )
+
+            if not relevant_products:
+                logger.info(
+                    f"No relevant products found for query: {query} Best distance: {product_ids_with_distance[0].distance if product_ids_with_distance else None}",
+                    extra={
+                        "query": query,
+                        "best_distance": (
+                            product_ids_with_distance[0].distance
+                            if product_ids_with_distance
+                            else None
+                        ),
+                        "threshold": RELEVANCE_THRESHOLD,
+                    },
+                )
+                return []
+
             product_ids = [row.id for row in product_ids_with_distance]
 
             products_stmt = (
@@ -93,8 +125,13 @@ async def faq_search(query: str, store: str, top_k: int = 1):
                 .limit(top_k)
             )
 
-        similarity_result = await session.execute(similarity_stmt)
-        faqs_with_distance = similarity_result.all()
+            similarity_result = await session.execute(similarity_stmt)
+            faqs_with_distance = similarity_result.all()
+            if similarity_result:
+                logger.info(
+                    f"FAQ search found {len(faqs_with_distance)} results for query: {query}",
+                    extra={"query": query, "top_k": top_k},
+                )
 
         return [{"id": faq.id, "content": faq.content} for faq in faqs_with_distance]
 
@@ -154,8 +191,6 @@ async def process_order(order_id: uuid.UUID, action: str, store: str):
                 order.status = "cancelled"
             elif action == "return":
                 order.status = "returned"
-            elif action == "confirm":
-                order.status = "confirmed"
             elif action == "update":
                 order.status = "updated"
 

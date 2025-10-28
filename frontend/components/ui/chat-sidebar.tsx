@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Send, Package, RotateCcw, Sparkles, X } from "lucide-react"
+import { Send, Package, RotateCcw, Sparkles, X, CheckCircle2 } from "lucide-react"
 import { v4 as uuidv4 } from "uuid"
 import { useStore } from "@/context/StoreContext"
-import { useChat, type Message, type Product } from "@/context/ChatContext" // Import types here
+import { useChat, type Message, type Product } from "@/context/ChatContext"
 import { useUser } from "@/context/UserContext"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -27,6 +27,14 @@ interface Order {
     currency: string
     image?: string | null
   }
+}
+
+interface PendingAction {
+  action_id: string
+  action_type: string
+  parameters: Record<string, unknown>
+  requires_confirmation: boolean
+  confirmation_message: string
 }
 
 const formatCurrency = (price: number, currency: string): string => {
@@ -55,6 +63,8 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   const { store: selectedStoreForProduct } = useStore()
   const { userId, userName } = useUser()
   const hasSentInitialMessage = useRef(false)
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const {
     messages,
     setMessages,
@@ -144,6 +154,11 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
           const data = JSON.parse(event.data)
           console.log("WebSocket message received:", data)
 
+          if (data.pending_action) {
+            setPendingAction(data.pending_action)
+            console.log("Pending action received:", data.pending_action)
+          }
+
           const assistantMessage = {
             id: uuidv4(),
             type: "assistant" as const,
@@ -152,6 +167,9 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             products: data.products || [],
             orders: data.orders || [],
             suggestions: data.suggestions || [],
+            warning_message: data.warning_message,
+            requires_human: data.requires_human,
+            confidence_score: data.confidence_score,
           }
 
           setIsTyping(false)
@@ -288,7 +306,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     sendWebSocketMessage(content)
   }
 
-  const sendWebSocketMessage = (content: string) => {
+  const sendWebSocketMessage = (content: string, confirmActionId?: string) => {
     try {
       const eventPayload = {
         event_id: sessionId,
@@ -314,12 +332,13 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                 product: selectedOrder.product,
               }
             : undefined,
+          confirm_action_id: confirmActionId,
         },
       }
 
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(eventPayload))
-        console.log("Message sent via WebSocket with product context:", eventPayload)
+        console.log("Message sent via WebSocket:", eventPayload)
 
         if (selectedOrder) {
           setSelectedOrder(null)
@@ -362,51 +381,54 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   }
 
   const handleOrderSelect = (order: Order) => {
+    if (selectedOrderId === order.order_id) {
+      setSelectedOrderId(null)
+      setSelectedOrder(null)
+    } else {
+      setSelectedOrderId(order.order_id)
+      setSelectedOrder(order)
+      console.log("Order selected:", order.order_id)
+    }
+  }
+
+  const handleSendWithSelectedOrder = () => {
+    if (!selectedOrder || !inputValue.trim()) return
+    
+    sendMessage(inputValue)
+    
+    setSelectedOrderId(null)
+  }
+
+  const handleConfirmAction = () => {
+    if (!pendingAction) return
+    
     const userMessage = {
       id: Date.now().toString(),
       type: "user" as const,
-      content: `This one: ${order.product.name}`,
+      content: "✓ Confirmed",
       timestamp: new Date(),
     }
-
+    
     setMessages((prev) => [...prev, userMessage])
     setIsTyping(true)
+    
+    sendWebSocketMessage("User confirmed the action", pendingAction.action_id)
+    
+    setPendingAction(null)
+  }
 
-    const eventPayload = {
-      event_id: sessionId,
-      event_data: {
-        question: `This one: ${order.product.name}`,
-        store: selectedStore,
-        user_name: userName || "Anonymous User",
-        user_id: userId || "00000000-0000-0000-0000-000000000000",
-        product: selectedProduct
-          ? {
-              id: selectedProduct.id,
-              name: selectedProduct.name,
-              price: selectedProduct.price,
-              currency: selectedProduct.currency,
-              description: selectedProduct.description,
-              sizes: selectedProduct.sizes,
-              colors: selectedProduct.colors,
-              variants: selectedProduct.variants,
-            }
-          : undefined,
-        order: {
-          order_id: order.order_id,
-          status: order.status,
-          user_name: userName || "Anonymous User",
-          created_at: order.created_at,
-          product: order.product,
-        },
-      },
+  const handleCancelAction = () => {
+    const userMessage = {
+      id: Date.now().toString(),
+      type: "user" as const,
+      content: "✗ Cancelled",
+      timestamp: new Date(),
     }
-
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(eventPayload))
-      console.log("Order message sent via WebSocket:", eventPayload)
-    } else {
-      handleWebSocketError()
-    }
+    
+    setMessages((prev) => [...prev, userMessage])
+    setPendingAction(null)
+    
+    sendWebSocketMessage("User cancelled the action")
   }
 
   return (
@@ -475,6 +497,19 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                     </div>
                   </div>
 
+                  {message.warning_message && (
+                    <div className="ml-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                      <p className="text-xs text-yellow-800 dark:text-yellow-200">⚠️ {message.warning_message}</p>
+                    </div>
+                  )}
+
+                  {message.requires_human && (
+                    <div className="ml-2 flex items-center space-x-1 text-xs text-muted-foreground">
+                      <span>🙋</span>
+                      <span>Flagged for team review</span>
+                    </div>
+                  )}
+
                   {message.products && message.products.length > 0 && (
                     <div className="space-y-2 ml-2">
                       {message.products.map((product) => (
@@ -515,16 +550,26 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
                   {message.orders && message.orders.length > 0 && (
                     <div className="space-y-2 ml-2">
+                      <p className="text-xs text-muted-foreground mb-2">
+                        💡 Select an order, then tell me what you&apos;d like to do (cancel, return, etc.)
+                      </p>
                       {message.orders.map((order) => (
                         <Card
                           key={order.order_id}
-                          className={`border-0 shadow-sm bg-card cursor-pointer hover:bg-muted/50 transition-colors ${
-                            selectedOrder?.order_id === order.order_id ? "border-blue-500 bg-blue-50" : ""
+                          className={`border shadow-sm bg-card cursor-pointer hover:bg-muted/50 transition-all ${
+                            selectedOrderId === order.order_id 
+                              ? "border-primary bg-primary/5 ring-2 ring-primary/20" 
+                              : "border-border/50"
                           }`}
                           onClick={() => handleOrderSelect(order)}
                         >
                           <CardContent className="p-3">
                             <div className="flex space-x-3">
+                              {selectedOrderId === order.order_id && (
+                                <div className="flex items-center justify-center">
+                                  <CheckCircle2 className="w-5 h-5 text-primary" />
+                                </div>
+                              )}
                               <Image
                                 src={order.product.image || "/placeholder.svg"}
                                 alt={order.product.name}
@@ -572,6 +617,52 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                 </div>
               ))}
 
+              {pendingAction && (
+                <div className="relative">
+                  <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-4 h-4 bg-card dark:bg-card rotate-45 border-t border-l border-border dark:border-border"></div>
+                  <Card className="bg-card dark:bg-card border-primary/30 dark:border-primary/30 shadow-lg">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-start space-x-2">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-primary text-sm">⚠️</span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-foreground dark:text-foreground leading-relaxed">
+                            {pendingAction.confirmation_message}
+                          </p>
+                          <p className="text-xs text-muted-foreground dark:text-muted-foreground mt-1">
+                            This action cannot be undone.
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex space-x-2 pt-1">
+                        <Button
+                          size="sm"
+                          onClick={handleConfirmAction}
+                          className="flex-1 bg-primary hover:bg-primary/90 dark:bg-primary dark:hover:bg-primary/90 
+                                  text-primary-foreground dark:text-primary-foreground font-medium shadow-sm
+                                  transition-all duration-200 hover:shadow-md"
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                          Confirm
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleCancelAction}
+                          className="flex-1 border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary/50 font-medium
+                                  transition-all duration-200"
+                        >
+                          <X className="w-4 h-4 mr-1.5" />
+                          Cancel
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
               {isTyping && (
                 <div className="flex justify-start">
                   <div className="bg-muted text-foreground rounded-2xl px-3 py-2">
@@ -599,16 +690,54 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
         </div>
 
         <div className="p-4 border-t bg-muted/30">
+          {selectedOrderId && (
+            <div className="mb-2 p-2 bg-primary/10 border border-primary/20 rounded-lg flex items-center justify-between">
+              <span className="text-xs text-foreground flex items-center">
+                <CheckCircle2 className="w-3 h-3 mr-1 text-primary" />
+                Order selected
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedOrderId(null)
+                  setSelectedOrder(null)
+                }}
+                className="h-5 px-1 text-xs"
+              >
+                Clear
+              </Button>
+            </div>
+          )}
+          
           <div className="flex space-x-2">
             <Input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Ask about products, sizing, or styling..."
-              onKeyPress={(e) => e.key === "Enter" && sendMessage(inputValue)}
+              placeholder={
+                selectedOrderId 
+                  ? "What would you like to do with this order?" 
+                  : "Ask about products, sizing, or styling..."
+              }
+              onKeyPress={(e) => {
+                if (e.key === "Enter") {
+                  if (selectedOrderId) {
+                    handleSendWithSelectedOrder()
+                  } else {
+                    sendMessage(inputValue)
+                  }
+                }
+              }}
               className="flex-1 h-9 text-sm bg-background border-border/50"
             />
             <Button
-              onClick={() => sendMessage(inputValue)}
+              onClick={() => {
+                if (selectedOrderId) {
+                  handleSendWithSelectedOrder()
+                } else {
+                  sendMessage(inputValue)
+                }
+              }}
               disabled={!inputValue.trim()}
               size="sm"
               className="h-9 px-3"

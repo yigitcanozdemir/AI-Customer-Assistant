@@ -12,6 +12,8 @@ from sqlalchemy import (
     Index,
     text,
     desc,
+    Float,
+    JSON,
 )
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY, UUID
@@ -173,3 +175,34 @@ class Order(Base):
         Index("ix_orders_store", "store"),
         Index("ix_orders_user_store_created", "user_id", "store", desc("created_at")),
     )
+
+
+class FlaggedSession(Base):
+    __tablename__ = "flagged_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(String, nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    user_name = Column(String, nullable=True)
+    store = Column(String, nullable=False)
+
+    requires_human = Column(Boolean, default=False)
+    confidence_score = Column(Float, nullable=True)
+    is_context_relevant = Column(Boolean, default=True)
+    warning_message = Column(Text, nullable=True)
+    assessment_reasoning = Column(Text, nullable=True)
+
+    user_query = Column(Text, nullable=False)
+    assistant_response = Column(Text, nullable=False)
+    message_history = Column(JSON, nullable=True)
+
+    flagged_at = Column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+    reviewed = Column(Boolean, default=False, index=True)
+    reviewed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    reviewed_by = Column(String, nullable=True)
+    review_notes = Column(Text, nullable=True)
+
+    def __repr__(self):
+        return f"<FlaggedSession(id={self.id}, session={self.session_id}, user={self.user_name})>"

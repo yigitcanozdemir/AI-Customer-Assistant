@@ -76,7 +76,11 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
+            "filename": record.filename,
+            "lineno": record.lineno,
+            "funcName": record.funcName,
         }
+
         if record.exc_info:
             log_record["exception"] = self.formatException(record.exc_info)
 
@@ -86,6 +90,40 @@ class JsonFormatter(logging.Formatter):
             log_record["otelSpanID"] = record.otelSpanID
         if hasattr(record, "otelServiceName"):
             log_record["otelServiceName"] = record.otelServiceName
+
+        skip_attrs = {
+            "name",
+            "msg",
+            "args",
+            "created",
+            "msecs",
+            "levelname",
+            "levelno",
+            "pathname",
+            "filename",
+            "module",
+            "exc_info",
+            "exc_text",
+            "stack_info",
+            "lineno",
+            "funcName",
+            "processName",
+            "process",
+            "threadName",
+            "thread",
+            "getMessage",
+            "otelTraceID",
+            "otelSpanID",
+            "otelServiceName",
+        }
+
+        for key, value in record.__dict__.items():
+            if key not in skip_attrs and not key.startswith("_"):
+                try:
+                    json.dumps(value)
+                    log_record[key] = value
+                except (TypeError, ValueError):
+                    log_record[key] = str(value)
 
         return json.dumps(log_record, ensure_ascii=False)
 

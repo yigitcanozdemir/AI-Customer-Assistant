@@ -13,6 +13,9 @@ export interface Message {
   products?: Product[]
   orders?: OrderStatus[]
   suggestions?: string[]
+  warning_message?: string
+  requires_human?: boolean
+  confidence_score?: number
 }
 
 interface OrderProduct {

@@ -107,5 +107,37 @@ class CacheManager:
         except Exception as e:
             logger.error(f"Cache invalidate product list error: {e}")
 
+    async def store_pending_action(
+        self, action_id: str, action_data: dict, ttl: int = 300
+    ) -> bool:
+        try:
+            key = f"pending_action:{action_id}"
+            await self.redis.setex(key, ttl, pickle.dumps(action_data))
+            logger.info(f"Stored pending action: {action_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error storing pending action: {e}")
+            return False
+
+    async def get_pending_action(self, action_id: str) -> Optional[dict]:
+        try:
+            key = f"pending_action:{action_id}"
+            cached = await self.redis.get(key)
+            if cached:
+                return pickle.loads(cached)
+        except Exception as e:
+            logger.error(f"Error getting pending action: {e}")
+        return None
+
+    async def delete_pending_action(self, action_id: str) -> bool:
+        try:
+            key = f"pending_action:{action_id}"
+            await self.redis.delete(key)
+            logger.info(f"Deleted pending action: {action_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting pending action: {e}")
+            return False
+
 
 cache_manager = CacheManager()

@@ -74,6 +74,36 @@ class Product(BaseModel):
     colors: List[str] = Field(default_factory=list)
 
 
+class ResponseAssessment(BaseModel):
+    """LLM's self-assessment of its response quality and context"""
+
+    confidence_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Confidence in response accuracy (0.0 = no confidence, 1.0 = completely confident)",
+    )
+    is_context_relevant: bool = Field(
+        ...,
+        description="Whether the user's question is relevant to e-commerce shopping context",
+    )
+    requires_human: bool = Field(
+        ..., description="Whether this conversation requires human intervention"
+    )
+    reasoning: str = Field(..., description="Brief explanation of the assessment")
+    warning_message: Optional[str] = Field(
+        None, description="User-facing warning message if needed"
+    )
+
+
+class PendingAction(BaseModel):
+    action_id: str
+    action_type: str
+    parameters: dict
+    requires_confirmation: bool = True
+    confirmation_message: str
+
+
 class MessageResponse(BaseModel):
     content: str
     store: str
@@ -81,6 +111,12 @@ class MessageResponse(BaseModel):
     products: Optional[List[Product]] = None
     orders: Optional[List[OrderStatus]] = None
     timestamp: datetime
+    requires_human: bool = False
+    confidence_score: Optional[float] = None
+    is_context_relevant: bool = True
+    pending_action: Optional[PendingAction] = None
+    warning_message: Optional[str] = None
+    assessment_reasoning: Optional[str] = None
 
 
 class Message(BaseModel):
@@ -90,6 +126,8 @@ class Message(BaseModel):
     timestamp: datetime
     products: Optional[List[Union[Product, ProductContext, OrderProduct]]] = None
     suggestions: Optional[List[str]] = None
+    requires_human: Optional[bool] = False
+    confidence_score: Optional[float] = None
 
 
 class ChatEventData(BaseModel):
@@ -100,6 +138,7 @@ class ChatEventData(BaseModel):
     product: Optional[ProductContext] = None
     order: Optional[OrderStatus] = None
     is_initial_message: Optional[bool] = False
+    confirm_action_id: Optional[str] = None
 
     class Config:
         arbitrary_types_allowed = True

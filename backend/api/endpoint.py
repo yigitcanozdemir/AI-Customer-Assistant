@@ -38,6 +38,7 @@ from backend.utility.utils import (
     EXCEPTIONS,
 )
 from backend.config import settings
+from backend.services.flagged_sessions import store_flagged_session
 
 tracer = trace.get_tracer(__name__)
 logger = logging.getLogger(__name__)
@@ -53,6 +54,54 @@ websocket_disconnects_total = Counter(
     "websocket_disconnects_total",
     "Total number of WebSocket disconnections",
 )
+
+
+def log_chat_interaction(
+    session_id: str,
+    user_id: str,
+    user_name: str,
+    store: str,
+    user_message: str,
+    assistant_response: str,
+    confidence_score: float = None,
+    requires_human: bool = False,
+    products_found: int = 0,
+    orders_found: int = 0,
+    tools_used: list = None,
+    trace_id: str = None,
+    duration_ms: float = None,
+):
+    """
+    Structured logging for chat interactions that will be properly indexed in Loki
+    """
+
+    logger.info(
+        f"CHAT_INTERACTION session={session_id} user={user_name}",
+        extra={
+            "event_type": "chat_interaction",
+            "session_id": session_id,
+            "user_id": user_id,
+            "user_name": user_name,
+            "store": store,
+            "user_message": (
+                user_message[:500] if len(user_message) > 500 else user_message
+            ),
+            "assistant_response": (
+                assistant_response[:500]
+                if len(assistant_response) > 500
+                else assistant_response
+            ),
+            "message_length_user": len(user_message),
+            "message_length_assistant": len(assistant_response),
+            "confidence_score": confidence_score,
+            "requires_human": requires_human,
+            "products_found": products_found,
+            "orders_found": orders_found,
+            "tools_used": ",".join(tools_used) if tools_used else "none",
+            "duration_ms": duration_ms,
+            "trace_id": trace_id,
+        },
+    )
 
 
 @router.websocket("/ws/chat/{session_id}")
@@ -93,10 +142,10 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 user_id = event.event_data.user_id
                 user_name = event.event_data.user_name
                 order_data = event.event_data.order
-
                 is_initial_message = getattr(
                     event.event_data, "is_initial_message", False
                 )
+                confirm_action_id = getattr(event.event_data, "confirm_action_id", None)
 
                 product_context = product_data
                 order_context = order_data if order_data else None
@@ -170,7 +219,37 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 message_history = get_message_history(session_id)
 
                 response: MessageResponse = await handle_chat_event(
-                    question, store, message_history, user_id, user_name
+                    user_input=question,
+                    store=store,
+                    message_history=message_history,
+                    user_id=user_id,
+                    user_name=user_name,
+                    confirm_action_id=confirm_action_id,
+                    selected_order=order_data,
+                )
+
+                span_context = trace.get_current_span().get_span_context()
+                trace_id_str = (
+                    trace.format_trace_id(span_context.trace_id)
+                    if span_context
+                    else "N/A"
+                )
+                tools_used = []
+
+                log_chat_interaction(
+                    session_id=session_id,
+                    user_id=user_id,
+                    user_name=user_name,
+                    store=store,
+                    user_message=question,
+                    assistant_response=response.content,
+                    confidence_score=response.confidence_score,
+                    requires_human=response.requires_human,
+                    products_found=len(response.products) if response.products else 0,
+                    orders_found=len(response.orders) if response.orders else 0,
+                    tools_used=tools_used,
+                    trace_id=trace_id_str,
+                    duration_ms=round((time.perf_counter() - msg_start) * 1000, 2),
                 )
 
                 logger.info(
@@ -180,6 +259,9 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         "session_id": session_id,
                         "user_id": user_id,
                         "response_length": len(response.content),
+                        "requires_human": response.requires_human,
+                        "confidence_score": response.confidence_score,
+                        "is_context_relevant": response.is_context_relevant,
                     },
                 )
 
@@ -190,8 +272,40 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     timestamp=datetime.utcnow(),
                     products=response.products,
                     suggestions=getattr(response, "suggestions", []),
+                    requires_human=response.requires_human,
+                    confidence_score=response.confidence_score,
                 )
                 add_message(session_id, assistant_message)
+
+                if response.requires_human:
+                    logger.warning(
+                        "Message flagged for human review",
+                        extra={
+                            "session_id": session_id,
+                            "user_id": user_id,
+                            "confidence_score": response.confidence_score,
+                            "warning": response.warning_message,
+                        },
+                    )
+                    await store_flagged_session(
+                        session_id=session_id,
+                        user_id=str(user_id),
+                        user_name=user_name,
+                        store=store,
+                        user_query=question,
+                        assistant_response=response.content,
+                        confidence_score=response.confidence_score,
+                        requires_human=response.requires_human,
+                        is_context_relevant=response.is_context_relevant,
+                        warning_message=response.warning_message,
+                        assessment_reasoning=getattr(
+                            response, "assessment_reasoning", None
+                        ),
+                        message_history=[
+                            m.dict() if hasattr(m, "dict") else m.__dict__
+                            for m in message_history[-10:]
+                        ],
+                    )
 
                 await websocket.send_json(jsonable_encoder(response))
                 websocket_messages_total.labels(direction="outbound").inc()
