@@ -10,6 +10,7 @@ COPY ./pyproject.toml ./uv.lock ./
 RUN uv sync --no-dev --frozen
 
 COPY ./backend /app/backend
+COPY ./alembic.ini /app/alembic.ini
 COPY ./startup.sh /app/startup.sh
 
 ENV PYTHONUNBUFFERED=1
