@@ -11,6 +11,14 @@ try:
 except Exception:
     trace = None
 
+try:
+    import boto3
+    import watchtower
+
+    CLOUDWATCH_AVAILABLE = True
+except ImportError:
+    CLOUDWATCH_AVAILABLE = False
+
 
 class OtelLogRecord(logging.LogRecord):
     """Custom LogRecord that adds OpenTelemetry fields"""
@@ -42,28 +50,6 @@ class OtelLogRecord(logging.LogRecord):
         self.otelTraceID = "N/A"
         self.otelSpanID = "N/A"
         self.otelServiceName = os.environ.get("OTEL_SERVICE_NAME", "unknown")
-
-
-class CustomLoggerAdapter(logging.LoggerAdapter):
-
-    def makeRecord(
-        self,
-        name,
-        level,
-        fn,
-        lno,
-        msg,
-        args,
-        exc_info,
-        func=None,
-        extra=None,
-        sinfo=None,
-    ):
-        rv = OtelLogRecord(name, level, fn, lno, msg, args, exc_info, func, sinfo)
-        if extra is not None:
-            for key in extra:
-                rv.__dict__[key] = extra[key]
-        return rv
 
 
 class JsonFormatter(logging.Formatter):
@@ -128,6 +114,27 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(log_record, ensure_ascii=False)
 
 
+class ProductionJsonFormatter(JsonFormatter):
+    """Optimized formatter for production - reduces log volume"""
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Skip debug logs in production
+        if record.levelno < logging.INFO:
+            return ""
+
+        # Skip noisy logs
+        if any(
+            skip in record.getMessage()
+            for skip in [
+                "GET /health",
+                "OPTIONS /",
+            ]
+        ):
+            return ""
+
+        return super().format(record)
+
+
 def setup_logging(force: bool = True, level: str = None) -> None:
     logging.setLogRecordFactory(OtelLogRecord)
 
@@ -149,9 +156,12 @@ def setup_logging(force: bool = True, level: str = None) -> None:
         except Exception:
             pass
 
+    # Console handler (always have this)
     console_handler = logging.StreamHandler(sys.stdout)
 
     log_format = os.environ.get("LOG_FORMAT", "json").lower()
+    environment = os.environ.get("ENVIRONMENT", "development")
+    use_cloudwatch = os.environ.get("USE_CLOUDWATCH", "false").lower() == "true"
 
     if log_format == "text":
         fmt = (
@@ -160,7 +170,11 @@ def setup_logging(force: bool = True, level: str = None) -> None:
         )
         formatter = logging.Formatter(fmt, datefmt="%Y-%m-%d %H:%M:%S")
     else:
-        formatter = JsonFormatter()
+        # Use optimized formatter in production
+        if environment == "production":
+            formatter = ProductionJsonFormatter()
+        else:
+            formatter = JsonFormatter()
 
     console_handler.setFormatter(formatter)
 
@@ -176,17 +190,59 @@ def setup_logging(force: bool = True, level: str = None) -> None:
     root.setLevel(numeric_level)
     root.addHandler(console_handler)
 
-    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
-    logging.getLogger("uvicorn.error").setLevel(logging.INFO)
-    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    # Add CloudWatch handler in production
+    if use_cloudwatch and CLOUDWATCH_AVAILABLE and environment == "production":
+        try:
+            aws_region = os.environ.get("AWS_REGION", "us-east-1")
+            log_group = f"/aws/ec2/{os.environ.get('APP_NAME', 'ecommerce-api')}"
+
+            cloudwatch_handler = watchtower.CloudWatchLogHandler(
+                log_group=log_group,
+                stream_name="{machine_name}/{program_name}/{logger_name}",
+                use_queues=True,
+                send_interval=10,
+                boto3_client=boto3.client("logs", region_name=aws_region),
+            )
+            cloudwatch_handler.setFormatter(formatter)
+            cloudwatch_handler.setLevel(
+                logging.WARNING
+            )  # Only WARNING and above to CloudWatch
+            root.addHandler(cloudwatch_handler)
+
+            logging.getLogger(__name__).info(
+                f"CloudWatch logging enabled (log_group={log_group}, region={aws_region})"
+            )
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                f"Failed to set up CloudWatch logging: {e}"
+            )
+
+    # More aggressive filtering in production
+    if environment == "production":
+        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+        logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+        logging.getLogger("sqlalchemy.engine").setLevel(logging.ERROR)
+        logging.getLogger("watchtower").setLevel(logging.ERROR)
+        logging.getLogger("botocore").setLevel(logging.ERROR)
+        logging.getLogger("boto3").setLevel(logging.ERROR)
+    else:
+        logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+        logging.getLogger("uvicorn.error").setLevel(logging.INFO)
+        logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
     uvicorn_logger = logging.getLogger("uvicorn")
     uvicorn_logger.handlers = []
     uvicorn_logger.propagate = True
 
-    logging.getLogger(__name__).info(f"Logging configured (format={log_format})")
+    logging.getLogger(__name__).info(
+        f"Logging configured (format={log_format}, environment={environment}, cloudwatch={use_cloudwatch})"
+    )
+
+    # Suppress noisy loggers
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "uvicorn.server"):
-        logging.getLogger(name).setLevel(logging.WARNING)
+        logging.getLogger(name).setLevel(
+            logging.WARNING if environment == "production" else logging.INFO
+        )
 
 
 setup_logging()

@@ -151,7 +151,7 @@ services:
       - OTEL_LOGS_EXPORTER=none
       - OTEL_SERVICE_NAME=fastapi-service
       - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production,service.version=1.0.0
-      - LOG_FORMAT=text 
+      - LOG_FORMAT=json 
     labels:
       job: "fastapi"
     networks:

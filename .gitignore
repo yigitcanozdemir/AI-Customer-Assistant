@@ -1,4 +1,5 @@
 .env
+.env.*
 .venv
 env/
 venv/
@@ -12,3 +13,9 @@ logs/
 prometheus_data/
 grafana_data/
 loki_data/
+*.pem
+*.key
+.vscode/
+*.pyc
+.DS_Store
+*.log

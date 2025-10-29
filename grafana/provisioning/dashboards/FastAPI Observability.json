@@ -981,7 +981,8 @@
             "type": "loki",
             "uid": "Loki"
           },
-          "expr": "sum by(level) (rate({job=\"fastapi\"} | pattern `<date> <time> <level> <logger> <_> [<_>=<trace_id> <_>=<span_id> <_>=<service_name>] - <msg>` | level != \"\" |= \"$log_keyword\" [1m]))",
+          "expr": "sum by(level) (count_over_time({job=\"fastapi\"} | json | level != \"\" |= \"$log_keyword\" [1m]))"
+,
           "legendFormat": "{{level}}",
           "refId": "A"
         }
@@ -1023,135 +1024,13 @@
             "type": "loki",
             "uid": "Loki"
           },
-          "expr": "{job=\"fastapi\"} | pattern `<date> <time> <level> <logger> <code> [<_>=<trace_id> <_>=<span_id> <_>=<service_name>] - <msg>` | line_format \"{{.job}}\\t{{.level}}\\t trace_id={{.trace_id}}\\t {{.msg}}\" |= \"$log_keyword\"",
+          "expr": "{job=\"fastapi\"} | json | line_format \"{{.level}}\\ttrace_id={{.otelTraceID}}\\t{{.message}}\" |= \"$log_keyword\"",
           "refId": "A"
         }
       ],
       "title": "Log of All FastAPI App",
       "type": "logs"
-    },    {
-    "title": "Chat History Table",
-    "type": "table",
-    "description": "Complete chat history with all interactions",
-    "datasource": { "type": "loki", "uid": "Loki" },
-    "targets": [
-      {
-        "refId": "A",
-        "expr": "{job=\"fastapi\"} |= \"CHAT_INTERACTION\" | json | line_format \"{{.timestamp}} | {{.user_name}} | {{.session_id}} | User: {{.user_message}} | Assistant: {{.assistant_response}} | Confidence: {{.confidence_score}} | Human Review: {{.requires_human}}\""
-      }
-    ],
-    "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
-  },
-  {
-    "title": "Chat Sessions by User",
-    "type": "logs",
-    "datasource": { "type": "loki", "uid": "Loki" },
-    "targets": [
-      {
-        "refId": "A",
-        "expr": "{job=\"fastapi\"} |= \"event_type=\\\"chat_interaction\\\"\" | json | user_name=\"$user_name\" | line_format \"[{{.timestamp}}] Session: {{.session_id}}\\nUser: {{.user_message}}\\nBot: {{.assistant_response}}\\nConfidence: {{.confidence_score}} | Tools: {{.tools_used}}\""
-      }
-    ],
-    "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
-  },
-  {
-    "title": "Low Confidence Interactions",
-    "type": "table",
-    "datasource": { "type": "loki", "uid": "Loki" },
-    "targets": [
-      {
-        "refId": "A",
-        "expr": "{job=\"fastapi\"} | json | event_type=\"chat_interaction\" | confidence_score < 0.5 | line_format \"{{.user_name}} | {{.user_message}} | {{.assistant_response}} | Score: {{.confidence_score}}\""
-      }
-    ],
-    "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
-  },
-  {
-    "title": "Flagged for Human Review",
-    "type": "logs",
-    "datasource": { "type": "loki", "uid": "Loki" },
-    "targets": [
-      {
-        "refId": "A",
-        "expr": "{job=\"fastapi\"} | json | event_type=\"chat_interaction\" | requires_human=\"true\" | line_format \"[REVIEW NEEDED] User: {{.user_name}} | {{.user_message}} | Response: {{.assistant_response}}\""
-      }
-    ],
-    "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
-  },
-  {
-    "title": "Chat Volume Over Time",
-    "type": "timeseries",
-    "datasource": { "type": "loki", "uid": "Loki" },
-    "targets": [
-      {
-        "refId": "A",
-        "expr": "sum(rate({job=\"fastapi\"} |= \"CHAT_INTERACTION\" [5m])) * 60"
-      }
-    ],
-    "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
-  },
-  {
-    "title": "Average Confidence Score",
-    "type": "stat",
-    "datasource": { "type": "loki", "uid": "Loki" },
-    "targets": [
-      {
-        "refId": "A",
-        "expr": "avg_over_time(({job=\"fastapi\"} | json | event_type=\"chat_interaction\" | unwrap confidence_score)[5m])"
-      }
-    ],
-    "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
-  },
-  {
-    "title": "Tools Usage",
-    "type": "piechart",
-    "datasource": { "type": "loki", "uid": "Loki" },
-    "targets": [
-      {
-        "refId": "A",
-        "expr": "sum by (tools_used) (rate({job=\"fastapi\"} | json | event_type=\"chat_interaction\" | tools_used != \"none\" [5m]))"
-      }
-    ],
-    "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 }
-  },
-  {
-    "title": "Session Trace Correlation",
-    "type": "table",
-    "datasource": { "type": "loki", "uid": "Loki" },
-    "targets": [
-      {
-        "refId": "A",
-        "expr": "{job=\"fastapi\"} | json | session_id=\"$session_id\" | line_format \"{{.timestamp}} | TraceID: {{.otelTraceID}} | {{.message}}\""
-      }
-    ],
-    "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 }
-  },
-  {
-    "title": "User Journey (Single Session)",
-    "type": "logs",
-    "datasource": { "type": "loki", "uid": "Loki" },
-    "targets": [
-      {
-        "refId": "A",
-        "expr": "{job=\"fastapi\"} | json | session_id=\"$session_id\" | line_format \"{{.timestamp}} | {{.level}} | {{.message}} | {{.event}}\""
-      }
-    ],
-    "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 }
-  },
-  {
-    "title": "Response Time by Store",
-    "type": "bargauge",
-    "datasource": { "type": "loki", "uid": "Loki" },
-    "targets": [
-      {
-        "refId": "A",
-        "expr": "avg by (store) (({job=\"fastapi\"} | json | event_type=\"chat_interaction\" | unwrap duration_ms)[5m])"
-      }
-    ],
-    "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 }
-  }
-
-    
+    }
   ],
   "preload": false,
   "refresh": "5s",
@@ -1198,19 +1077,7 @@
         ],
         "query": "",
         "type": "textbox"
-      },
-      {
-      "name": "session_id",
-      "type": "query",
-      "query": "label_values({job=\"fastapi\"} |= \"session_id\", session_id)",
-      "label": "Session ID"
-    },
-    {
-      "name": "user_name",
-      "type": "query",
-      "query": "label_values({job=\"fastapi\"} |= \"user_name\", user_name)",
-      "label": "User Name"
-    }
+      }
     ]
   },
   "time": {
