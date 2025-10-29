@@ -32,7 +32,7 @@ from backend.db.services.database_logic import (
 )
 from backend.db.utils.doc_converter import json_to_plain_text, converter
 from backend.db.utils.helper_funcs import directory_exists, prettify
-from batcher import process_products_batch
+from backend.db.batcher import process_products_batch
 import nest_asyncio
 from sqlalchemy import select, func
 from backend.db.schema import Product

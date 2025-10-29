@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y curl && \
 
 COPY ./pyproject.toml ./uv.lock ./
 RUN uv sync --no-dev --frozen
+RUN uv pip install "sqlalchemy[asyncio]>=2.0.43" asyncpg alembic
 
 COPY ./backend /app/backend
 COPY ./alembic.ini /app/alembic.ini
