@@ -15,25 +15,10 @@ services:
       - LOG_FORMAT=json
       - LOG_LEVEL=INFO
       - ENVIRONMENT=production
-      - USE_CLOUDWATCH=true
-      - AWS_REGION=us-east-1
+      - USE_CLOUDWATCH=True
+      - AWS_REGION=us-north-1
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-    # Mount AWS credentials from EC2 instance
-    volumes:
-      - ~/.aws:/root/.aws:ro
-
-  nginx:
-    image: nginx:alpine
-    container_name: nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - fastapi
-    restart: unless-stopped
