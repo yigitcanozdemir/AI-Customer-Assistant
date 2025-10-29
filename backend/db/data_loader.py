@@ -30,21 +30,13 @@ from backend.db.services.database_logic import (
     process_faq_embeddings,
     process_product_embeddings,
 )
-from backend.db.utils.doc_converter import json_to_plain_text, converter
-from backend.db.utils.helper_funcs import directory_exists, prettify
 from backend.db.batcher import process_products_batch
-import nest_asyncio
 from sqlalchemy import select, func
 from backend.db.schema import Product
-
-nest_asyncio.apply()
+from backend.db.utils.doc_converter import json_to_text
 
 BATCH_SIZE = 100
 logger = logging.getLogger(__name__)
-
-# ======================================================
-# Main execution function
-# ======================================================
 
 
 async def main():
@@ -91,18 +83,20 @@ async def main():
                     extra={"store": store_name, "action": "process_store"},
                 )
 
+                store_name_pretty = " ".join(
+                    word[0].upper() + word[1:] if word else ""
+                    for word in store_name.split("_")
+                )
+
                 faq_file = files.get("faq")
                 if faq_file and faq_file.exists():
                     with open(faq_file, "r", encoding="utf-8") as f:
                         faq_data = json.load(f)
-                    plain_text = json_to_plain_text(faq_data)
-                    md_file = json_folder / f"{store_name}_faq.md"
-                    directory_exists(md_file)
-                    with open(md_file, "w", encoding="utf-8") as f:
-                        f.write(plain_text)
-                    result = converter.convert(md_file)
-                    store_name_pretty = prettify(store_name)
-                    await process_faq_embeddings(session, result, store_name_pretty)
+
+                    faq_text = json_to_text(faq_data)
+
+                    await process_faq_embeddings(session, faq_text, store_name_pretty)
+
                     logger.info(
                         "FAQ processed successfully",
                         extra={"store": store_name, "action": "faq_processed"},
@@ -125,7 +119,6 @@ async def main():
                             "action": "products_loaded",
                         },
                     )
-                    store_name_pretty = prettify(store_name)
                     await process_products_batch(
                         session, products, store_name_pretty, BATCH_SIZE
                     )

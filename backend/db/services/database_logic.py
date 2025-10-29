@@ -1,6 +1,5 @@
 import random
 import logging
-from docling.chunking import HybridChunker
 
 from backend.services.embedding import create_embedding
 from .db_operations import (
@@ -10,10 +9,8 @@ from .db_operations import (
     create_product_embedding,
     create_faq_entries,
 )
-from backend.db.utils.tokenizer import OpenAITokenizerWrapper
 
 logger = logging.getLogger(__name__)
-tokenizer = OpenAITokenizerWrapper()
 
 
 async def process_product_embeddings(session, product_data, store):
@@ -67,29 +64,30 @@ async def process_product_embeddings(session, product_data, store):
                 embedding=embedding_vector,
             )
         except Exception as e:
-            logger.error(f"Embedding creation failed for product {product.title}: {e}")
+            logger.error(f"Embedding creation failed for product {product.name}: {e}")
 
     await session.commit()
 
 
-async def process_faq_embeddings(session, faq_data, store):
-    chunker = HybridChunker(tokenizer=tokenizer, max_tokens=600, merge_peers=True)
-    chunks = list(chunker.chunk(dl_doc=faq_data.document))
-    faq_entries = []
+async def process_faq_embeddings(session, faq_text, store):
+    """
+    Process FAQ text directly without chunking.
+    Just create one embedding for the entire FAQ.
+    """
+    try:
+        embedding_vector = await create_embedding(faq_text)
 
-    for chunk in chunks:
-        try:
-            embedding_vector = await create_embedding(chunk.text)
-            faq_entries.append(
-                {
-                    "store": store,
-                    "content": chunk.text,
-                    "embedding": embedding_vector,
-                }
-            )
-        except Exception as e:
-            logger.error(f"Failed to process FAQ chunk: {e}")
+        faq_entry = {
+            "store": store,
+            "content": faq_text,
+            "embedding": embedding_vector,
+        }
 
-    if faq_entries:
-        await create_faq_entries(session, faq_entries)
+        await create_faq_entries(session, [faq_entry])
         await session.commit()
+
+        logger.info(f"FAQ processed successfully for store: {store}")
+
+    except Exception as e:
+        logger.error(f"Failed to process FAQ: {e}")
+        raise

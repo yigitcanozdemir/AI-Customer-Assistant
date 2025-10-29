@@ -7,7 +7,6 @@ requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.16.5",
     "asyncpg>=0.30.0",
-    "docling>=2.43.0",
     "fastapi>=0.116.1",
     "gunicorn>=23.0.0",
     "hiredis>=3.2.1",
@@ -36,4 +35,5 @@ dependencies = [
     "websockets>=15.0.1",
     "boto3>=1.40.61",
     "watchtower>=3.4.0",
+    "pydantic-settings>=2.11.0",
 ]
