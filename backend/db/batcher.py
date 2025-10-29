@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import asyncio
 import logging
 import logging
-from services.database_logic import process_product_embeddings
+from backend.db.services.database_logic import process_product_embeddings
 
 logger = logging.getLogger(__name__)
 
