@@ -2,6 +2,7 @@ import type React from "react";
 import { Inter } from "next/font/google";
 import { Suspense } from "react";
 import { Providers } from "@/components/providers";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
 const inter = Inter({
@@ -20,6 +21,7 @@ export default function RootLayout({
         <Suspense fallback={null}>
           <Providers>{children}</Providers>
         </Suspense>
+        <SpeedInsights />
       </body>
     </html>
   );
