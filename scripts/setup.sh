@@ -32,7 +32,6 @@ docker-compose -f docker-compose.prod.yml exec -T fastapi python backend/db/data
 
 echo "✅ Setup complete!"
 echo ""
-echo "🌐 Your API will be available at: https://api.yigitcanozdemir.com" # Change this with your api domain!
-echo "📝 Don't forget to:"
+echo "📝 Next steps:"
 echo "   1. Get SSL certificate: ./scripts/get-ssl.sh"
-echo "   2. Update Vercel env vars with your API URL"
+echo "   2. Update Vercel with: https://api.yigitcanozdemir.com"
