@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     frontend_url: str
     openai_api_key: str
     debug: bool = False
+    environment: str = "production"
     port: int = 8000
     redis_url: str
     database_url: str
