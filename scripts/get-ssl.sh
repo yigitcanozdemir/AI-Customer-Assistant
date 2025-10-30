@@ -26,7 +26,7 @@ else
 fi
 
 # Start/restart services
-docker-compose -f docker-compose.prod.yml up -d nginx
+NGINX_CONF=./nginx/nginx.http.conf docker-compose -f docker-compose.prod.yml up -d nginx
 sleep 3
 
 # Get certificate if it doesn't exist
