@@ -15,7 +15,7 @@ services:
       - LOG_FORMAT=json
       - LOG_LEVEL=INFO
       - ENVIRONMENT=production
-      - USE_CLOUDWATCH=false
+      - USE_CLOUDWATCH=true
       - AWS_REGION=eu-north-1
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
