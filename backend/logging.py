@@ -1,4 +1,3 @@
-# backend/logging.py
 import logging
 import sys
 import json
@@ -21,8 +20,6 @@ except ImportError:
 
 
 class OtelLogRecord(logging.LogRecord):
-    """Custom LogRecord that adds OpenTelemetry fields"""
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if trace:
@@ -115,14 +112,10 @@ class JsonFormatter(logging.Formatter):
 
 
 class ProductionJsonFormatter(JsonFormatter):
-    """Optimized formatter for production - reduces log volume"""
-
     def format(self, record: logging.LogRecord) -> str:
-        # Skip debug logs in production
         if record.levelno < logging.INFO:
             return ""
 
-        # Skip noisy logs
         if any(
             skip in record.getMessage()
             for skip in [
@@ -156,7 +149,6 @@ def setup_logging(force: bool = True, level: str = None) -> None:
         except Exception:
             pass
 
-    # Console handler (always have this)
     console_handler = logging.StreamHandler(sys.stdout)
 
     log_format = os.environ.get("LOG_FORMAT", "json").lower()
@@ -170,7 +162,6 @@ def setup_logging(force: bool = True, level: str = None) -> None:
         )
         formatter = logging.Formatter(fmt, datefmt="%Y-%m-%d %H:%M:%S")
     else:
-        # Use optimized formatter in production
         if environment == "production":
             formatter = ProductionJsonFormatter()
         else:
@@ -190,7 +181,6 @@ def setup_logging(force: bool = True, level: str = None) -> None:
     root.setLevel(numeric_level)
     root.addHandler(console_handler)
 
-    # Add CloudWatch handler in production
     if use_cloudwatch and CLOUDWATCH_AVAILABLE and environment == "production":
         try:
             aws_region = os.environ.get("AWS_REGION", "us-east-1")
@@ -204,9 +194,7 @@ def setup_logging(force: bool = True, level: str = None) -> None:
                 boto3_client=boto3.client("logs", region_name=aws_region),
             )
             cloudwatch_handler.setFormatter(formatter)
-            cloudwatch_handler.setLevel(
-                logging.WARNING
-            )  # Only WARNING and above to CloudWatch
+            cloudwatch_handler.setLevel(logging.WARNING)
             root.addHandler(cloudwatch_handler)
 
             logging.getLogger(__name__).info(
@@ -217,7 +205,6 @@ def setup_logging(force: bool = True, level: str = None) -> None:
                 f"Failed to set up CloudWatch logging: {e}"
             )
 
-    # More aggressive filtering in production
     if environment == "production":
         logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
         logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
@@ -238,7 +225,6 @@ def setup_logging(force: bool = True, level: str = None) -> None:
         f"Logging configured (format={log_format}, environment={environment}, cloudwatch={use_cloudwatch})"
     )
 
-    # Suppress noisy loggers
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "uvicorn.server"):
         logging.getLogger(name).setLevel(
             logging.WARNING if environment == "production" else logging.INFO

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
     openai_model: str
+    tempo_endpoint: str = "tempo:4317"
 
 
 settings = Settings()

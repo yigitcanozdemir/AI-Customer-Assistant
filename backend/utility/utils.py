@@ -20,6 +20,8 @@ from starlette.responses import Response
 from starlette.routing import Match
 from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
 from starlette.types import ASGIApp
+from backend.config import settings
+from opentelemetry.sdk.trace.export import ConsoleSpanExporter
 
 
 INFO = Gauge("fastapi_app_info", "FastAPI app info", ["app_name"])
@@ -118,13 +120,26 @@ def metrics(_: Request) -> Response:
     )
 
 
-def setup_otlp(app: ASGIApp, app_name: str, endpoint: str = "tempo:4317") -> None:
+def setup_otlp(
+    app: ASGIApp,
+    app_name: str,
+    endpoint: str = settings.tempo_endpoint,
+    environment: str = settings.environment,
+) -> None:
     resource = Resource.create(attributes={"service.name": app_name})
     tracer_provider = TracerProvider(resource=resource)
+
+    if endpoint:
+        tracer_provider.add_span_processor(
+            BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True))
+        )
+    else:
+        if environment != "production":
+            tracer_provider.add_span_processor(
+                BatchSpanProcessor(ConsoleSpanExporter())
+            )
+
     trace.set_tracer_provider(tracer_provider)
-    tracer_provider.add_span_processor(
-        BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True))
-    )
 
     LoggingInstrumentor().instrument(set_logging_format=True)
     FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer_provider)
