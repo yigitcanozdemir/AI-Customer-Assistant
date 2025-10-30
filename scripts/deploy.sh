@@ -26,7 +26,7 @@ echo "▶️  Starting services..."
 docker-compose -f docker-compose.prod.yml up -d
 
 echo "⏳ Waiting for services..."
-sleep 15
+sleep 30 
 
 MAX_RETRIES=5
 RETRY_COUNT=0

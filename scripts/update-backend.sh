@@ -47,7 +47,7 @@ fi
 
 echo ""
 echo "🏥 Health check..."
-sleep 5
+sleep 30 
 
 if docker exec fastapi curl -f http://localhost:8000/health > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Backend updated successfully!${NC}"
