@@ -60,7 +60,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(debug=settings.debug, lifespan=lifespan)
 app.add_middleware(PrometheusMiddleware, app_name=APP_NAME)
 app.add_route("/metrics", metrics)
-setup_otlp(app, APP_NAME, endpoint="tempo:4317")
+
+if settings.environment != "production":
+    setup_otlp(app, APP_NAME, endpoint="tempo:4317")
 
 app.middleware("http")(catch_exceptions_middleware)
 
