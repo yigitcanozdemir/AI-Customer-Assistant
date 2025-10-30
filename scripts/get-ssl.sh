@@ -6,16 +6,13 @@ EMAIL="${SSL_EMAIL:-}"
 
 echo "🔒 Setting up SSL certificate for $DOMAIN..."
 
-# Validate
 if [[ "$EMAIL" == "your-email@example.com" ]]; then
     echo "❌ Please update EMAIL in this script"
     exit 1
 fi
 
-# Create directories
 mkdir -p certbot/conf certbot/www
 
-# Check if certificate already exists
 if [ -f "certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
     echo "✓ Certificate already exists"
     echo "🔄 Using production config with HTTPS..."
@@ -25,11 +22,9 @@ else
     export NGINX_CONF=./nginx/nginx.http.conf
 fi
 
-# Start/restart services
 NGINX_CONF=./nginx/nginx.http.conf docker-compose -f docker-compose.prod.yml up -d nginx
 sleep 3
 
-# Get certificate if it doesn't exist
 if [ ! -f "certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
     echo "📝 Requesting certificate from Let's Encrypt..."
     
@@ -49,7 +44,6 @@ if [ ! -f "certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
     echo "✓ Certificate obtained!"
     echo "🔄 Switching to production config with HTTPS..."
     
-    # Switch to production config
     export NGINX_CONF=./nginx/nginx.conf
     docker-compose -f docker-compose.prod.yml up -d nginx
 fi

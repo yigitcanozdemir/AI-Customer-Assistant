@@ -90,6 +90,8 @@ async def get_llm_assessment(
     assistant_response: str,
     tool_calls_used: bool,
     products_found: int,
+    selected_order_id,
+    product_name,
 ) -> ResponseAssessment:
     """
     Let the LLM assess its own response quality using structured output
@@ -99,6 +101,11 @@ async def get_llm_assessment(
         assistant_response=assistant_response,
         tools_used="Yes" if tool_calls_used else "No",
         products_found=products_found,
+        order_context=(
+            f"The user has selected order {selected_order_id} for product {product_name}"
+            if selected_order_id
+            else ""
+        ),
     )
 
     try:
@@ -459,6 +466,8 @@ async def handle_chat_event(
             assistant_response=content,
             tool_calls_used=tool_calls_found,
             products_found=len(products),
+            selected_order_id=selected_order_id,
+            product_name=product_name if selected_order else "",
         )
 
         logger.info(

@@ -2,6 +2,7 @@ You are evaluating a conversation in an e-commerce shopping assistant context.
 
 User Question: "{user_input}"
 Assistant Response: "{assistant_response}"
+Order Context: "{order_context}"
 Tools Used: {tools_used}
 Products Found: {products_found}
 
