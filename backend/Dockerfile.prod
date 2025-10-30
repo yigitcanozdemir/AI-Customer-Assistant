@@ -2,20 +2,28 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Install system dependencies and uv
 RUN apt-get update && apt-get install -y curl && \
-    pip install --no-cache-dir uv && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-COPY ./pyproject.toml ./uv.lock ./
-RUN uv sync --no-dev --frozen
-RUN uv pip install "sqlalchemy[asyncio]>=2.0.43" asyncpg alembic
+# Install uv using official method
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# Copy dependency files
+COPY ./pyproject.toml ./uv.lock ./
+
+# Install dependencies with uv
+RUN uv sync --frozen --no-dev
+
+# Copy application code
 COPY ./backend /app/backend
 COPY ./alembic.ini /app/alembic.ini
 COPY ./startup.sh /app/startup.sh
 
+# CRITICAL: Set PATH to include the venv
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
 
 RUN chmod +x /app/startup.sh

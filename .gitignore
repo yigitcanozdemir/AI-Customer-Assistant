@@ -19,3 +19,5 @@ loki_data/
 *.pyc
 .DS_Store
 *.log
+certbot/
+nginx/ssl/

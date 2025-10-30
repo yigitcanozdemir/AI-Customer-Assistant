@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-echo "🔄 Updating application from Git..."
+echo "🔄 Updating from Git and deploying..."
 
 # Pull latest code
 git pull origin main
 
 # Run deployment
-./deploy.sh
+./scripts/deploy.sh
