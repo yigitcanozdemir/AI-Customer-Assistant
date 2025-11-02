@@ -172,28 +172,28 @@ export function OrderSuccessModal({
                 className="border-green-200 bg-green-50/50 dark:bg-green-950/20"
               >
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-lg flex items-center space-x-2">
-                    <Package className="w-5 h-5" />
-                    <span>Order #{order.order_id.slice(0, 8)}...</span>
+                  <CardTitle className="text-base sm:text-lg flex items-center space-x-2 flex-wrap">
+                    <Package className="w-5 h-5 flex-shrink-0" />
+                    <span className="break-all">Order #{order.order_id.slice(0, 8)}...</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="flex items-center space-x-2">
-                      <User className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">Customer:</span>
-                      <span className="font-medium">{order.user_name}</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
+                    <div className="flex items-center space-x-2 flex-wrap">
+                      <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <span className="text-muted-foreground flex-shrink-0">Customer:</span>
+                      <span className="font-medium break-words">{order.user_name}</span>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Clock className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">Created:</span>
-                      <span className="font-medium">
+                    <div className="flex items-center space-x-2 flex-wrap">
+                      <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <span className="text-muted-foreground flex-shrink-0">Created:</span>
+                      <span className="font-medium text-xs sm:text-sm break-words">
                         {formatDate(order.created_at)}
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2 text-sm">
-                    <span className="text-muted-foreground">Status:</span>
+                  <div className="flex items-center space-x-2 text-sm flex-wrap">
+                    <span className="text-muted-foreground flex-shrink-0">Status:</span>
                     <span className="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full text-xs font-medium capitalize">
                       {order.status}
                     </span>

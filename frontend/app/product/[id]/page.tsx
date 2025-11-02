@@ -350,7 +350,11 @@ export default function ProductPage() {
   } else if (bothPanelsOpen && windowWidth >= 1024 && windowWidth < 1400) {
     sideWidth = windowWidth / 2;
   } else {
-    sideWidth = MAX_SIDE_WIDTH;
+    if (windowWidth >= 1024 && windowWidth <= 1366 && !bothPanelsOpen) {
+      sideWidth = Math.min(MAX_SIDE_WIDTH, windowWidth * 0.35);
+    } else {
+      sideWidth = MAX_SIDE_WIDTH;
+    }
   }
 
   const totalOffset =

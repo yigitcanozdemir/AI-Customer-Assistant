@@ -132,6 +132,9 @@ export function CheckoutModal({
   const shouldShowFullScreen =
     bothPanelsOpen && windowWidth >= 1024 && windowWidth < 1400;
 
+  const availableWidth = windowWidth - totalOffset;
+  const useMobileLayout = windowWidth < 1024 || availableWidth < 700;
+
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center"
@@ -162,11 +165,12 @@ export function CheckoutModal({
           height: shouldShowFullScreen ? "100%" : "auto",
           borderRadius: shouldShowFullScreen ? "0" : undefined,
           touchAction: "auto",
+          overflowX: "hidden",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
-          <h2 className="text-2xl font-semibold">Checkout</h2>
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b flex-shrink-0">
+          <h2 className="text-xl sm:text-2xl font-semibold">Checkout</h2>
           <Button
             variant="ghost"
             size="sm"
@@ -177,15 +181,21 @@ export function CheckoutModal({
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          <div className="grid md:grid-cols-2 gap-6 p-6">
+        <div 
+          className="flex-1"
+          style={{
+            overflowY: 'auto',
+            overflowX: 'hidden',
+          }}
+        >
+          <div className={`gap-6 p-4 sm:p-6 ${useMobileLayout ? 'grid grid-cols-1' : 'grid md:grid-cols-2'}`}>
             {/* Left Column - Forms */}
             <div className="space-y-6">
               <form onSubmit={handleSubmit} className="space-y-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center">
-                      <User className="w-5 h-5 mr-2" />
+                    <CardTitle className="text-base sm:text-lg flex items-center">
+                      <User className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                       Customer Information
                     </CardTitle>
                   </CardHeader>
@@ -193,15 +203,15 @@ export function CheckoutModal({
                     <div className="p-3 bg-muted/20 rounded-lg">
                       <div className="flex justify-between items-center">
                         <div>
-                          <p className="font-medium">{userName}</p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="font-medium text-sm sm:text-base">{userName}</p>
+                          <p className="text-xs sm:text-sm text-muted-foreground">
                             User ID: {userId?.slice(0, 8)}...
                           </p>
                         </div>
                       </div>
                     </div>
                     <div>
-                      <Label htmlFor="email">Email Address</Label>
+                      <Label htmlFor="email" className="text-sm">Email Address</Label>
                       <Input
                         id="email"
                         type="email"
@@ -211,6 +221,7 @@ export function CheckoutModal({
                         }
                         placeholder="your@email.com"
                         required
+                        className="text-sm"
                       />
                     </div>
                   </CardContent>
@@ -219,14 +230,14 @@ export function CheckoutModal({
                 {/* Shipping Address */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center">
-                      <Truck className="w-5 h-5 mr-2" />
+                    <CardTitle className="text-base sm:text-lg flex items-center">
+                      <Truck className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                       Shipping Address
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
-                      <Label htmlFor="address">Street Address</Label>
+                      <Label htmlFor="address" className="text-sm">Street Address</Label>
                       <Input
                         id="address"
                         value={formData.address}
@@ -235,11 +246,12 @@ export function CheckoutModal({
                         }
                         placeholder="123 Main Street"
                         required
+                        className="text-sm"
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="city">City</Label>
+                        <Label htmlFor="city" className="text-sm">City</Label>
                         <Input
                           id="city"
                           value={formData.city}
@@ -248,10 +260,11 @@ export function CheckoutModal({
                           }
                           placeholder="New York"
                           required
+                          className="text-sm"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="postalCode">Postal Code</Label>
+                        <Label htmlFor="postalCode" className="text-sm">Postal Code</Label>
                         <Input
                           id="postalCode"
                           value={formData.postalCode}
@@ -260,11 +273,12 @@ export function CheckoutModal({
                           }
                           placeholder="10001"
                           required
+                          className="text-sm"
                         />
                       </div>
                     </div>
                     <div>
-                      <Label htmlFor="country">Country</Label>
+                      <Label htmlFor="country" className="text-sm">Country</Label>
                       <Input
                         id="country"
                         value={formData.country}
@@ -273,6 +287,7 @@ export function CheckoutModal({
                         }
                         placeholder="United States"
                         required
+                        className="text-sm"
                       />
                     </div>
                   </CardContent>
@@ -281,14 +296,14 @@ export function CheckoutModal({
                 {/* Payment Information */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center">
-                      <CreditCard className="w-5 h-5 mr-2" />
+                    <CardTitle className="text-base sm:text-lg flex items-center">
+                      <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                       Payment Information
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
-                      <Label htmlFor="nameOnCard">Name on Card</Label>
+                      <Label htmlFor="nameOnCard" className="text-sm">Name on Card</Label>
                       <Input
                         id="nameOnCard"
                         value={formData.nameOnCard}
@@ -297,10 +312,11 @@ export function CheckoutModal({
                         }
                         placeholder={userName}
                         required
+                        className="text-sm"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="cardNumber">Card Number</Label>
+                      <Label htmlFor="cardNumber" className="text-sm">Card Number</Label>
                       <Input
                         id="cardNumber"
                         value={formData.cardNumber}
@@ -309,11 +325,12 @@ export function CheckoutModal({
                         }
                         placeholder="1234 5678 9012 3456"
                         required
+                        className="text-sm"
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="expiryDate">Expiry Date</Label>
+                        <Label htmlFor="expiryDate" className="text-sm">Expiry Date</Label>
                         <Input
                           id="expiryDate"
                           value={formData.expiryDate}
@@ -322,10 +339,11 @@ export function CheckoutModal({
                           }
                           placeholder="MM/YY"
                           required
+                          className="text-sm"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="cvv">CVV</Label>
+                        <Label htmlFor="cvv" className="text-sm">CVV</Label>
                         <Input
                           id="cvv"
                           value={formData.cvv}
@@ -334,6 +352,7 @@ export function CheckoutModal({
                           }
                           placeholder="123"
                           required
+                          className="text-sm"
                         />
                       </div>
                     </div>
@@ -346,7 +365,7 @@ export function CheckoutModal({
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Order Summary</CardTitle>
+                  <CardTitle className="text-base sm:text-lg">Order Summary</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Order Items */}
@@ -354,9 +373,9 @@ export function CheckoutModal({
                     {state.items.map((item) => (
                       <div
                         key={item.id}
-                        className="flex items-center space-x-3 p-3 rounded-lg border bg-muted/20"
+                        className="flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 rounded-lg border bg-muted/20"
                       >
-                        <div className="relative w-12 h-12 rounded overflow-hidden bg-muted/20 flex-shrink-0">
+                        <div className="relative w-10 h-10 sm:w-12 sm:h-12 rounded overflow-hidden bg-muted/20 flex-shrink-0">
                           <Image
                             src={item.image || "/placeholder.svg"}
                             alt={item.name}
@@ -367,10 +386,10 @@ export function CheckoutModal({
                           />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-sm line-clamp-1">
+                          <h4 className="font-medium text-xs sm:text-sm line-clamp-1">
                             {item.name}
                           </h4>
-                          <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                          <div className="flex items-center space-x-1 sm:space-x-2 text-xs text-muted-foreground">
                             <span>{item.size}</span>
                             <span>•</span>
                             <span>{item.color}</span>
@@ -378,7 +397,7 @@ export function CheckoutModal({
                             <span>Qty: {item.quantity}</span>
                           </div>
                         </div>
-                        <div className="text-sm font-medium">
+                        <div className="text-xs sm:text-sm font-medium flex-shrink-0">
                           {formatCurrency(
                             item.price * item.quantity,
                             item.currency
@@ -392,7 +411,7 @@ export function CheckoutModal({
 
                   {/* Order Totals */}
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
+                    <div className="flex justify-between text-xs sm:text-sm">
                       <span>Subtotal ({state.totalItems} items)</span>
                       <span>
                         {formatCurrency(
@@ -401,11 +420,11 @@ export function CheckoutModal({
                         )}
                       </span>
                     </div>
-                    <div className="flex justify-between text-sm">
+                    <div className="flex justify-between text-xs sm:text-sm">
                       <span>Shipping</span>
                       <span className="text-green-600">Free</span>
                     </div>
-                    <div className="flex justify-between text-sm">
+                    <div className="flex justify-between text-xs sm:text-sm">
                       <span>Tax</span>
                       <span>
                         {formatCurrency(
@@ -415,7 +434,7 @@ export function CheckoutModal({
                       </span>
                     </div>
                     <Separator />
-                    <div className="flex justify-between text-lg font-semibold">
+                    <div className="flex justify-between text-base sm:text-lg font-semibold">
                       <span>Total</span>
                       <span>
                         {formatCurrency(
@@ -429,7 +448,7 @@ export function CheckoutModal({
                   {/* Place Order Button */}
                   <Button
                     onClick={handleSubmit}
-                    className="w-full"
+                    className="w-full text-sm sm:text-base"
                     size="lg"
                     disabled={isLoading}
                   >
