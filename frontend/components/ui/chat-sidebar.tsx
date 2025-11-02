@@ -102,13 +102,22 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       const isMobile = window.innerWidth < 1024;
       if (isMobile) {
         document.body.style.overflow = "hidden";
+        document.body.style.position = "fixed";
+        document.body.style.width = "100%";
+        document.body.style.height = "100%";
       }
     } else {
       document.body.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.width = "";
+      document.body.style.height = "";
     }
 
     return () => {
       document.body.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.width = "";
+      document.body.style.height = "";
     };
   }, [isAssistantOpen]);
 

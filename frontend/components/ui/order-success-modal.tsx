@@ -53,14 +53,34 @@ export function OrderSuccessModal({
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
+      document.body.style.position = "fixed";
+      document.body.style.width = "100%";
+      document.body.style.height = "100%";
     } else {
-      document.body.style.overflow = "";
+      const isMobile = windowWidth < 1024;
+      if (isMobile && (state.isOpen || isAssistantOpen)) {
+        document.body.style.overflow = "hidden";
+        document.body.style.position = "fixed";
+        document.body.style.width = "100%";
+        document.body.style.height = "100%";
+      } else {
+        document.body.style.overflow = "";
+        document.body.style.position = "";
+        document.body.style.width = "";
+        document.body.style.height = "";
+      }
     }
 
     return () => {
-      document.body.style.overflow = "";
+      const isMobile = windowWidth < 1024;
+      if (!isMobile || (!state.isOpen && !isAssistantOpen)) {
+        document.body.style.overflow = "";
+        document.body.style.position = "";
+        document.body.style.width = "";
+        document.body.style.height = "";
+      }
     };
-  }, [isOpen]);
+  }, [isOpen, state.isOpen, isAssistantOpen, windowWidth]);
 
   if (!isOpen || !orderData) return null;
 
@@ -90,9 +110,11 @@ export function OrderSuccessModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center overflow-hidden"
+      className="fixed inset-0 bg-black/50 flex items-center justify-center"
       style={{
         zIndex: 60,
+        overflow: "hidden",
+        touchAction: "none",
         paddingLeft: shouldShowFullScreen ? "0" : "1rem",
         paddingRight: shouldShowFullScreen
           ? "0"
@@ -102,6 +124,11 @@ export function OrderSuccessModal({
         paddingTop: shouldShowFullScreen ? "0" : "1rem",
         paddingBottom: shouldShowFullScreen ? "0" : "1rem",
       }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div
         className="bg-background rounded-lg shadow-xl w-full overflow-y-auto"
@@ -110,7 +137,9 @@ export function OrderSuccessModal({
           maxHeight: shouldShowFullScreen ? "100%" : "90vh",
           height: shouldShowFullScreen ? "100%" : "auto",
           borderRadius: shouldShowFullScreen ? "0" : undefined,
+          touchAction: "auto",
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-6 border-b">
           <div className="flex items-center space-x-3">
