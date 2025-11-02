@@ -50,6 +50,18 @@ export function OrderSuccessModal({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
+
   if (!isOpen || !orderData) return null;
 
   const formatDate = (dateString: string) => {
@@ -78,7 +90,7 @@ export function OrderSuccessModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center"
+      className="fixed inset-0 bg-black/50 flex items-center justify-center overflow-hidden"
       style={{
         zIndex: 60,
         paddingLeft: shouldShowFullScreen ? "0" : "1rem",

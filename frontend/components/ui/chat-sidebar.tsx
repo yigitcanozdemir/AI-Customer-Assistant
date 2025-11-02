@@ -97,6 +97,21 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     setIsMounted(true);
   }, []);
 
+  useEffect(() => {
+    if (isAssistantOpen && typeof window !== "undefined") {
+      const isMobile = window.innerWidth < 1024;
+      if (isMobile) {
+        document.body.style.overflow = "hidden";
+      }
+    } else {
+      document.body.style.overflow = "";
+    }
+
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isAssistantOpen]);
+
   const sendInitialMessageToBackend = useCallback(
     (message: Message, websocket: WebSocket) => {
       try {

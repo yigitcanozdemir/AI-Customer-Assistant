@@ -86,9 +86,26 @@ export function ShoppingCart({ right, sideWidth }: ShoppingCartProps) {
   const { store: selectedStore } = useStore();
   const [isOrderSuccessOpen, setIsOrderSuccessOpen] = useState(false);
   const [orderData, setOrderData] = useState<CreateOrderResponse | null>(null);
+  
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (state.isOpen && typeof window !== "undefined") {
+      const isMobile = window.innerWidth < 1024;
+      if (isMobile) {
+        document.body.style.overflow = "hidden";
+      }
+    } else {
+      document.body.style.overflow = "";
+    }
+
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [state.isOpen]);
+
   const handleCheckout = async () => {
     if (!state.items.length || !userId || !userName) return;
 
