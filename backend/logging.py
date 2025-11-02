@@ -7,8 +7,11 @@ from typing import Any, Dict
 
 try:
     from opentelemetry import trace
+
+    OTEL_AVAILABLE = True
 except Exception:
     trace = None
+    OTEL_AVAILABLE = False
 
 try:
     import boto3
@@ -22,11 +25,12 @@ except ImportError:
 class OtelLogRecord(logging.LogRecord):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if trace:
+        # Only try to get OTEL context if it's actually enabled
+        if OTEL_AVAILABLE and trace:
             try:
                 span = trace.get_current_span()
                 ctx = span.get_span_context()
-                if ctx and ctx.trace_id:
+                if ctx and ctx.is_valid and ctx.trace_id:
                     self.otelTraceID = trace.format_trace_id(ctx.trace_id)
                     self.otelSpanID = (
                         format(ctx.span_id, "016x")
@@ -67,11 +71,12 @@ class JsonFormatter(logging.Formatter):
         if record.exc_info:
             log_record["exception"] = self.formatException(record.exc_info)
 
-        if hasattr(record, "otelTraceID"):
+        # Only add OTEL fields if they exist and are not "N/A"
+        if hasattr(record, "otelTraceID") and record.otelTraceID != "N/A":
             log_record["otelTraceID"] = record.otelTraceID
-        if hasattr(record, "otelSpanID"):
+        if hasattr(record, "otelSpanID") and record.otelSpanID != "N/A":
             log_record["otelSpanID"] = record.otelSpanID
-        if hasattr(record, "otelServiceName"):
+        if hasattr(record, "otelServiceName") and record.otelServiceName != "unknown":
             log_record["otelServiceName"] = record.otelServiceName
 
         skip_attrs = {
@@ -98,6 +103,8 @@ class JsonFormatter(logging.Formatter):
             "otelTraceID",
             "otelSpanID",
             "otelServiceName",
+            "relativeCreated",
+            "taskName",
         }
 
         for key, value in record.__dict__.items():
@@ -112,27 +119,30 @@ class JsonFormatter(logging.Formatter):
 
 
 class ProductionJsonFormatter(JsonFormatter):
+    """Filters out noisy logs in production"""
+
     def format(self, record: logging.LogRecord) -> str:
+        # Skip debug logs in production
         if record.levelno < logging.INFO:
             return ""
 
-        if any(
-            skip in record.getMessage()
-            for skip in [
-                "GET /health",
-                "OPTIONS /",
-            ]
-        ):
+        # Skip health check and CORS logs
+        if any(skip in record.getMessage() for skip in ["GET /health", "OPTIONS /"]):
             return ""
 
         return super().format(record)
 
 
 def setup_logging(force: bool = True, level: str = None) -> None:
-    logging.setLogRecordFactory(OtelLogRecord)
+    """Setup logging with JSON formatting and optional CloudWatch"""
+
+    # Use custom log record only if OTEL is available
+    if OTEL_AVAILABLE:
+        logging.setLogRecordFactory(OtelLogRecord)
 
     root = logging.getLogger()
 
+    # Clear existing handlers
     if root.handlers:
         for h in list(root.handlers):
             try:
@@ -141,6 +151,7 @@ def setup_logging(force: bool = True, level: str = None) -> None:
             except Exception:
                 pass
 
+    # Reset all loggers
     for name in list(logging.Logger.manager.loggerDict.keys()):
         try:
             logger = logging.getLogger(name)
@@ -149,17 +160,16 @@ def setup_logging(force: bool = True, level: str = None) -> None:
         except Exception:
             pass
 
+    # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
 
     log_format = os.environ.get("LOG_FORMAT", "json").lower()
     environment = os.environ.get("ENVIRONMENT", "development")
     use_cloudwatch = os.environ.get("USE_CLOUDWATCH", "false").lower() == "true"
 
+    # Choose formatter
     if log_format == "text":
-        fmt = (
-            "%(asctime)s %(levelname)s %(name)s %(filename)s:%(lineno)d "
-            "[trace_id=%(otelTraceID)s span_id=%(otelSpanID)s resource.service.name=%(otelServiceName)s] - %(message)s"
-        )
+        fmt = "%(asctime)s %(levelname)s %(name)s %(filename)s:%(lineno)d - %(message)s"
         formatter = logging.Formatter(fmt, datefmt="%Y-%m-%d %H:%M:%S")
     else:
         if environment == "production":
@@ -169,6 +179,7 @@ def setup_logging(force: bool = True, level: str = None) -> None:
 
     console_handler.setFormatter(formatter)
 
+    # Set log level
     env_level = os.environ.get("LOG_LEVEL", "INFO")
     chosen_level = (level or env_level).upper()
 
@@ -181,6 +192,7 @@ def setup_logging(force: bool = True, level: str = None) -> None:
     root.setLevel(numeric_level)
     root.addHandler(console_handler)
 
+    # CloudWatch handler (production only)
     if use_cloudwatch and CLOUDWATCH_AVAILABLE and environment == "production":
         try:
             aws_region = os.environ.get("AWS_REGION", "us-east-1")
@@ -205,6 +217,12 @@ def setup_logging(force: bool = True, level: str = None) -> None:
                 f"Failed to set up CloudWatch logging: {e}"
             )
 
+    # Suppress noisy loggers
+    logging.getLogger("opentelemetry").setLevel(logging.CRITICAL)
+    logging.getLogger("opentelemetry.exporter.otlp.proto.grpc.exporter").setLevel(
+        logging.CRITICAL
+    )
+
     if environment == "production":
         logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
         logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
@@ -217,11 +235,13 @@ def setup_logging(force: bool = True, level: str = None) -> None:
         logging.getLogger("uvicorn.error").setLevel(logging.INFO)
         logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
+    # Reset uvicorn loggers
     uvicorn_logger = logging.getLogger("uvicorn")
     uvicorn_logger.handlers = []
     uvicorn_logger.propagate = True
 
-    logging.getLogger(__name__).info(
+    logger = logging.getLogger(__name__)
+    logger.info(
         f"Logging configured (format={log_format}, environment={environment}, cloudwatch={use_cloudwatch})"
     )
 
