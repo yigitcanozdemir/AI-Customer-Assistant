@@ -4,6 +4,24 @@ from datetime import datetime, date
 import uuid
 
 
+class CurrentLocation(BaseModel):
+    country: str
+    region: str
+    city: str
+    lat: float
+    lng: float
+
+
+class DeliveryAddress(BaseModel):
+    full_name: str
+    address_line1: str
+    address_line2: Optional[str] = None
+    city: str
+    state: str
+    postal_code: str
+    country: str
+
+
 class OrderProduct(BaseModel):
     id: uuid.UUID
     variant_id: uuid.UUID
@@ -20,6 +38,8 @@ class OrderItem(BaseModel):
     variant_id: Optional[uuid.UUID] = None
     quantity: int
     product: Optional[OrderProduct] = None
+    current_location: Optional[CurrentLocation] = None
+    delivery_address: Optional[DeliveryAddress] = None
 
 
 class CreateOrderRequest(BaseModel):
@@ -35,6 +55,14 @@ class OrderStatus(BaseModel):
     user_name: str
     created_at: datetime
     product: OrderProduct
+
+
+class OrderLocation(BaseModel):
+    order_id: uuid.UUID
+    current_location: Optional[CurrentLocation] = None
+    delivery_address: Optional[DeliveryAddress] = None
+    created_at: datetime
+    status: str
 
 
 class CreateOrderResponse(BaseModel):
@@ -110,6 +138,7 @@ class MessageResponse(BaseModel):
     suggestions: Optional[List[str]] = None
     products: Optional[List[Product]] = None
     orders: Optional[List[OrderStatus]] = None
+    tracking_data: Optional[OrderLocation] = None
     timestamp: datetime
     requires_human: bool = False
     confidence_score: Optional[float] = None
@@ -117,6 +146,7 @@ class MessageResponse(BaseModel):
     pending_action: Optional[PendingAction] = None
     warning_message: Optional[str] = None
     assessment_reasoning: Optional[str] = None
+    tracking_data: Optional[OrderLocation]
 
 
 class Message(BaseModel):

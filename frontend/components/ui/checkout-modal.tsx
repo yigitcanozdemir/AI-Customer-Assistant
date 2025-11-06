@@ -8,17 +8,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { X, CreditCard, Truck, CheckCircle, User } from "lucide-react";
+import { X, CheckCircle, User, MapPin } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useUser } from "@/context/UserContext";
 import { useChat } from "@/context/ChatContext";
 import Image from "next/image";
+
 interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCheckout: () => Promise<void>;
+  onCheckout: (deliveryAddress: DeliveryAddress) => Promise<void>;
   isLoading?: boolean;
   userName: string;
+}
+
+export interface DeliveryAddress {
+  full_name: string;
+  address_line1: string;
+  address_line2?: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
 }
 
 const formatCurrency = (price: number, currency: string): string => {
@@ -47,16 +58,14 @@ export function CheckoutModal({
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 1200
   );
-  const [formData, setFormData] = useState({
-    email: "",
-    address: "",
+  const [formData, setFormData] = useState<DeliveryAddress>({
+    full_name: userName || "",
+    address_line1: "",
+    address_line2: "",
     city: "",
-    postalCode: "",
+    state: "",
+    postal_code: "",
     country: "",
-    cardNumber: "",
-    expiryDate: "",
-    cvv: "",
-    nameOnCard: "",
   });
 
   useEffect(() => {
@@ -64,11 +73,6 @@ export function CheckoutModal({
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
-
-  useEffect(() => {
-    if (isOpen && isAssistantOpen) {
-    }
-  }, [isOpen, isAssistantOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -101,13 +105,13 @@ export function CheckoutModal({
     };
   }, [isOpen, state.isOpen, windowWidth]);
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field: keyof DeliveryAddress, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onCheckout();
+    await onCheckout(formData);
   };
 
   if (!isOpen) return null;
@@ -210,48 +214,59 @@ export function CheckoutModal({
                         </div>
                       </div>
                     </div>
-                    <div>
-                      <Label htmlFor="email" className="text-sm">Email Address</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) =>
-                          handleInputChange("email", e.target.value)
-                        }
-                        placeholder="your@email.com"
-                        required
-                        className="text-sm"
-                      />
-                    </div>
                   </CardContent>
                 </Card>
 
-                {/* Shipping Address */}
+                {/* Delivery Address */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base sm:text-lg flex items-center">
-                      <Truck className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                      Shipping Address
+                      <MapPin className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+                      Delivery Address
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
-                      <Label htmlFor="address" className="text-sm">Street Address</Label>
+                      <Label htmlFor="full_name" className="text-sm">Full Name *</Label>
                       <Input
-                        id="address"
-                        value={formData.address}
+                        id="full_name"
+                        value={formData.full_name}
                         onChange={(e) =>
-                          handleInputChange("address", e.target.value)
+                          handleInputChange("full_name", e.target.value)
+                        }
+                        placeholder="John Doe"
+                        required
+                        className="text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="address_line1" className="text-sm">Address Line 1 *</Label>
+                      <Input
+                        id="address_line1"
+                        value={formData.address_line1}
+                        onChange={(e) =>
+                          handleInputChange("address_line1", e.target.value)
                         }
                         placeholder="123 Main Street"
                         required
                         className="text-sm"
                       />
                     </div>
+                    <div>
+                      <Label htmlFor="address_line2" className="text-sm">Address Line 2 (Optional)</Label>
+                      <Input
+                        id="address_line2"
+                        value={formData.address_line2}
+                        onChange={(e) =>
+                          handleInputChange("address_line2", e.target.value)
+                        }
+                        placeholder="Apt 4B"
+                        className="text-sm"
+                      />
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="city" className="text-sm">City</Label>
+                        <Label htmlFor="city" className="text-sm">City *</Label>
                         <Input
                           id="city"
                           value={formData.city}
@@ -264,93 +279,42 @@ export function CheckoutModal({
                         />
                       </div>
                       <div>
-                        <Label htmlFor="postalCode" className="text-sm">Postal Code</Label>
+                        <Label htmlFor="state" className="text-sm">State/Province *</Label>
                         <Input
-                          id="postalCode"
-                          value={formData.postalCode}
+                          id="state"
+                          value={formData.state}
                           onChange={(e) =>
-                            handleInputChange("postalCode", e.target.value)
+                            handleInputChange("state", e.target.value)
+                          }
+                          placeholder="NY"
+                          required
+                          className="text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="postal_code" className="text-sm">Postal Code *</Label>
+                        <Input
+                          id="postal_code"
+                          value={formData.postal_code}
+                          onChange={(e) =>
+                            handleInputChange("postal_code", e.target.value)
                           }
                           placeholder="10001"
                           required
                           className="text-sm"
                         />
                       </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="country" className="text-sm">Country</Label>
-                      <Input
-                        id="country"
-                        value={formData.country}
-                        onChange={(e) =>
-                          handleInputChange("country", e.target.value)
-                        }
-                        placeholder="United States"
-                        required
-                        className="text-sm"
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Payment Information */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base sm:text-lg flex items-center">
-                      <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                      Payment Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label htmlFor="nameOnCard" className="text-sm">Name on Card</Label>
-                      <Input
-                        id="nameOnCard"
-                        value={formData.nameOnCard}
-                        onChange={(e) =>
-                          handleInputChange("nameOnCard", e.target.value)
-                        }
-                        placeholder={userName}
-                        required
-                        className="text-sm"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="cardNumber" className="text-sm">Card Number</Label>
-                      <Input
-                        id="cardNumber"
-                        value={formData.cardNumber}
-                        onChange={(e) =>
-                          handleInputChange("cardNumber", e.target.value)
-                        }
-                        placeholder="1234 5678 9012 3456"
-                        required
-                        className="text-sm"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="expiryDate" className="text-sm">Expiry Date</Label>
+                        <Label htmlFor="country" className="text-sm">Country *</Label>
                         <Input
-                          id="expiryDate"
-                          value={formData.expiryDate}
+                          id="country"
+                          value={formData.country}
                           onChange={(e) =>
-                            handleInputChange("expiryDate", e.target.value)
+                            handleInputChange("country", e.target.value)
                           }
-                          placeholder="MM/YY"
-                          required
-                          className="text-sm"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="cvv" className="text-sm">CVV</Label>
-                        <Input
-                          id="cvv"
-                          value={formData.cvv}
-                          onChange={(e) =>
-                            handleInputChange("cvv", e.target.value)
-                          }
-                          placeholder="123"
+                          placeholder="United States"
                           required
                           className="text-sm"
                         />

@@ -74,6 +74,20 @@ IMPORTANT CONTEXT RULES:
 - If FAQ search returns no results, inform the user and suggest contacting support
 - Always use the store name exactly as provided: {store}
 
+**CRITICAL POLICY NOTES BY STORE**:
+- **Aurora Style**: Orders cannot be cancelled after payment. 30-day returns accepted.
+- **Celeste Wear**: Orders cannot be cancelled after checkout. 30-day returns accepted.
+- **Luna Apparel**: All sales final - NO cancellations allowed. 30-day returns accepted.
+- **Dayifuse Fashion**: No explicit cancel policy mentioned. 14-day returns for defective/wrong items.
+
+**WORKFLOW PRIORITY**:
+1. FIRST: Check FAQ policy (time limits, conditions, store rules)
+2. SECOND: Check order state (created/shipped/delivered)
+3. THIRD: Process action if both checks pass
+
+The state validation (created/shipped) is handled automatically by `process_order`.
+Your job is to check FAQ policies BEFORE calling `process_order`.
+
 {order_context_info}
 
 **SELF-AWARENESS**:

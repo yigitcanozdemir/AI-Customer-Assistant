@@ -15,6 +15,24 @@ import { useStore } from "@/context/StoreContext";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
+interface UserLocation {
+  country: string;
+  region: string;
+  city: string;
+  lat: string;
+  lng: string;
+}
+
+interface DeliveryAddress {
+  full_name: string;
+  address_line1: string;
+  address_line2?: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+}
+
 interface CreateOrderRequest {
   user_id: string;
   user_name: string;
@@ -33,6 +51,8 @@ interface CreateOrderRequest {
       variant: string | null;
       variant_text: string | null;
     };
+    current_location: UserLocation | null;
+    delivery_address: DeliveryAddress | null;
   }[];
 }
 
@@ -86,7 +106,7 @@ export function ShoppingCart({ right, sideWidth }: ShoppingCartProps) {
   const { store: selectedStore } = useStore();
   const [isOrderSuccessOpen, setIsOrderSuccessOpen] = useState(false);
   const [orderData, setOrderData] = useState<CreateOrderResponse | null>(null);
-  
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -115,12 +135,14 @@ export function ShoppingCart({ right, sideWidth }: ShoppingCartProps) {
     };
   }, [state.isOpen]);
 
-  const handleCheckout = async () => {
+  const handleCheckout = async (deliveryAddress: DeliveryAddress) => {
     if (!state.items.length || !userId || !userName) return;
 
     try {
       setIsLoading(true);
 
+      const geoString = sessionStorage.getItem("user-geo");
+      const currentGeo: UserLocation | null = geoString ? JSON.parse(geoString) : null;
       const payload: CreateOrderRequest = {
         user_id: userId,
         user_name: userName,
@@ -139,9 +161,10 @@ export function ShoppingCart({ right, sideWidth }: ShoppingCartProps) {
             variant: item.color || null,
             variant_text: `${item.size} - ${item.color}` || null,
           },
+          current_location: currentGeo,
+          delivery_address: deliveryAddress,
         })),
       };
-      console.log("Selected Store in Cart:", selectedStore);
 
       console.log("Payload:", JSON.stringify(payload, null, 2));
       const res = await fetch(`${apiUrl}/events/orders`, {

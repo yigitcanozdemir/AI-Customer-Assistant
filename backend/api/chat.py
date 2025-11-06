@@ -9,6 +9,7 @@ from backend.api.schema import (
     Product as ProductModel,
     Message,
     ListOrdersResponse,
+    OrderLocation,
 )
 from fastapi.encoders import jsonable_encoder
 from typing import List, Any
@@ -80,6 +81,16 @@ TOOLS = [
             "type": "object",
             "properties": {"store": {"type": "string"}},
             "required": ["store"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "fetch_order_location",
+        "description": "Fetch order location information including current location and delivery address",
+        "parameters": {
+            "type": "object",
+            "properties": {"order_id": {"type": "string"}, "store": {"type": "string"}},
+            "required": ["order_id", "store"],
         },
     },
 ]
@@ -172,12 +183,22 @@ async def handle_chat_event(
             else "Unknown"
         )
 
+        order_date = (
+            selected_order.created_at.isoformat()
+            if hasattr(selected_order.created_at, "isoformat")
+            else str(selected_order.created_at)
+        )
+
+        current_date = datetime.utcnow().isoformat()
+
         order_context_info = f"""
         
         **ORDER CONTEXT AVAILABLE**:
+        Current date: {current_date}
         The user has selected order ID: {selected_order_id}
         Order status: {order_status}
         Product: {product_name}
+        Order date: {order_date}
         
         IMPORTANT: Since an order is selected and the user is requesting a modification:
         1. You MUST call faq_search to check the relevant policy BEFORE any action
@@ -314,6 +335,7 @@ async def handle_chat_event(
         content = ""
         products: list[ProductModel] = []
         orders = None
+        tracking_data = None
         pending_action = None
 
         input_list += response.output
@@ -431,6 +453,17 @@ async def handle_chat_event(
                         "output": json.dumps({"success": True}),
                     }
                 )
+            elif tool_name == "fetch_order_location" and isinstance(
+                result, OrderLocation
+            ):
+                tracking_data = result
+                input_list.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": call_id,
+                        "output": json.dumps(jsonable_encoder(result)),
+                    }
+                )
             elif tool_name == "faq_search":
                 input_list.append(
                     {
@@ -489,6 +522,7 @@ async def handle_chat_event(
             suggestions=[],
             products=products,
             orders=orders,
+            tracking_data=tracking_data,
             timestamp=datetime.now(timezone.utc),
             requires_human=assessment.requires_human,
             confidence_score=assessment.confidence_score,
@@ -515,6 +549,7 @@ async def handle_chat_event(
             store=store,
             products=[],
             orders=None,
+            tracking_data=None,
             timestamp=datetime.now(timezone.utc),
             requires_human=True,
             confidence_score=0.0,

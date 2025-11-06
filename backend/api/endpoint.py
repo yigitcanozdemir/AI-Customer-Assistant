@@ -3,6 +3,7 @@ from http import HTTPStatus
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 import traceback
+import random
 from backend.services.session_manager import get_message_history, add_message
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -15,6 +16,8 @@ from backend.api.schema import (
     CreateOrderRequest,
     CreateOrderResponse,
     OrderStatus,
+    CurrentLocation,
+    DeliveryAddress,
 )
 from backend.api.convert import convert_messages
 from datetime import datetime
@@ -451,9 +454,40 @@ async def create_order(request: CreateOrderRequest):
     async with get_session() as session:
         async with session.begin():
             for item in request.items:
+                current_location_data = None
+                if item.current_location:
+                    current_location_data = {
+                        "country": item.current_location.country,
+                        "region": item.current_location.region,
+                        "city": item.current_location.city,
+                        "lat": item.current_location.lat,
+                        "lng": item.current_location.lng,
+                    }
+                else:
+                    current_location_data = {
+                        "country": "Germany",
+                        "region": "Berlin",
+                        "city": "Berlin",
+                        "lat": 52.52,
+                        "lng": 13.405,
+                    }
+
+                delivery_address_data = None
+                if item.delivery_address:
+                    delivery_address_data = {
+                        "full_name": item.delivery_address.full_name,
+                        "address_line1": item.delivery_address.address_line1,
+                        "address_line2": item.delivery_address.address_line2,
+                        "city": item.delivery_address.city,
+                        "state": item.delivery_address.state,
+                        "postal_code": item.delivery_address.postal_code,
+                        "country": item.delivery_address.country,
+                    }
+
                 for _ in range(item.quantity):
                     order_id = uuid.uuid4()
                     created_at = datetime.utcnow()
+                    order_status = random.choice(["created", "shipped", "delivered"])
                     order = Order(
                         order_id=order_id,
                         user_id=request.user_id,
@@ -461,15 +495,17 @@ async def create_order(request: CreateOrderRequest):
                         product_id=item.product_id,
                         variant_id=item.variant_id,
                         store=request.store,
-                        status="created",
+                        status=order_status,
                         created_at=created_at,
+                        current_location=current_location_data,
+                        delivery_address=delivery_address_data,
                     )
                     session.add(order)
 
                     created_orders.append(
                         OrderStatus(
                             order_id=order_id,
-                            status=order.status,
+                            status=order_status,
                             user_name=request.user_name,
                             created_at=created_at,
                             product=item.product,

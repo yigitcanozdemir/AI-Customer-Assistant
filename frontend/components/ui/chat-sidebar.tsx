@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
 import {
   Send,
   Package,
@@ -14,6 +15,8 @@ import {
   Sparkles,
   X,
   CheckCircle2,
+  MapPin,
+  Truck,
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useStore } from "@/context/StoreContext";
@@ -205,6 +208,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
             products: data.products || [],
             orders: data.orders || [],
+            tracking_data: data.tracking_data || null,
             suggestions: data.suggestions || [],
             warning_message: data.warning_message,
             requires_human: data.requires_human,
@@ -689,6 +693,140 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                           </CardContent>
                         </Card>
                       ))}
+                    </div>
+                  )}
+
+                  {message.tracking_data && (
+                    <div className="ml-2">
+                      <Card className="border-0 shadow-sm bg-card overflow-hidden">
+                        <CardContent className="p-0">
+                          {(message.tracking_data.current_location || message.tracking_data.delivery_address) && (
+                            <div className="w-full h-48 bg-muted relative">
+                              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
+                                <MapPin className="w-5 h-5 mr-2" />
+                                Map Loading... (Add react-leaflet)
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="p-4 space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <Package className="w-5 h-5 text-primary" />
+                                <h4 className="font-semibold text-card-foreground">
+                                  Order Tracking
+                                </h4>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-xs text-muted-foreground">Tracking ID</div>
+                                <div className="text-sm font-mono font-medium">
+                                  #FX{message.tracking_data.order_id.split('-')[0].toUpperCase()}
+                                </div>
+                              </div>
+                            </div>
+
+                            <Separator />
+
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                                <div className="flex items-center space-x-3">
+                                  <div className={`w-2 h-2 rounded-full ${
+                                    message.tracking_data.status === "delivered" 
+                                      ? "bg-green-500" 
+                                      : message.tracking_data.status === "shipped"
+                                      ? "bg-primary animate-pulse"
+                                      : "bg-yellow-500"
+                                  }`} />
+                                  <div>
+                                    <div className="text-sm font-medium">
+                                      {message.tracking_data.status === "created" && "Order Placed"}
+                                      {message.tracking_data.status === "shipped" && "In Transit"}
+                                      {message.tracking_data.status === "delivered" && "Delivered"}
+                                    </div>
+                                    {message.tracking_data.status !== "delivered" && (
+                                      <div className="text-xs text-muted-foreground">
+                                        Est. Delivery: {new Date(
+                                          new Date(message.tracking_data.created_at).getTime() + 
+                                          (message.tracking_data.status === "created" ? 5 : 2) * 24 * 60 * 60 * 1000
+                                        ).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <Truck className={`w-5 h-5 ${
+                                  message.tracking_data.status === "delivered" 
+                                    ? "text-green-600" 
+                                    : "text-primary"
+                                }`} />
+                              </div>
+
+                              <div className="grid grid-cols-1 gap-3">
+                                {message.tracking_data.current_location && (
+                                  <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                    <div className="flex items-start space-x-2">
+                                      <MapPin className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-medium text-blue-900 dark:text-blue-100 mb-1">
+                                          Current Location
+                                        </div>
+                                        <div className="text-sm text-blue-800 dark:text-blue-200">
+                                          {message.tracking_data.current_location.city}, {message.tracking_data.current_location.region}
+                                        </div>
+                                        <div className="text-sm text-blue-700 dark:text-blue-300">
+                                          {message.tracking_data.current_location.country}
+                                        </div>
+                                        <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                          {new Date(message.tracking_data.created_at).toLocaleString('en-US', { 
+                                            month: 'short', 
+                                            day: 'numeric', 
+                                            hour: '2-digit', 
+                                            minute: '2-digit' 
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {message.tracking_data.delivery_address && (
+                                  <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                                    <div className="flex items-start space-x-2">
+                                      <MapPin className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-medium text-green-900 dark:text-green-100 mb-1">
+                                          Delivery Address
+                                        </div>
+                                        <div className="text-sm text-green-800 dark:text-green-200">
+                                          {message.tracking_data.delivery_address.full_name}
+                                        </div>
+                                        <div className="text-sm text-green-700 dark:text-green-300">
+                                          {message.tracking_data.delivery_address.address_line1}
+                                          {message.tracking_data.delivery_address.address_line2 && 
+                                            `, ${message.tracking_data.delivery_address.address_line2}`}
+                                        </div>
+                                        <div className="text-sm text-green-700 dark:text-green-300">
+                                          {message.tracking_data.delivery_address.city}, {message.tracking_data.delivery_address.state} {message.tracking_data.delivery_address.postal_code}
+                                        </div>
+                                        <div className="text-sm text-green-600 dark:text-green-400">
+                                          {message.tracking_data.delivery_address.country}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center justify-between p-3 bg-muted/20 rounded-lg border">
+                                <div className="flex items-center space-x-2">
+                                  <Truck className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-sm text-muted-foreground">Carrier</span>
+                                </div>
+                                <span className="text-sm font-medium">FedEx Express</span>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
                   )}
 

@@ -19,10 +19,33 @@ export interface Message {
   timestamp: Date;
   products?: Product[];
   orders?: OrderStatus[];
+  tracking_data?: TrackingData;
   suggestions?: string[];
   warning_message?: string;
   requires_human?: boolean;
   confidence_score?: number;
+}
+
+interface TrackingData {
+  order_id: string;
+  current_location?: {
+    country: string;
+    region: string;
+    city: string;
+    lat: number;
+    lng: number;
+  } | null;
+  delivery_address?: {
+    full_name: string;
+    address_line1: string;
+    address_line2?: string;
+    city: string;
+    state: string;
+    postal_code: string;
+    country: string;
+  } | null;
+  created_at: string;
+  status: string;
 }
 
 interface OrderProduct {

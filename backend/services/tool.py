@@ -6,11 +6,15 @@ from backend.services.embedding import create_embedding
 from backend.api.helper import format_products
 import logging
 import uuid
+from datetime import datetime
 from backend.api.schema import (
     OrderStatus,
     ListOrdersResponse,
     OrderProduct,
     ProductVariant,
+    OrderLocation,
+    CurrentLocation,
+    DeliveryAddress,
 )
 from typing import List
 
@@ -187,10 +191,53 @@ async def process_order(order_id: uuid.UUID, action: str, store: str):
             if not order:
                 return {"status": "error", "message": "Order not found"}
 
+            current_status = order.status
+
             if action == "cancel":
+                if current_status == "shipped":
+                    return {
+                        "status": "error",
+                        "message": "Cannot cancel a shipped order. You may initiate a return instead.",
+                        "current_status": current_status,
+                        "suggested_action": "return",
+                    }
+                elif current_status == "delivered":
+                    return {
+                        "status": "error",
+                        "message": "Cannot cancel a delivered order. You may initiate a return instead.",
+                        "current_status": current_status,
+                        "suggested_action": "return",
+                    }
+                elif current_status in ["cancelled", "returned"]:
+                    return {
+                        "status": "error",
+                        "message": f"Order is already {current_status}.",
+                        "current_status": current_status,
+                    }
                 order.status = "cancelled"
+
             elif action == "return":
+                if current_status == "created":
+                    return {
+                        "status": "error",
+                        "message": "Cannot return an order that hasn't been shipped yet. You can cancel it instead.",
+                        "current_status": current_status,
+                        "suggested_action": "cancel",
+                    }
+                elif current_status == "cancelled":
+                    return {
+                        "status": "error",
+                        "message": "Cannot return a cancelled order.",
+                        "current_status": current_status,
+                    }
+                elif current_status == "returned":
+                    return {
+                        "status": "error",
+                        "message": "Order is already returned.",
+                        "current_status": current_status,
+                    }
                 order.status = "returned"
+
             elif action == "update":
                 order.status = "updated"
 
@@ -198,10 +245,12 @@ async def process_order(order_id: uuid.UUID, action: str, store: str):
 
     return {
         "status": "success",
-        "order_id": order_id,
+        "order_id": str(order_id),
         "action": action,
+        "previous_status": current_status,
         "current_status": order.status,
-        "timestamp": "2025-08-23T19:15:39.724687Z",
+        "timestamp": datetime.utcnow().isoformat(),
+        "message": f"Order {action} completed successfully.",
     }
 
 
@@ -276,12 +325,45 @@ async def list_orders(user_id: str, store: str) -> ListOrdersResponse:
         return ListOrdersResponse(orders=[])
 
 
+async def fetch_order_location(order_id: uuid.UUID, store: str) -> OrderLocation:
+    try:
+        async with get_session() as session:
+            stmt = select(Order).where(Order.order_id == order_id, Order.store == store)
+            result = await session.execute(stmt)
+            order = result.scalar_one_or_none()
+
+            if not order:
+                logger.warning(f"Order {order_id} not found")
+                return None
+
+            current_loc = None
+            if order.current_location:
+                current_loc = CurrentLocation(**order.current_location)
+
+            delivery_addr = None
+            if order.delivery_address:
+                delivery_addr = DeliveryAddress(**order.delivery_address)
+
+            return OrderLocation(
+                order_id=order.order_id,
+                current_location=current_loc,
+                delivery_address=delivery_addr,
+                created_at=order.created_at,
+                status=order.status,
+            )
+
+    except Exception as e:
+        logger.error(f"Fetch order location error: {e}", exc_info=True)
+        return None
+
+
 TOOLS = {
     "product_search": product_search,
     "variant_check": variant_check,
     "process_order": process_order,
     "faq_search": faq_search,
     "list_orders": list_orders,
+    "fetch_order_location": fetch_order_location,
 }
 
 
@@ -310,5 +392,7 @@ async def call_tool(tool_name: str, arguments: dict):
             return {"status": "error", "error": "Unable to process order at this time"}
         elif tool_name == "list_orders":
             return ListOrdersResponse(orders=[])
+        elif tool_name == "fetch_order_location":
+            return None
 
         return {"error": str(e)}

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, User } from "lucide-react";
+import { AlertTriangle, User, MapPin } from "lucide-react";
 import { useUser } from "@/context/UserContext";
 
 export function UserEntryModal() {
@@ -20,6 +20,21 @@ export function UserEntryModal() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (mounted && !isUserSet) {
+      requestGeolocation();
+    }
+  }, [mounted, isUserSet]);
+
+  const requestGeolocation = async () => {
+    try {
+      const geo = await fetch("/api/get-geo").then((res) => res.json());
+      sessionStorage.setItem("user-geo", JSON.stringify(geo));
+    } catch (error) {
+      console.error("Failed to get geolocation:", error);
+    }
+  };
 
   if (!mounted || isUserSet) return null;
 
@@ -55,6 +70,18 @@ export function UserEntryModal() {
                 Generation (RAG) e-commerce experience. It does not represent a
                 real store, and any personal data you enter will be
                 automatically deleted when you close your browser tab.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-start space-x-2">
+            <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+            <div className="text-xs text-blue-800 dark:text-blue-200">
+              <p className="font-medium mb-1">Location Data</p>
+              <p>
+                We collect your approximate location for order tracking and
+                delivery purposes. This data is stored temporarily and deleted
+                when you close the tab.
               </p>
             </div>
           </div>

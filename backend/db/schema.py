@@ -1,7 +1,6 @@
 from sqlalchemy import (
     Column,
     String,
-    BigInteger,
     Text,
     Boolean,
     Numeric,
@@ -10,13 +9,12 @@ from sqlalchemy import (
     ARRAY,
     ForeignKey,
     Index,
-    text,
     desc,
     Float,
     JSON,
 )
 from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID, JSONB
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 import uuid
@@ -168,6 +166,8 @@ class Order(Base):
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
     product = relationship("Product", backref="orders")
     variant = relationship("Variant", backref="orders")
+    current_location = Column(JSONB, nullable=True)
+    delivery_address = Column(JSONB, nullable=True)
 
     __table_args__ = (
         Index("ix_orders_user_id", "user_id"),
