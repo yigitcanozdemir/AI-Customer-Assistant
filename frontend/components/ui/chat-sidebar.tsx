@@ -24,6 +24,17 @@ import { useChat, type Message, type Product } from "@/context/ChatContext";
 import { useUser } from "@/context/UserContext";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import dynamic from "next/dynamic";
+
+const TrackingMap = dynamic(() => import("@/components/ui/TrackingMap").then(mod => ({ default: mod.TrackingMap })), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-48 bg-muted flex items-center justify-center text-muted-foreground text-sm">
+      Loading map...
+    </div>
+  ),
+});
+
 const wsBase = process.env.NEXT_PUBLIC_WS_URL;
 
 interface Order {
@@ -701,12 +712,10 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                       <Card className="border-0 shadow-sm bg-card overflow-hidden">
                         <CardContent className="p-0">
                           {(message.tracking_data.current_location || message.tracking_data.delivery_address) && (
-                            <div className="w-full h-48 bg-muted relative">
-                              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
-                                <MapPin className="w-5 h-5 mr-2" />
-                                Map Loading... (Add react-leaflet)
-                              </div>
-                            </div>
+                            <TrackingMap
+                              currentLocation={message.tracking_data.current_location}
+                              deliveryAddress={message.tracking_data.delivery_address}
+                            />
                           )}
 
                           <div className="p-4 space-y-4">

@@ -407,6 +407,8 @@ async def handle_chat_event(
 
                 if output_item.name == "list_orders":
                     args["user_id"] = user_id
+                if output_item.name == "fetch_order_location":
+                    args["store"] = store
 
                 tool_tasks.append(call_tool(output_item.name, args))
                 tool_metadata.append(

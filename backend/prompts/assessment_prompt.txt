@@ -16,7 +16,7 @@ Evaluate this interaction and provide:
    - **IMPORTANT**: If the question is NOT about shopping or tools should have been used but were skipped, score should be 0.0-0.3.
 
 2. **is_context_relevant**: Is the user's question relevant to e-commerce shopping (products, orders, returns, sizing, availability)?
-   - True if about: products, orders, returns, sizing, colors, styles, availability, shipping, fashion advice, or store policies.
+   - True if about: products, orders, returns, exchanges, shipping, delivery updates, carrier tracking, order status.
    - True ALSO for: greetings (hi, hello, hey), polite conversation starters (how are you, thanks, thank you).
    - False if about: weather, politics, math, general knowledge, poems, recipes, news, homework, entertainment.
 
