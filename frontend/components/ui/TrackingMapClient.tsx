@@ -3,25 +3,7 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { PORTS } from "./ports";
 
-function findNearestPort(lat: number, lng: number) {
-  let best = null;
-  let bestDist = Infinity;
-
-  for (const port of PORTS) {
-    const d =
-      Math.sqrt(
-        Math.pow(lat - port.lat, 2) +
-        Math.pow(lng - port.lng, 2)
-      );
-    if (d < bestDist) {
-      bestDist = d;
-      best = port;
-    }
-  }
-  return best;
-}
 if (typeof window !== "undefined") {
   const DefaultIcon = L.Icon.Default.prototype as L.Icon.Default & {
     _getIconUrl?: () => string;
@@ -29,9 +11,12 @@ if (typeof window !== "undefined") {
   delete DefaultIcon._getIconUrl;
 
   L.Icon.Default.mergeOptions({
-    iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-    iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+    iconRetinaUrl:
+      "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+    iconUrl:
+      "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+    shadowUrl:
+      "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
   });
 }
 
@@ -55,124 +40,166 @@ interface TrackingMapClientProps {
   } | null;
 }
 
-async function fetchRoute(
+const PORTS = {
+  NEW_YORK: { coords: [40.6925, -74.0446], name: "New York Port" },
+  BALTIMORE: { coords: [39.2654, -76.5783], name: "Baltimore" },
+  MIAMI: { coords: [25.7739, -80.1869], name: "Miami Port" },
+
+  LOS_ANGELES: { coords: [33.7405, -118.2713], name: "Los Angeles" },
+  SEATTLE: { coords: [47.6176, -122.3509], name: "Seattle" },
+
+  ROTTERDAM: { coords: [51.9225, 4.4792], name: "Rotterdam" },
+  HAMBURG: { coords: [53.5511, 9.9937], name: "Hamburg" },
+  LE_HAVRE: { coords: [49.4944, 0.1079], name: "Le Havre" },
+  FELIXSTOWE: { coords: [51.9543, 1.2963], name: "Felixstowe" },
+
+  BARCELONA: { coords: [41.3208, 2.0406], name: "Barcelona" },
+  PIRAEUS: { coords: [37.9386, 23.6375], name: "Piraeus" },
+  ISTANBUL: { coords: [41.0201, 28.9869], name: "Istanbul" },
+  IZMIR: { coords: [38.4189, 27.1287], name: "Izmir" },
+
+  DUBAI: { coords: [25.2048, 55.2708], name: "Dubai" },
+  SINGAPORE: { coords: [1.2897, 103.8501], name: "Singapore" },
+  HONG_KONG: { coords: [22.302, 114.1724], name: "Hong Kong" },
+
+  GIBRALTAR: { coords: [36.1408, -5.3536], name: "Gibraltar" },
+  SUEZ_NORTH: { coords: [31.2653, 32.3019], name: "Suez (North)" },
+  SUEZ_SOUTH: { coords: [29.9668, 32.5498], name: "Suez (South)" },
+  AZORES: { coords: [38.6613, -27.2208], name: "Azores" },
+  BERMUDA: { coords: [32.2949, -64.7813], name: "Bermuda" },
+};
+
+type Port = (typeof PORTS)[keyof typeof PORTS];
+
+function getRegion(lat: number, lng: number): string {
+  if (lat > 30 && lat < 60 && lng > -130 && lng < -110) return "NA_WEST";
+  if (lat > 25 && lat < 50 && lng > -85 && lng < -65) return "NA_EAST";
+  if (lat > 35 && lat < 70 && lng > -10 && lng < 40) return "EUROPE";
+  if (lat > 10 && lat < 40 && lng > 25 && lng < 45) return "TURKEY_ME";
+  if (lat > 10 && lat < 40 && lng > 45 && lng < 65) return "MIDDLE_EAST";
+  if (lat > -10 && lat < 50 && lng > 95 && lng < 145) return "ASIA";
+  return "OTHER";
+}
+
+function findNearestPort(lat: number, lng: number, region: string): Port {
+  const portsByRegion: Record<string, Port[]> = {
+    NA_WEST: [PORTS.LOS_ANGELES, PORTS.SEATTLE],
+    NA_EAST: [PORTS.NEW_YORK, PORTS.BALTIMORE, PORTS.MIAMI],
+    EUROPE: [PORTS.ROTTERDAM, PORTS.HAMBURG, PORTS.LE_HAVRE, PORTS.FELIXSTOWE],
+    TURKEY_ME: [PORTS.ISTANBUL, PORTS.IZMIR, PORTS.PIRAEUS],
+    MIDDLE_EAST: [PORTS.DUBAI],
+    ASIA: [PORTS.SINGAPORE, PORTS.HONG_KONG],
+  };
+
+  const ports = portsByRegion[region] || [PORTS.ROTTERDAM];
+  let nearest = ports[0];
+  let minDist = Infinity;
+
+  for (const port of ports) {
+    const dist = Math.sqrt(
+      Math.pow(port.coords[0] - lat, 2) + Math.pow(port.coords[1] - lng, 2)
+    );
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = port;
+    }
+  }
+
+  return nearest;
+}
+
+function getShippingRoute(
+  startRegion: string,
+  endRegion: string,
+  originPort: Port,
+  destPort: Port
+): Port[] {
+  const route: Port[] = [originPort];
+
+  if (
+    (startRegion.startsWith("NA_") && endRegion === "EUROPE") ||
+    (startRegion === "EUROPE" && endRegion.startsWith("NA_"))
+  ) {
+    if (startRegion === "EUROPE") {
+      route.push(PORTS.AZORES);
+      route.push(PORTS.BERMUDA);
+    } else {
+      route.push(PORTS.BERMUDA);
+      route.push(PORTS.AZORES);
+    }
+  } else if (
+    (startRegion === "EUROPE" &&
+      (endRegion === "TURKEY_ME" ||
+        endRegion === "MIDDLE_EAST" ||
+        endRegion === "ASIA")) ||
+    ((startRegion === "TURKEY_ME" ||
+      startRegion === "MIDDLE_EAST" ||
+      startRegion === "ASIA") &&
+      endRegion === "EUROPE")
+  ) {
+    if (startRegion === "EUROPE") {
+      route.push(PORTS.GIBRALTAR);
+      route.push(PORTS.SUEZ_NORTH);
+      route.push(PORTS.SUEZ_SOUTH);
+      if (endRegion === "ASIA" || endRegion === "MIDDLE_EAST") {
+        route.push(PORTS.DUBAI);
+      }
+      if (endRegion === "ASIA") {
+        route.push(PORTS.SINGAPORE);
+      }
+    } else {
+      if (startRegion === "ASIA") {
+        route.push(PORTS.SINGAPORE);
+      }
+      if (startRegion === "ASIA" || startRegion === "MIDDLE_EAST") {
+        route.push(PORTS.DUBAI);
+      }
+      route.push(PORTS.SUEZ_SOUTH);
+      route.push(PORTS.SUEZ_NORTH);
+      route.push(PORTS.GIBRALTAR);
+    }
+  } else if (
+    (startRegion.startsWith("NA_") && endRegion === "ASIA") ||
+    (startRegion === "ASIA" && endRegion.startsWith("NA_"))
+  ) {
+  }
+
+  route.push(destPort);
+
+  return route;
+}
+
+async function fetchRoadRoute(
   start: [number, number],
-  end: [number, number],
-  allowPortRouting = true
+  end: [number, number]
 ): Promise<[number, number][] | null> {
   try {
-    const latDiff = Math.abs(start[0] - end[0]);
-    const lngDiff = Math.abs(start[1] - end[1]);
-    const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
-
-    if (allowPortRouting && distance > 50) {
-      console.log("🌍 Using port → sea → port route");
-
-      const originPort = findNearestPort(start[0], start[1]);
-      const destinationPort = findNearestPort(end[0], end[1]);
-
-      if (!originPort || !destinationPort) {
-        console.warn("⚠️ No valid ports found — using great circle fallback");
-        return createGreatCircleRoute(start, end);
-      }
-
-      const land1 = await fetchRoute(start, [originPort.lat, originPort.lng], false);
-      const sea = createGreatCircleRoute(
-        [originPort.lat, originPort.lng],
-        [destinationPort.lat, destinationPort.lng]
-      );
-      const land2 = await fetchRoute([destinationPort.lat, destinationPort.lng], end, false);
-
-      return [
-        ...(land1 ?? []),
-        ...sea,
-        ...(land2 ?? []),
-      ];
-    }
-
     const url = `https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`;
-
     const response = await fetch(url);
     const data = await response.json();
-
     if (data.code === "Ok" && data.routes && data.routes[0]) {
-      return data.routes[0].geometry.coordinates.map((coord: number[]) => [coord[1], coord[0]]);
+      return data.routes[0].geometry.coordinates.map((c: number[]) => [
+        c[1],
+        c[0],
+      ]);
     }
-
     return null;
-  } catch (error) {
-    console.error("Routing failed:", error);
+  } catch {
     return null;
   }
 }
 
-
-function createGreatCircleRoute(start: [number, number], end: [number, number]): [number, number][] {
+function generateGreatCircle(
+  start: [number, number],
+  end: [number, number],
+  steps = 50
+): [number, number][] {
   const points: [number, number][] = [];
-  const steps = 100;
-  
-  const lat1 = (start[0] * Math.PI) / 180;
-  const lng1 = (start[1] * Math.PI) / 180;
-  const lat2 = (end[0] * Math.PI) / 180;
-  const lng2 = (end[1] * Math.PI) / 180;
-  
   for (let i = 0; i <= steps; i++) {
-    const f = i / steps;
-    
-    const a = Math.sin((1 - f) * distance(lat1, lng1, lat2, lng2)) / Math.sin(distance(lat1, lng1, lat2, lng2));
-    const b = Math.sin(f * distance(lat1, lng1, lat2, lng2)) / Math.sin(distance(lat1, lng1, lat2, lng2));
-    
-    const x = a * Math.cos(lat1) * Math.cos(lng1) + b * Math.cos(lat2) * Math.cos(lng2);
-    const y = a * Math.cos(lat1) * Math.sin(lng1) + b * Math.cos(lat2) * Math.sin(lng2);
-    const z = a * Math.sin(lat1) + b * Math.sin(lat2);
-    
-    const lat = Math.atan2(z, Math.sqrt(x * x + y * y));
-    const lng = Math.atan2(y, x);
-    
-    points.push([(lat * 180) / Math.PI, (lng * 180) / Math.PI]);
-  }
-  
-  console.log("Using great circle route (transoceanic)");
-  return points;
-}
-
-function distance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  return Math.acos(
-    Math.sin(lat1) * Math.sin(lat2) + 
-    Math.cos(lat1) * Math.cos(lat2) * Math.cos(lng2 - lng1)
-  );
-}
-
-function createCurvedPath(start: [number, number], end: [number, number]): [number, number][] {
-  const points: [number, number][] = [];
-  const steps = 100;
-  
-  const midLat = (start[0] + end[0]) / 2;
-  const midLng = (start[1] + end[1]) / 2;
-  
-  const dx = end[1] - start[1];
-  const dy = end[0] - start[0];
-  const distance = Math.sqrt(dx * dx + dy * dy);
-  
-  const curveOffset = distance * 0.2;
-  const offsetLat = -dx / distance * curveOffset;
-  const offsetLng = dy / distance * curveOffset;
-  
-  const controlLat = midLat + offsetLat;
-  const controlLng = midLng + offsetLng;
-  
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const t2 = t * t;
-    const mt = 1 - t;
-    const mt2 = mt * mt;
-    
-    const lat = mt2 * start[0] + 2 * mt * t * controlLat + t2 * end[0];
-    const lng = mt2 * start[1] + 2 * mt * t * controlLng + t2 * end[1];
-    
+    const lat = start[0] + ((end[0] - start[0]) * i) / steps;
+    const lng = start[1] + ((end[1] - start[1]) * i) / steps;
     points.push([lat, lng]);
   }
-  
   return points;
 }
 
@@ -185,37 +212,23 @@ export default function TrackingMapClient({
   const mapInstanceRef = useRef<L.Map | null>(null);
 
   useEffect(() => {
-    if (!mapRef.current) return;
-    if (mapInstanceRef.current) return;
+    if (!mapRef.current || mapInstanceRef.current) return;
 
-    const hasCurrentLocation = currentLocation && currentLocation.lat && currentLocation.lng;
+    const hasCurrentLocation =
+      currentLocation && currentLocation.lat && currentLocation.lng;
     const hasDeliveryLocation = deliveryCoords;
-
     if (!hasCurrentLocation && !hasDeliveryLocation) return;
 
     let isMounted = true;
 
     let center: [number, number];
     let zoom: number;
-
     if (hasCurrentLocation && hasDeliveryLocation) {
       center = [
         (currentLocation.lat + deliveryCoords.lat) / 2,
         (currentLocation.lng + deliveryCoords.lng) / 2,
       ];
-      
-      const latDiff = Math.abs(currentLocation.lat - deliveryCoords.lat);
-      const lngDiff = Math.abs(currentLocation.lng - deliveryCoords.lng);
-      const maxDiff = Math.max(latDiff, lngDiff);
-
-      if (maxDiff < 0.01) zoom = 13;
-      else if (maxDiff < 0.05) zoom = 11;
-      else if (maxDiff < 0.1) zoom = 10;
-      else if (maxDiff < 0.5) zoom = 8;
-      else if (maxDiff < 2) zoom = 6;
-      else if (maxDiff < 5) zoom = 5;
-      else if (maxDiff < 10) zoom = 4;
-      else zoom = 3;
+      zoom = 4;
     } else if (hasCurrentLocation) {
       center = [currentLocation.lat, currentLocation.lng];
       zoom = 10;
@@ -229,25 +242,16 @@ export default function TrackingMapClient({
       zoom,
       scrollWheelZoom: true,
       zoomControl: true,
-      doubleClickZoom: true,
-      touchZoom: true,
-      dragging: true,
-      zoomAnimation: true,
-      fadeAnimation: true,
-      markerZoomAnimation: true,
     });
-
     mapInstanceRef.current = map;
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap",
     }).addTo(map);
-
-    const currentLocationIcon = L.divIcon({
+    const currentIcon = L.divIcon({
       html: `
         <div style="position: relative;">
-          <div style="position: absolute; top: -20px; left: -15px; width: 30px; height: 30px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border: 3px solid white;">
+          <div style="position: absolute; top: -20px; left: -15px; width: 30px; height: 30px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
               <rect x="1" y="3" width="15" height="13"></rect>
               <path d="M16 8h5l3 3v5h-2"></path>
@@ -263,10 +267,10 @@ export default function TrackingMapClient({
       iconAnchor: [15, 15],
     });
 
-    const deliveryLocationIcon = L.divIcon({
+    const deliveryIcon = L.divIcon({
       html: `
         <div style="position: relative;">
-          <div style="position: absolute; top: -20px; left: -15px; width: 30px; height: 30px; background: #22c55e; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border: 3px solid white;">
+          <div style="position: absolute; top: -20px; left: -15px; width: 30px; height: 30px; background: #22c55e; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="white" stroke="white" stroke-width="2">
               <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
               <circle cx="12" cy="10" r="3" fill="#22c55e"></circle>
@@ -280,69 +284,126 @@ export default function TrackingMapClient({
       iconAnchor: [15, 15],
     });
 
-    if (hasCurrentLocation) {
-      L.marker([currentLocation.lat, currentLocation.lng], { icon: currentLocationIcon })
+    if (hasCurrentLocation)
+      L.marker([currentLocation.lat, currentLocation.lng], {
+        icon: currentIcon,
+      })
         .addTo(map)
-        .bindPopup(`
-          <div style="padding: 4px;">
-            <strong>Current Location</strong><br/>
-            ${currentLocation.city}, ${currentLocation.region}<br/>
-            ${currentLocation.country}
-          </div>
-        `);
-    }
-
-    if (hasDeliveryLocation) {
-      L.marker([deliveryCoords.lat, deliveryCoords.lng], { icon: deliveryLocationIcon })
+        .bindPopup(
+          `<strong>Current</strong><br/>${currentLocation.city}, ${currentLocation.country}`
+        );
+    if (hasDeliveryLocation)
+      L.marker([deliveryCoords.lat, deliveryCoords.lng], { icon: deliveryIcon })
         .addTo(map)
-        .bindPopup(`
-          <div style="padding: 4px;">
-            <strong>Delivery Address</strong><br/>
-            ${deliveryAddress?.full_name || ""}<br/>
-            ${deliveryAddress?.address_line1 || ""}${deliveryAddress?.address_line2 ? ", " + deliveryAddress.address_line2 : ""}<br/>
-            ${deliveryAddress?.city}, ${deliveryAddress?.state} ${deliveryAddress?.postal_code || ""}<br/>
-            ${deliveryAddress?.country}
-          </div>
-        `);
-    }
+        .bindPopup(
+          `<strong>Delivery</strong><br/>${deliveryAddress?.city}, ${deliveryAddress?.country}`
+        );
 
     if (hasCurrentLocation && hasDeliveryLocation) {
-      const start: [number, number] = [currentLocation.lat, currentLocation.lng];
+      const start: [number, number] = [
+        currentLocation.lat,
+        currentLocation.lng,
+      ];
       const end: [number, number] = [deliveryCoords.lat, deliveryCoords.lng];
-      
-      fetchRoute(start, end).then((routePoints) => {
-        if (!isMounted || !mapInstanceRef.current) {
-          console.log("Component unmounted, skipping route rendering");
-          return;
+      const startRegion = getRegion(start[0], start[1]);
+      const endRegion = getRegion(end[0], end[1]);
+
+      const needsOcean =
+        (startRegion.startsWith("NA_") &&
+          ["EUROPE", "TURKEY_ME", "MIDDLE_EAST", "ASIA"].includes(endRegion)) ||
+        (["EUROPE", "TURKEY_ME"].includes(startRegion) &&
+          endRegion.startsWith("NA_")) ||
+        (startRegion === "EUROPE" &&
+          ["MIDDLE_EAST", "ASIA"].includes(endRegion)) ||
+        (["MIDDLE_EAST", "ASIA"].includes(startRegion) &&
+          endRegion === "EUROPE");
+
+      if (needsOcean) {
+        const originPort = findNearestPort(start[0], start[1], startRegion);
+        const destPort = findNearestPort(end[0], end[1], endRegion);
+        const shippingRoute = getShippingRoute(
+          startRegion,
+          endRegion,
+          originPort,
+          destPort
+        );
+
+        fetchRoadRoute(start, originPort.coords as [number, number]).then(
+          (road) => {
+            if (!isMounted || !mapInstanceRef.current) return;
+            if (road)
+              L.polyline(road, {
+                color: "#2563eb",
+                weight: 5,
+                opacity: 0.9,
+                lineJoin: "round",
+              }).addTo(map);
+          }
+        );
+
+        for (let i = 0; i < shippingRoute.length - 1; i++) {
+          const portA = shippingRoute[i];
+          const portB = shippingRoute[i + 1];
+          const seaLine = generateGreatCircle(
+            portA.coords as [number, number],
+            portB.coords as [number, number],
+            100
+          );
+          L.polyline(seaLine, {
+            color: "#0ea5e9",
+            weight: 4,
+            opacity: 0.7,
+            dashArray: "0",
+            lineJoin: "round",
+          }).addTo(map);
+          L.circleMarker(portA.coords as [number, number], {
+            radius: 4,
+            color: "#0ea5e9",
+            fillColor: "#fff",
+            fillOpacity: 1,
+            weight: 2,
+          })
+            .bindPopup(`⚓ ${portA.name}`)
+            .addTo(map);
         }
 
-        let pathToDisplay: [number, number][];
-        let isGreatCircle = false;
-        
-        if (routePoints && routePoints.length > 0) {
-          pathToDisplay = routePoints;
-          const lngDiff = Math.abs(start[1] - end[1]);
-          isGreatCircle = lngDiff > 50;
-        } else {
-          pathToDisplay = createCurvedPath(start, end);
-          console.log("Using curved fallback route");
-        }
-        
-        setTimeout(() => {
-        if (mapInstanceRef.current) {
-            L.polyline(pathToDisplay, {
-            color: isGreatCircle ? "#8b5cf6" : "#3b82f6",
-            weight: isGreatCircle ? 2 : 3,
-            opacity: 0.85
-            }).addTo(mapInstanceRef.current);
-        }
-        }, 50);
-      }).catch((error) => {
-        console.error("Route fetch error:", error);
-      });
+        const lastPort = shippingRoute[shippingRoute.length - 1];
+        L.circleMarker(lastPort.coords as [number, number], {
+          radius: 4,
+          color: "#0ea5e9",
+          fillColor: "#fff",
+          fillOpacity: 1,
+          weight: 2,
+        })
+          .bindPopup(`⚓ ${lastPort.name}`)
+          .addTo(map);
 
-      const bounds = L.latLngBounds(start, end);
-      map.fitBounds(bounds, { padding: [50, 50] });
+        fetchRoadRoute(destPort.coords as [number, number], end).then(
+          (road) => {
+            if (!isMounted || !mapInstanceRef.current) return;
+            if (road)
+              L.polyline(road, {
+                color: "#2563eb",
+                weight: 5,
+                opacity: 0.9,
+                lineJoin: "round",
+              }).addTo(map);
+          }
+        );
+      } else {
+        fetchRoadRoute(start, end).then((road) => {
+          if (!isMounted || !mapInstanceRef.current) return;
+          if (road)
+            L.polyline(road, {
+              color: "#3b82f6",
+              weight: 3,
+              opacity: 0.7,
+              dashArray: "10,10",
+            }).addTo(map);
+        });
+      }
+
+      map.fitBounds(L.latLngBounds(start, end), { padding: [50, 50] });
     }
 
     return () => {
@@ -355,12 +416,8 @@ export default function TrackingMapClient({
   }, [currentLocation, deliveryCoords, deliveryAddress]);
 
   return (
-    <div className="relative w-full h-48 rounded-lg overflow-hidden border border-border/50 shadow-sm">
-      <div ref={mapRef} className="w-full h-full" />
-      
-      <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-black/60 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm pointer-events-none opacity-80 hidden md:block">
-        Scroll to zoom • Drag to move
-      </div>
+    <div className="relative w-full h-48 rounded-lg overflow-visible border border-border/50">
+      <div ref={mapRef} className="w-full h-full rounded-lg" />
     </div>
   );
 }

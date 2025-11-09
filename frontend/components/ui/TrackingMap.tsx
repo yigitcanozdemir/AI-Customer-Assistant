@@ -34,8 +34,14 @@ const MapComponent = dynamic(
   }
 );
 
-export function TrackingMap({ currentLocation, deliveryAddress }: TrackingMapProps) {
-  const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lng: number } | null>(null);
+export function TrackingMap({
+  currentLocation,
+  deliveryAddress,
+}: TrackingMapProps) {
+  const [deliveryCoords, setDeliveryCoords] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
   const [isGeocoding, setIsGeocoding] = useState(false);
 
   useEffect(() => {
@@ -46,107 +52,175 @@ export function TrackingMap({ currentLocation, deliveryAddress }: TrackingMapPro
 
     const geocodeAddress = async () => {
       setIsGeocoding(true);
+      let bestResult: { lat: number; lng: number } | null = null;
+
       try {
+        if (deliveryAddress.address_line1) {
+          try {
+            const photonQuery = [
+              deliveryAddress.address_line1,
+              deliveryAddress.address_line2,
+              deliveryAddress.city,
+              deliveryAddress.state,
+              deliveryAddress.postal_code,
+              deliveryAddress.country,
+            ]
+              .filter(Boolean)
+              .join(", ");
+
+            console.log("🔍 Trying Photon API:", photonQuery);
+
+            const photonResponse = await fetch(
+              `https://photon.komoot.io/api/?q=${encodeURIComponent(
+                photonQuery
+              )}&limit=1`
+            );
+            const photonData = await photonResponse.json();
+
+            if (photonData.features && photonData.features[0]) {
+              const coords = photonData.features[0].geometry.coordinates;
+              bestResult = { lat: coords[1], lng: coords[0] };
+              console.log(
+                "✅ Photon API success:",
+                bestResult,
+                photonData.features[0].properties.name
+              );
+              setDeliveryCoords(bestResult);
+              setIsGeocoding(false);
+              return;
+            }
+          } catch {
+            console.log("⚠️ Photon API failed, trying Nominatim");
+          }
+        }
+
         if (deliveryAddress.address_line1 || deliveryAddress.postal_code) {
-          const structuredQuery = new URLSearchParams();
-          
-          if (deliveryAddress.address_line1 || deliveryAddress.address_line2) {
-            const street = [deliveryAddress.address_line1, deliveryAddress.address_line2].filter(Boolean).join(" ");
-            structuredQuery.append('street', street);
+          const params = new URLSearchParams();
+
+          if (deliveryAddress.address_line1) {
+            params.append("street", deliveryAddress.address_line1);
           }
-          structuredQuery.append('city', deliveryAddress.city);
-          structuredQuery.append('state', deliveryAddress.state);
-          structuredQuery.append('country', deliveryAddress.country);
+          if (deliveryAddress.city) {
+            params.append("city", deliveryAddress.city);
+          }
+          if (deliveryAddress.state) {
+            params.append("state", deliveryAddress.state);
+          }
           if (deliveryAddress.postal_code) {
-            structuredQuery.append('postalcode', deliveryAddress.postal_code);
+            params.append("postalcode", deliveryAddress.postal_code);
           }
-          
-          console.log("Geocoding with structured query:", structuredQuery.toString());
-          
+          if (deliveryAddress.country) {
+            params.append("country", deliveryAddress.country);
+          }
+          params.append("format", "json");
+          params.append("limit", "1");
+          params.append("addressdetails", "1");
+
+          console.log("🔍 Trying Nominatim structured query");
+
           const structuredResponse = await fetch(
-            `https://nominatim.openstreetmap.org/search?${structuredQuery.toString()}&format=json&limit=1&addressdetails=1`
+            `https://nominatim.openstreetmap.org/search?${params.toString()}`
           );
           const structuredData = await structuredResponse.json();
-          
+
           if (structuredData && structuredData[0]) {
-            const coords = {
+            bestResult = {
               lat: parseFloat(structuredData[0].lat),
               lng: parseFloat(structuredData[0].lon),
             };
-            setDeliveryCoords(coords);
-            console.log("Geocoded (structured):", coords, structuredData[0].display_name);
+            console.log(
+              "✅ Nominatim structured success:",
+              bestResult,
+              structuredData[0].display_name
+            );
+            setDeliveryCoords(bestResult);
             setIsGeocoding(false);
             return;
           }
         }
 
-        const addressParts = [
+        if (deliveryAddress.postal_code) {
+          const postalQuery = `${deliveryAddress.postal_code}, ${deliveryAddress.country}`;
+          console.log("🔍 Trying postal code only:", postalQuery);
+
+          const postalResponse = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+              postalQuery
+            )}&limit=1&addressdetails=1`
+          );
+          const postalData = await postalResponse.json();
+
+          if (postalData && postalData[0]) {
+            bestResult = {
+              lat: parseFloat(postalData[0].lat),
+              lng: parseFloat(postalData[0].lon),
+            };
+            console.log(
+              "✅ Postal code success:",
+              bestResult,
+              postalData[0].display_name
+            );
+            setDeliveryCoords(bestResult);
+            setIsGeocoding(false);
+            return;
+          }
+        }
+
+        const fullAddress = [
           deliveryAddress.address_line1,
           deliveryAddress.address_line2,
-          deliveryAddress.postal_code,
           deliveryAddress.city,
           deliveryAddress.state,
+          deliveryAddress.postal_code,
           deliveryAddress.country,
-        ].filter(Boolean);
+        ]
+          .filter(Boolean)
+          .join(", ");
 
-        const fullQuery = addressParts.join(", ");
-        
-        console.log("Geocoding with full address:", fullQuery);
-        
-        const fullResponse = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullQuery)}&limit=1&addressdetails=1`
+        console.log("🔍 Trying full address free-form:", fullAddress);
+
+        const freeFormResponse = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+            fullAddress
+          )}&limit=1&addressdetails=1`
         );
-        const fullData = await fullResponse.json();
+        const freeFormData = await freeFormResponse.json();
 
-        if (fullData && fullData[0]) {
-          const coords = {
-            lat: parseFloat(fullData[0].lat),
-            lng: parseFloat(fullData[0].lon),
+        if (freeFormData && freeFormData[0]) {
+          bestResult = {
+            lat: parseFloat(freeFormData[0].lat),
+            lng: parseFloat(freeFormData[0].lon),
           };
-          setDeliveryCoords(coords);
-          console.log("Geocoded (full address):", coords, fullData[0].display_name);
+          console.log(
+            "✅ Free-form success:",
+            bestResult,
+            freeFormData[0].display_name
+          );
+          setDeliveryCoords(bestResult);
           setIsGeocoding(false);
           return;
         }
 
-        if (deliveryAddress.postal_code) {
-          const postalQuery = `${deliveryAddress.postal_code}, ${deliveryAddress.city}, ${deliveryAddress.country}`;
-          console.log("Geocoding with postal code:", postalQuery);
-          
-          const postalResponse = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(postalQuery)}&limit=1`
-          );
-          const postalData = await postalResponse.json();
-          
-          if (postalData && postalData[0]) {
-            const coords = {
-              lat: parseFloat(postalData[0].lat),
-              lng: parseFloat(postalData[0].lon),
-            };
-            setDeliveryCoords(coords);
-            console.log("Geocoded (postal code):", coords, postalData[0].display_name);
-            setIsGeocoding(false);
-            return;
-          }
-        }
-
-        console.log("Geocoding fallback: city only");
         const cityQuery = `${deliveryAddress.city}, ${deliveryAddress.state}, ${deliveryAddress.country}`;
+        console.log("🔍 Fallback to city:", cityQuery);
+
         const cityResponse = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityQuery)}&limit=1`
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+            cityQuery
+          )}&limit=1`
         );
         const cityData = await cityResponse.json();
-        
+
         if (cityData && cityData[0]) {
-          const coords = {
+          bestResult = {
             lat: parseFloat(cityData[0].lat),
             lng: parseFloat(cityData[0].lon),
           };
-          setDeliveryCoords(coords);
-          console.log("Geocoded (city fallback):", coords, cityData[0].display_name);
+          console.log("⚠️ Using city fallback:", bestResult);
+          setDeliveryCoords(bestResult);
         }
       } catch (error) {
-        console.error("Geocoding failed:", error);
+        console.error("❌ All geocoding strategies failed:", error);
       } finally {
         setIsGeocoding(false);
       }
@@ -163,7 +237,8 @@ export function TrackingMap({ currentLocation, deliveryAddress }: TrackingMapPro
     );
   }
 
-  const hasCurrentLocation = currentLocation && currentLocation.lat && currentLocation.lng;
+  const hasCurrentLocation =
+    currentLocation && currentLocation.lat && currentLocation.lng;
   const hasDeliveryLocation = deliveryCoords;
 
   if (!hasCurrentLocation && !hasDeliveryLocation) {
