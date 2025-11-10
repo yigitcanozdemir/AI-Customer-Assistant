@@ -21,6 +21,7 @@ import { useCart } from "@/context/CartContext";
 import { ShoppingCart } from "@/components/ui/shopping-cart";
 import { ChatSidebar } from "@/components/ui/chat-sidebar";
 import { useChat } from "@/context/ChatContext";
+import { ThemeSelector } from "@/components/ui/theme-selector";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -195,7 +196,6 @@ export default function Store() {
           content: `Hello! Welcome to ${selectedStore}. How can I help you today?`,
           timestamp: new Date(),
           suggestions: [
-            "Show me your latest products",
             "I'm looking for a dress",
             "Help me track my order",
           ],
@@ -409,6 +409,8 @@ export default function Store() {
                   >
                     <Search className="w-6 h-6" />
                   </Button>
+
+                  <ThemeSelector />
 
                   <Button
                     onClick={() => openGeneralChat()}

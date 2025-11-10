@@ -2,6 +2,7 @@ import type React from "react";
 import { Inter } from "next/font/google";
 import { Suspense } from "react";
 import { Providers } from "@/components/providers";
+import { ThemeProvider } from "@/context/ThemeContext";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
@@ -19,7 +20,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased`}>
         <Suspense fallback={null}>
-          <Providers>{children}</Providers>
+          <ThemeProvider>
+            <Providers>{children}</Providers>
+          </ThemeProvider>
         </Suspense>
         <SpeedInsights />
       </body>

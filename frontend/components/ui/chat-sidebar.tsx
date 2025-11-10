@@ -6,12 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import {
   Send,
   Package,
-  RotateCcw,
   Sparkles,
   X,
   CheckCircle2,
@@ -26,14 +24,20 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import dynamic from "next/dynamic";
 
-const TrackingMap = dynamic(() => import("@/components/ui/TrackingMap").then(mod => ({ default: mod.TrackingMap })), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-48 bg-muted flex items-center justify-center text-muted-foreground text-sm">
-      Loading map...
-    </div>
-  ),
-});
+const TrackingMap = dynamic(
+  () =>
+    import("@/components/ui/TrackingMap").then((mod) => ({
+      default: mod.TrackingMap,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-48 bg-muted flex items-center justify-center text-muted-foreground text-sm">
+        Loading map...
+      </div>
+    ),
+  }
+);
 
 const wsBase = process.env.NEXT_PUBLIC_WS_URL;
 
@@ -508,7 +512,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
   return (
     <div
-      className={`fixed top-0 h-full bg-background border-l z-50 shadow-xl transition-transform duration-300 ease-in-out ${
+      className={`fixed top-0 h-full bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out ${
         isAssistantOpen ? "translate-x-0" : "translate-x-full"
       }`}
       style={{
@@ -519,19 +523,14 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       }}
     >
       <div className="flex flex-col h-full">
-        <div className="p-4 border-b bg-muted/30">
+        <div className="p-4 border-b bg-card">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Avatar className="w-8 h-8 bg-primary/10">
-                <AvatarFallback className="text-primary font-medium text-sm">
-                  AI
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <h3 className="font-medium text-sm text-foreground font-modern-heading">
-                  Customer Assistant
-                </h3>
-                <div className="flex items-center mt-0.5">
+            <div className="flex items-center space-x-2">
+              <Sparkles className="w-5 h-5" />
+
+              <div className="flex items-center space-x-2">
+                <h2 className="text-lg font-semibold">Assistant</h2>
+                <div className="flex items-center">
                   <div
                     className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
                       connectionStatus === "connected"
@@ -555,9 +554,9 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
               variant="ghost"
               size="sm"
               onClick={() => setIsAssistantOpen(false)}
-              className="w-8 h-8 p-0"
+              className="w-8 h-8 p-0 text-foreground hover:text-primary bg-transparent hover:bg-transparent transition-colors"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4 text-current" />
             </Button>
           </div>
         </div>
@@ -711,10 +710,15 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                     <div className="ml-2">
                       <Card className="border-0 shadow-sm bg-card overflow-hidden">
                         <CardContent className="p-0">
-                          {(message.tracking_data.current_location || message.tracking_data.delivery_address) && (
+                          {(message.tracking_data.current_location ||
+                            message.tracking_data.delivery_address) && (
                             <TrackingMap
-                              currentLocation={message.tracking_data.current_location}
-                              deliveryAddress={message.tracking_data.delivery_address}
+                              currentLocation={
+                                message.tracking_data.current_location
+                              }
+                              deliveryAddress={
+                                message.tracking_data.delivery_address
+                              }
                             />
                           )}
 
@@ -727,9 +731,14 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                 </h4>
                               </div>
                               <div className="text-right">
-                                <div className="text-xs text-muted-foreground">Tracking ID</div>
+                                <div className="text-xs text-muted-foreground">
+                                  Tracking ID
+                                </div>
                                 <div className="text-sm font-mono font-medium">
-                                  #FX{message.tracking_data.order_id.split('-')[0].toUpperCase()}
+                                  #FX
+                                  {message.tracking_data.order_id
+                                    .split("-")[0]
+                                    .toUpperCase()}
                                 </div>
                               </div>
                             </div>
@@ -739,57 +748,94 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                             <div className="space-y-3">
                               <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                                 <div className="flex items-center space-x-3">
-                                  <div className={`w-2 h-2 rounded-full ${
-                                    message.tracking_data.status === "delivered" 
-                                      ? "bg-green-500" 
-                                      : message.tracking_data.status === "shipped"
-                                      ? "bg-primary animate-pulse"
-                                      : "bg-yellow-500"
-                                  }`} />
+                                  <div
+                                    className={`w-2 h-2 rounded-full ${
+                                      message.tracking_data.status ===
+                                      "delivered"
+                                        ? "bg-success"
+                                        : message.tracking_data.status ===
+                                          "shipped"
+                                        ? "bg-primary animate-pulse"
+                                        : "bg-warning"
+                                    }`}
+                                  />
                                   <div>
                                     <div className="text-sm font-medium">
-                                      {message.tracking_data.status === "created" && "Order Placed"}
-                                      {message.tracking_data.status === "shipped" && "In Transit"}
-                                      {message.tracking_data.status === "delivered" && "Delivered"}
+                                      {message.tracking_data.status ===
+                                        "created" && "Order Placed"}
+                                      {message.tracking_data.status ===
+                                        "shipped" && "In Transit"}
+                                      {message.tracking_data.status ===
+                                        "delivered" && "Delivered"}
                                     </div>
-                                    {message.tracking_data.status !== "delivered" && (
+                                    {message.tracking_data.status !==
+                                      "delivered" && (
                                       <div className="text-xs text-muted-foreground">
-                                        Est. Delivery: {new Date(
-                                          new Date(message.tracking_data.created_at).getTime() + 
-                                          (message.tracking_data.status === "created" ? 5 : 2) * 24 * 60 * 60 * 1000
-                                        ).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                        Est. Delivery:{" "}
+                                        {new Date(
+                                          new Date(
+                                            message.tracking_data.created_at
+                                          ).getTime() +
+                                            (message.tracking_data.status ===
+                                            "created"
+                                              ? 5
+                                              : 2) *
+                                              24 *
+                                              60 *
+                                              60 *
+                                              1000
+                                        ).toLocaleDateString("en-US", {
+                                          month: "short",
+                                          day: "numeric",
+                                          year: "numeric",
+                                        })}
                                       </div>
                                     )}
                                   </div>
                                 </div>
-                                <Truck className={`w-5 h-5 ${
-                                  message.tracking_data.status === "delivered" 
-                                    ? "text-green-600" 
-                                    : "text-primary"
-                                }`} />
+                                <Truck
+                                  className={`w-5 h-5 ${
+                                    message.tracking_data.status === "delivered"
+                                      ? "text-success"
+                                      : "text-primary"
+                                  }`}
+                                />
                               </div>
 
                               <div className="grid grid-cols-1 gap-3">
                                 {message.tracking_data.current_location && (
-                                  <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                  <div className="p-3 bg-primary-light border border-primary-medium rounded-lg">
                                     <div className="flex items-start space-x-2">
-                                      <MapPin className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                                      <MapPin className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
                                       <div className="flex-1 min-w-0">
-                                        <div className="text-xs font-medium text-blue-900 dark:text-blue-100 mb-1">
+                                        <div className="text-xs font-medium text-primary mb-1">
                                           Current Location
                                         </div>
-                                        <div className="text-sm text-blue-800 dark:text-blue-200">
-                                          {message.tracking_data.current_location.city}, {message.tracking_data.current_location.region}
+                                        <div className="text-sm text-card-foreground">
+                                          {
+                                            message.tracking_data
+                                              .current_location.city
+                                          }
+                                          ,{" "}
+                                          {
+                                            message.tracking_data
+                                              .current_location.region
+                                          }
                                         </div>
-                                        <div className="text-sm text-blue-700 dark:text-blue-300">
-                                          {message.tracking_data.current_location.country}
+                                        <div className="text-sm text-muted-foreground">
+                                          {
+                                            message.tracking_data
+                                              .current_location.country
+                                          }
                                         </div>
-                                        <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                                          {new Date(message.tracking_data.created_at).toLocaleString('en-US', { 
-                                            month: 'short', 
-                                            day: 'numeric', 
-                                            hour: '2-digit', 
-                                            minute: '2-digit' 
+                                        <div className="text-xs text-muted-foreground mt-1">
+                                          {new Date(
+                                            message.tracking_data.created_at
+                                          ).toLocaleString("en-US", {
+                                            month: "short",
+                                            day: "numeric",
+                                            hour: "2-digit",
+                                            minute: "2-digit",
                                           })}
                                         </div>
                                       </div>
@@ -798,26 +844,48 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                 )}
 
                                 {message.tracking_data.delivery_address && (
-                                  <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                                  <div className="p-3 status-delivered rounded-lg">
                                     <div className="flex items-start space-x-2">
-                                      <MapPin className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                                      <MapPin className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
                                       <div className="flex-1 min-w-0">
-                                        <div className="text-xs font-medium text-green-900 dark:text-green-100 mb-1">
+                                        <div className="text-xs font-medium text-success mb-1">
                                           Delivery Address
                                         </div>
-                                        <div className="text-sm text-green-800 dark:text-green-200">
-                                          {message.tracking_data.delivery_address.full_name}
+                                        <div className="text-sm text-card-foreground">
+                                          {
+                                            message.tracking_data
+                                              .delivery_address.full_name
+                                          }
                                         </div>
-                                        <div className="text-sm text-green-700 dark:text-green-300">
-                                          {message.tracking_data.delivery_address.address_line1}
-                                          {message.tracking_data.delivery_address.address_line2 && 
+                                        <div className="text-sm text-muted-foreground">
+                                          {
+                                            message.tracking_data
+                                              .delivery_address.address_line1
+                                          }
+                                          {message.tracking_data
+                                            .delivery_address.address_line2 &&
                                             `, ${message.tracking_data.delivery_address.address_line2}`}
                                         </div>
-                                        <div className="text-sm text-green-700 dark:text-green-300">
-                                          {message.tracking_data.delivery_address.city}, {message.tracking_data.delivery_address.state} {message.tracking_data.delivery_address.postal_code}
+                                        <div className="text-sm text-muted-foreground">
+                                          {
+                                            message.tracking_data
+                                              .delivery_address.city
+                                          }
+                                          ,{" "}
+                                          {
+                                            message.tracking_data
+                                              .delivery_address.state
+                                          }{" "}
+                                          {
+                                            message.tracking_data
+                                              .delivery_address.postal_code
+                                          }
                                         </div>
-                                        <div className="text-sm text-green-600 dark:text-green-400">
-                                          {message.tracking_data.delivery_address.country}
+                                        <div className="text-sm text-muted-foreground">
+                                          {
+                                            message.tracking_data
+                                              .delivery_address.country
+                                          }
                                         </div>
                                       </div>
                                     </div>
@@ -828,9 +896,13 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                               <div className="flex items-center justify-between p-3 bg-muted/20 rounded-lg border">
                                 <div className="flex items-center space-x-2">
                                   <Truck className="w-4 h-4 text-muted-foreground" />
-                                  <span className="text-sm text-muted-foreground">Carrier</span>
+                                  <span className="text-sm text-muted-foreground">
+                                    Carrier
+                                  </span>
                                 </div>
-                                <span className="text-sm font-medium">FedEx Express</span>
+                                <span className="text-sm font-medium">
+                                  FedEx Express
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -985,33 +1057,6 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
               className="h-9 px-3"
             >
               <Send className="w-4 h-4" />
-            </Button>
-          </div>
-
-          <div className="flex justify-center space-x-4 mt-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground hover:text-primary h-7 px-2"
-            >
-              <Package className="w-3 h-3 mr-1" />
-              Track Order
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground hover:text-primary h-7 px-2"
-            >
-              <RotateCcw className="w-3 h-3 mr-1" />
-              Returns
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground hover:text-primary h-7 px-2"
-            >
-              <Sparkles className="w-3 h-3 mr-1" />
-              Style Tips
             </Button>
           </div>
         </div>
