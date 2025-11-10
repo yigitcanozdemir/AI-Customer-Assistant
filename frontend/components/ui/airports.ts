@@ -108,9 +108,7 @@ export function findNearestAirport(lat: number, lng: number, region?: string): A
   let minDist = Infinity;
   
   for (const airport of candidates) {
-    const dist = Math.sqrt(
-      Math.pow(airport.lat - lat, 2) + Math.pow(airport.lng - lng, 2)
-    );
+    const dist = distanceKm(airport.lat, airport.lng, lat, lng);
     if (dist < minDist) {
       minDist = dist;
       nearest = airport;
