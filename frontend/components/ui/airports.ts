@@ -158,21 +158,26 @@ export function getRegionFromCoords(lat: number, lng: number): string {
   return "OTHER";
 }
 
-export function getFlightRoute(startLat: number, startLng: number, endLat: number, endLng: number): Airport[] {
-  const startRegion = getRegionFromCoords(startLat, startLng);
-  const endRegion = getRegionFromCoords(endLat, endLng);
+export function getFlightRoute(
+  startLat: number,
+  startLng: number,
+  endLat: number,
+  endLng: number
+): Airport[] {
+  const route: Airport[] = [];
+  const tripDistance = distanceKm(startLat, startLng, endLat, endLng);
+  const LAND_THRESHOLD_KM = 300;
 
-  const originAirport = findNearestAirport(startLat, startLng, startRegion);
-  const destAirport = findNearestAirport(endLat, endLng, endRegion);
-
-  const route: Airport[] = [originAirport];
-
-  if (startRegion === endRegion) {
-    route.push(destAirport);
+  if (tripDistance <= LAND_THRESHOLD_KM) {
     return route;
   }
 
-  if (startRegion !== endRegion) {
+  const originAirport = findNearestAirport(startLat, startLng);
+  const destAirport = findNearestAirport(endLat, endLng);
+
+  route.push(originAirport);
+
+  if (originAirport.code !== destAirport.code) {
     route.push(destAirport);
   }
 
