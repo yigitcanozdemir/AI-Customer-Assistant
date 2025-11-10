@@ -163,75 +163,20 @@ export function getRegionFromCoords(lat: number, lng: number): string {
 export function getFlightRoute(startLat: number, startLng: number, endLat: number, endLng: number): Airport[] {
   const startRegion = getRegionFromCoords(startLat, startLng);
   const endRegion = getRegionFromCoords(endLat, endLng);
-  
+
   const originAirport = findNearestAirport(startLat, startLng, startRegion);
   const destAirport = findNearestAirport(endLat, endLng, endRegion);
-  
+
   const route: Airport[] = [originAirport];
-  
+
   if (startRegion === endRegion) {
     route.push(destAirport);
     return route;
   }
-  
-  // Europe ↔ North America
-  if ((startRegion.includes("EUROPE") && endRegion.includes("NA_")) ||
-      (startRegion.includes("NA_") && endRegion.includes("EUROPE"))) {
-    // Direct transatlantic flights exist
+
+  if (startRegion !== endRegion) {
     route.push(destAirport);
-    return route;
   }
-  
-  // Turkey ↔ USA (via European hub)
-  if ((startRegion === "TURKEY" && endRegion.includes("NA_")) ||
-      (startRegion.includes("NA_") && endRegion === "TURKEY")) {
-    const euroHub = AIRPORTS.filter(a => a.region === "EUROPE_WEST")
-                         .reduce((prev, curr) => {
-                           const dPrev = distanceKm(prev.lat, prev.lng, startLat, startLng);
-                           const dCurr = distanceKm(curr.lat, curr.lng, startLat, startLng);
-                           return dCurr < dPrev ? curr : prev;
-                         });
-    route.push(euroHub);
-    route.push(destAirport);
-    return route;
-  }
-  
-  // Europe ↔ Asia East (direct or via Middle East hub)
-  if ((startRegion.includes("EUROPE") && endRegion === "ASIA_EAST") ||
-      (startRegion === "ASIA_EAST" && endRegion.includes("EUROPE"))) {
-    // Can use Middle East hub for connections
-    const middleEastHub = AIRPORTS.find(a => a.code === "DXB" || a.code === "DOH");
-    if (middleEastHub) {
-      route.push(middleEastHub);
-    }
-    route.push(destAirport);
-    return route;
-  }
-  
-  // Turkey ↔ Asia (via Middle East hub like Dubai/Doha or direct)
-  if ((startRegion === "TURKEY" && endRegion.includes("ASIA")) ||
-      (startRegion.includes("ASIA") && endRegion === "TURKEY")) {
-    const middleEastHub = AIRPORTS.find(a => a.code === "DXB");
-    if (middleEastHub) {
-      route.push(middleEastHub);
-    }
-    route.push(destAirport);
-    return route;
-  }
-  
-  // North America ↔ Asia (transpacific, possibly via west coast hub)
-  if ((startRegion.includes("NA_") && endRegion.includes("ASIA")) ||
-      (startRegion.includes("ASIA") && endRegion.includes("NA_"))) {
-    // If starting from east coast, connect through west coast
-    if (startRegion === "NA_EAST" && endRegion.includes("ASIA")) {
-      const westHub = AIRPORTS.find(a => a.code === "LAX") || AIRPORTS.find(a => a.region === "NA_WEST")!;
-      route.push(westHub);
-    }
-    route.push(destAirport);
-    return route;
-  }
-  
-  // Default: direct flight
-  route.push(destAirport);
+
   return route;
 }
