@@ -1,4 +1,17 @@
+export function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
 
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
 export const AIRPORTS = [
   // North America - USA East
   { code: "JFK", name: "New York JFK", lat: 40.6413, lng: -73.7781, country: "USA", region: "NA_EAST" },
@@ -172,7 +185,12 @@ export function getFlightRoute(startLat: number, startLng: number, endLat: numbe
   // Turkey ↔ USA (via European hub)
   if ((startRegion === "TURKEY" && endRegion.includes("NA_")) ||
       (startRegion.includes("NA_") && endRegion === "TURKEY")) {
-    const euroHub = AIRPORTS.find(a => a.code === "FRA") || AIRPORTS.find(a => a.region === "EUROPE_WEST")!;
+    const euroHub = AIRPORTS.filter(a => a.region === "EUROPE_WEST")
+                         .reduce((prev, curr) => {
+                           const dPrev = distanceKm(prev.lat, prev.lng, startLat, startLng);
+                           const dCurr = distanceKm(curr.lat, curr.lng, startLat, startLng);
+                           return dCurr < dPrev ? curr : prev;
+                         });
     route.push(euroHub);
     route.push(destAirport);
     return route;
