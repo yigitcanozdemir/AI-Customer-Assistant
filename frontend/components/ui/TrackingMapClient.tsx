@@ -82,17 +82,26 @@ function createFlightPath(
   return points;
 }
 
+function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 function needsAirFreight(
   startLat: number,
   startLng: number,
   endLat: number,
   endLng: number
 ): boolean {
-  const distance = Math.sqrt(
-    Math.pow(endLat - startLat, 2) + Math.pow(endLng - startLng, 2)
-  );
-
-  return distance > 5;
+  const distance = distanceKm(startLat, startLng, endLat, endLng);
+  return distance > 600;
 }
 
 export default function TrackingMapClient({
