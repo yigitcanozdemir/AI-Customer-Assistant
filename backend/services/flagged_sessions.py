@@ -5,7 +5,7 @@ from backend.db.schema import FlaggedSession
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 logger = logging.getLogger(__name__)
 
@@ -164,3 +164,19 @@ async def mark_reviewed(flagged_id: str, reviewed_by: str, notes: Optional[str] 
     except Exception as e:
         logger.error(f"Error marking session as reviewed: {e}")
         return False
+
+
+async def get_flag_count_for_session(session_id: str) -> int:
+    try:
+        async with get_session() as session:
+            stmt = select(func.count(FlaggedSession.id)).where(
+                FlaggedSession.session_id == session_id
+            )
+            result = await session.execute(stmt)
+            return result.scalar() or 0
+    except Exception as e:
+        logger.error(
+            "Error counting flagged sessions",
+            extra={"session_id": session_id, "error": str(e)},
+        )
+        return 0

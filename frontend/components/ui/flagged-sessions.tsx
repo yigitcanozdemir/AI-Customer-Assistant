@@ -32,6 +32,12 @@ import {
 } from "lucide-react";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+const STORE_OPTIONS = [
+  "Aurora Style",
+  "Luna Apperal",
+  "Celeste Wear",
+  "Dayifuse Fashion",
+];
 
 interface FlaggedSessionItem {
   id: string;
@@ -84,17 +90,14 @@ export function FlaggedSessionsButton() {
   const [error, setError] = useState<string | null>(null);
   const [reviewNotes, setReviewNotes] = useState<ReviewNotesState>({});
   const [reviewLoading, setReviewLoading] = useState<LoadingMap>({});
-  const [storeScope, setStoreScope] = useState<"current" | "all">(
-    store ? "current" : "all"
-  );
+  const [storeFilter, setStoreFilter] = useState<string>(store || "all");
 
   const hasUserProfile = Boolean(userId);
 
   useEffect(() => {
-    if (!store) {
-      setStoreScope("all");
-    }
-  }, [store]);
+    if (!isOpen) return;
+    setStoreFilter(store || "all");
+  }, [isOpen, store]);
 
   const fetchSessions = useCallback(async () => {
     if (!apiUrl) {
@@ -115,14 +118,8 @@ export function FlaggedSessionsButton() {
       if (userName) {
         url.searchParams.set("user_name", userName);
       }
-      if (storeScope === "current") {
-        if (!store) {
-          setError("Please select a store to filter flagged sessions.");
-          setSessions([]);
-          setIsLoading(false);
-          return;
-        }
-        url.searchParams.set("store", store);
+      if (storeFilter !== "all") {
+        url.searchParams.set("store", storeFilter);
       }
 
       const response = await fetch(url.toString());
@@ -137,13 +134,13 @@ export function FlaggedSessionsButton() {
     } finally {
       setIsLoading(false);
     }
-  }, [hasUserProfile, storeScope, store, userId, userName]);
+  }, [hasUserProfile, storeFilter, userId, userName]);
 
   useEffect(() => {
     if (isOpen) {
       void fetchSessions();
     }
-  }, [isOpen, fetchSessions]);
+  }, [isOpen, storeFilter, fetchSessions]);
 
   const handleReviewSubmit = async (flaggedId: string) => {
     if (!apiUrl) {
@@ -410,17 +407,22 @@ export function FlaggedSessionsButton() {
         <div className="flex items-center justify-between border-b px-4 py-3 text-xs text-muted-foreground">
           <span>Store scope</span>
           <Select
-            value={storeScope}
-            onValueChange={(value) => setStoreScope(value as "current" | "all")}
+            value={storeFilter}
+            onValueChange={(value) => setStoreFilter(value)}
           >
             <SelectTrigger className="h-8 w-40 text-foreground">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="current" disabled={!store}>
-                Current store
-              </SelectItem>
               <SelectItem value="all">All stores</SelectItem>
+              {STORE_OPTIONS.map((storeOption) => (
+                <SelectItem key={storeOption} value={storeOption}>
+                  {storeOption}
+                </SelectItem>
+              ))}
+              {store && !STORE_OPTIONS.includes(store) && (
+                <SelectItem value={store}>{store}</SelectItem>
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -447,7 +449,7 @@ export function FlaggedSessionsButton() {
 
             {!isLoading && hasUserProfile && sessions.length === 0 && !error && (
               <div className="rounded-md border border-border/60 bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-                No flagged sessions found for this user/store yet.
+                No flagged sessions found for the selected store filter.
               </div>
             )}
 

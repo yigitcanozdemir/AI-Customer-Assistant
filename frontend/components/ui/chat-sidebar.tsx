@@ -109,6 +109,10 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     setSelectedProduct,
     selectedOrder,
     setSelectedOrder,
+    isSessionLocked,
+    setIsSessionLocked,
+    sessionLockReason,
+    setSessionLockReason,
   } = useChat();
   useEffect(() => {
   hasSentInitialMessage.current = false;
@@ -174,6 +178,13 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     [sessionId, selectedStore, userName, userId, selectedProduct]
   );
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const key = `chat-initial-synced:${sessionId}`;
+    const synced = window.sessionStorage.getItem(key);
+    hasSentInitialMessage.current = synced === "true";
+  }, [sessionId]);
+
   const connectWebSocket = useCallback(() => {
     try {
       const connectingTimer = setTimeout(() => {
@@ -195,6 +206,12 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
           if (data.pending_action) {
             setPendingAction(data.pending_action);
             console.log("Pending action received:", data.pending_action);
+          }
+          if (typeof data.session_locked === "boolean") {
+            setIsSessionLocked(data.session_locked);
+            setSessionLockReason(
+              data.session_locked ? data.lock_reason || "policy_violation" : null
+            );
           }
           const assistantMessage = {
             id: uuidv4(),
@@ -299,8 +316,12 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       assistantMessages.forEach((message) => {
         sendInitialMessageToBackend(message, ws);
       });
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(`chat-initial-synced:${sessionId}`, "true");
+      }
       hasSentInitialMessage.current = true;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, ws, sendInitialMessageToBackend, isAssistantOpen]);
 
   const scrollToBottom = () => {
@@ -323,7 +344,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   }, [isAssistantOpen]);
 
   const sendMessage = async (content: string) => {
-    if (!content.trim()) return;
+    if (!content.trim() || isSessionLocked) return;
 
     const userMessage = {
       id: Date.now().toString(),
@@ -340,6 +361,10 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   };
 
   const sendWebSocketMessage = (content: string, confirmActionId?: string) => {
+    if (isSessionLocked) {
+      setIsTyping(false);
+      return;
+    }
     try {
       const eventPayload = {
         event_id: sessionId,
@@ -471,6 +496,10 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
     sendWebSocketMessage("User cancelled the action");
   };
+
+  const lockedBannerMessage = sessionLockReason
+    ? "This chat is paused due to repeated policy violations. You can review previous messages, but sending new ones is disabled."
+    : "This chat is paused. You can review previous messages, but sending new ones is disabled.";
 
   const latestProductMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -1040,17 +1069,25 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             </div>
           )}
 
+          {isSessionLocked && (
+            <div className="mb-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+              {lockedBannerMessage}
+            </div>
+          )}
+
           <div className="flex space-x-2">
             <Input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               placeholder={
-                selectedOrderId
+                isSessionLocked
+                  ? "Chat is paused due to policy violations."
+                  : selectedOrderId
                   ? "What would you like to do with this order?"
                   : "Ask about products, sizing, or styling..."
               }
               onKeyPress={(e) => {
-                if (e.key === "Enter") {
+                if (e.key === "Enter" && !isSessionLocked) {
                   if (selectedOrderId) {
                     handleSendWithSelectedOrder();
                   } else {
@@ -1059,6 +1096,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                 }
               }}
               className="flex-1 h-9 text-sm bg-background border-border/50"
+              disabled={isSessionLocked}
             />
             <Button
               onClick={() => {
@@ -1068,7 +1106,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                   sendMessage(inputValue);
                 }
               }}
-              disabled={!inputValue.trim()}
+              disabled={!inputValue.trim() || isSessionLocked}
               size="sm"
               className="h-9 px-3"
             >

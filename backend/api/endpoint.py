@@ -5,7 +5,12 @@ from fastapi.responses import JSONResponse
 import traceback
 import random
 from typing import Optional
-from backend.services.session_manager import get_message_history, add_message
+from backend.services.session_manager import (
+    get_message_history,
+    add_message,
+    is_session_locked,
+    lock_session,
+)
 from fastapi import (
     APIRouter,
     Depends,
@@ -56,6 +61,7 @@ from backend.services.flagged_sessions import (
     store_flagged_session,
     get_flagged_sessions_for_user,
     mark_reviewed,
+    get_flag_count_for_session,
 )
 
 tracer = trace.get_tracer(__name__)
@@ -72,6 +78,23 @@ websocket_disconnects_total = Counter(
     "websocket_disconnects_total",
     "Total number of WebSocket disconnections",
 )
+
+PROFANITY_KEYWORDS = {
+    "fuck",
+    "shit",
+    "bitch",
+    "asshole",
+    "bastard",
+    "dumbass",
+    "cunt",
+    "motherfucker",
+    "fucker",
+}
+
+
+def contains_abusive_language(text: str) -> bool:
+    lowered = text.lower()
+    return any(word in lowered for word in PROFANITY_KEYWORDS)
 
 
 def log_chat_interaction(
@@ -223,6 +246,41 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
 
                     continue
 
+                if is_session_locked(session_id):
+                    locked_response = MessageResponse(
+                        content=(
+                            "This chat session is paused due to repeated policy violations. "
+                            "You can still review earlier messages, but sending new ones is disabled."
+                        ),
+                        store=store,
+                        suggestions=[],
+                        products=[],
+                        orders=None,
+                        tracking_data=None,
+                        timestamp=datetime.utcnow(),
+                        requires_human=True,
+                        confidence_score=0.0,
+                        is_context_relevant=True,
+                        warning_message="Session paused",
+                        session_locked=True,
+                        lock_reason="policy_violation",
+                    )
+
+                    await websocket.send_json(jsonable_encoder(locked_response))
+                    websocket_messages_total.labels(direction="outbound").inc()
+                    duration = time.perf_counter() - msg_start
+                    span_ctx = trace.get_current_span().get_span_context()
+                    trace_id_val = (
+                        trace.format_trace_id(span_ctx.trace_id) if span_ctx else "N/A"
+                    )
+                    REQUESTS_PROCESSING_TIME.labels(
+                        method=method, path=path, app_name=app_name
+                    ).observe(duration, exemplar={"TraceID": trace_id_val})
+                    RESPONSES.labels(
+                        method=method, path=path, status_code=200, app_name=app_name
+                    ).inc()
+                    continue
+
                 if order_context:
                     add_message(
                         session_id,
@@ -259,15 +317,38 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 add_message(session_id, user_message)
                 message_history = get_message_history(session_id)
 
-                response: MessageResponse = await handle_chat_event(
-                    user_input=question,
-                    store=store,
-                    message_history=message_history,
-                    user_id=user_id,
-                    user_name=user_name,
-                    confirm_action_id=confirm_action_id,
-                    selected_order=order_data,
-                )
+                abusive_language = contains_abusive_language(question)
+
+                response: MessageResponse
+
+                if abusive_language:
+                    response = MessageResponse(
+                        content=(
+                            "We need to keep this conversation respectful. "
+                            "Using abusive or harassing language violates our policy and may pause this chat."
+                        ),
+                        store=store,
+                        suggestions=["Browse products", "Contact support"],
+                        products=[],
+                        orders=None,
+                        tracking_data=None,
+                        timestamp=datetime.utcnow(),
+                        requires_human=True,
+                        confidence_score=0.0,
+                        is_context_relevant=True,
+                        warning_message="Abusive language detected",
+                        assessment_reasoning="Detected prohibited language",
+                    )
+                else:
+                    response = await handle_chat_event(
+                        user_input=question,
+                        store=store,
+                        message_history=message_history,
+                        user_id=user_id,
+                        user_name=user_name,
+                        confirm_action_id=confirm_action_id,
+                        selected_order=order_data,
+                    )
 
                 span_context = trace.get_current_span().get_span_context()
                 trace_id_str = (
@@ -328,7 +409,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                             "warning": response.warning_message,
                         },
                     )
-                    await store_flagged_session(
+                    stored_flag = await store_flagged_session(
                         session_id=session_id,
                         user_id=str(user_id),
                         user_name=user_name,
@@ -347,6 +428,22 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                             for m in message_history[-10:]
                         ],
                     )
+
+                    flag_count = 0
+                    if stored_flag:
+                        flag_count = await get_flag_count_for_session(session_id)
+
+                    if flag_count >= 4:
+                        lock_session(session_id)
+                        response.session_locked = True
+                        response.lock_reason = "policy_violation"
+                        response.content = (
+                            "This chat session is paused due to repeated policy violations. "
+                            "You can review earlier messages, but sending new ones is disabled."
+                        )
+                        response.warning_message = response.warning_message or (
+                            "Session paused after multiple policy violations"
+                        )
 
                 await websocket.send_json(jsonable_encoder(response))
                 websocket_messages_total.labels(direction="outbound").inc()
@@ -526,6 +623,9 @@ async def create_order(request: CreateOrderRequest):
                     order_id = uuid.uuid4()
                     created_at = datetime.utcnow()
                     order_status = random.choice(["created", "shipped", "delivered"])
+                    location_payload = (
+                        None if order_status == "delivered" else current_location_data
+                    )
                     order = Order(
                         order_id=order_id,
                         user_id=request.user_id,
@@ -535,7 +635,7 @@ async def create_order(request: CreateOrderRequest):
                         store=request.store,
                         status=order_status,
                         created_at=created_at,
-                        current_location=current_location_data,
+                        current_location=location_payload,
                         delivery_address=delivery_address_data,
                     )
                     session.add(order)

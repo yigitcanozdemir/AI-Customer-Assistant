@@ -176,7 +176,8 @@ class MessageResponse(BaseModel):
     pending_action: Optional[PendingAction] = None
     warning_message: Optional[str] = None
     assessment_reasoning: Optional[str] = None
-    tracking_data: Optional[OrderLocation]
+    session_locked: bool = False
+    lock_reason: Optional[str] = None
 
 
 class Message(BaseModel):

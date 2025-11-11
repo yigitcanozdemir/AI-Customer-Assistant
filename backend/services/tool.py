@@ -337,7 +337,7 @@ async def fetch_order_location(order_id: uuid.UUID, store: str) -> OrderLocation
                 return None
 
             current_loc = None
-            if order.current_location:
+            if order.current_location and order.status != "delivered":
                 current_loc = CurrentLocation(**order.current_location)
 
             delivery_addr = None

@@ -105,6 +105,10 @@ interface ChatContextType {
 
   selectedOrder: OrderStatus | null;
   setSelectedOrder: React.Dispatch<React.SetStateAction<OrderStatus | null>>;
+  isSessionLocked: boolean;
+  setIsSessionLocked: React.Dispatch<React.SetStateAction<boolean>>;
+  sessionLockReason: string | null;
+  setSessionLockReason: React.Dispatch<React.SetStateAction<string | null>>;
   resetChatForStore: () => void;
 }
 
@@ -134,12 +138,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
   const wsRef = useRef<WebSocket | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<OrderStatus | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [isSessionLocked, setIsSessionLocked] = useState(false);
+  const [sessionLockReason, setSessionLockReason] = useState<string | null>(null);
 
   type StoreSession = {
     sessionId: string;
     messages: Message[];
     isAssistantOpen: boolean;
     selectedProduct: Product | null;
+    isSessionLocked: boolean;
+    sessionLockReason: string | null;
   };
 
   const [storeSessionMap, setStoreSessionMap] = useState<
@@ -191,6 +199,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
           messages: [],
           isAssistantOpen: false,
           selectedProduct: null,
+          isSessionLocked: false,
+          sessionLockReason: null,
         },
       }));
     }
@@ -214,6 +224,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
       setMessages(storeState.messages);
       setIsAssistantOpen(storeState.isAssistantOpen);
       setSelectedProduct(storeState.selectedProduct);
+      setIsSessionLocked(storeState.isSessionLocked ?? false);
+      setSessionLockReason(storeState.sessionLockReason ?? null);
 
       if (storeState.messages.length > 0) {
         console.log("Setting connection to connected - has messages");
@@ -236,6 +248,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
       setMessages([]);
       setIsAssistantOpen(false);
       setSelectedProduct(null);
+      setIsSessionLocked(false);
+      setSessionLockReason(null);
       setConnectionStatus("disconnected");
 
       setStoreSessionMap((prev) => ({
@@ -245,6 +259,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
           messages: [],
           isAssistantOpen: false,
           selectedProduct: null,
+          isSessionLocked: false,
+          sessionLockReason: null,
         },
       }));
     }
@@ -262,6 +278,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
             messages,
             isAssistantOpen,
             selectedProduct,
+            isSessionLocked,
+            sessionLockReason,
           },
         }));
       }, 300);
@@ -275,6 +293,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
     messages,
     isAssistantOpen,
     selectedProduct,
+    isSessionLocked,
+    sessionLockReason,
     isMounted,
   ]);
 
@@ -295,6 +315,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
     setSelectedProduct,
     selectedOrder,
     setSelectedOrder,
+    isSessionLocked,
+    setIsSessionLocked,
+    sessionLockReason,
+    setSessionLockReason,
     resetChatForStore,
   };
 

@@ -176,12 +176,24 @@ export default function TrackingMapClient({
   const mapInstanceRef = useRef<L.Map | null>(null);
 
   useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current) return;
+    if (!mapRef.current) return;
 
     const hasCurrentLocation =
       currentLocation && currentLocation.lat && currentLocation.lng;
     const hasDeliveryLocation = deliveryCoords;
-    if (!hasCurrentLocation && !hasDeliveryLocation) return;
+
+    if (!hasCurrentLocation && !hasDeliveryLocation) {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+      return;
+    }
+
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+    }
 
     let isMounted = true;
 
