@@ -61,6 +61,12 @@ async function fetchRoadRoute(
   }
 }
 
+function normalizeLng(lng: number): number {
+  while (lng > 180) lng -= 360;
+  while (lng < -180) lng += 360;
+  return lng;
+}
+
 function createFlightPath(
   start: [number, number],
   end: [number, number],
@@ -68,12 +74,16 @@ function createFlightPath(
 ): [number, number][] {
   const points: [number, number][] = [];
 
+  const [endLat, endLngRaw] = end;
+  let endLng = endLngRaw;
+  const diff = endLng - start[1];
+  if (diff > 180) endLng -= 360;
+  else if (diff < -180) endLng += 360;
+
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-
-    const lat = start[0] + (end[0] - start[0]) * t;
-    const lng = start[1] + (end[1] - start[1]) * t;
-
+    const lat = start[0] + (endLat - start[0]) * t;
+    const lng = start[1] + (endLng - start[1]) * t;
     const arc = Math.sin(t * Math.PI) * 3;
 
     points.push([lat + arc, lng]);
@@ -82,26 +92,79 @@ function createFlightPath(
   return points;
 }
 
-function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
 function needsAirFreight(
   startLat: number,
   startLng: number,
   endLat: number,
   endLng: number
 ): boolean {
-  const distance = distanceKm(startLat, startLng, endLat, endLng);
-  return distance > 600;
+  const flightRoute = getFlightRoute(startLat, startLng, endLat, endLng);
+
+  return flightRoute.length > 0;
+}
+
+function addMarkerWithDuplicates(
+  map: L.Map,
+  lat: number,
+  lng: number,
+  icon: L.DivIcon,
+  popupContent: string
+) {
+  const normalizedLng = normalizeLng(lng);
+
+  L.marker([lat, normalizedLng], { icon }).addTo(map).bindPopup(popupContent);
+
+  L.marker([lat, normalizedLng - 360], { icon })
+    .addTo(map)
+    .bindPopup(popupContent);
+
+  L.marker([lat, normalizedLng + 360], { icon })
+    .addTo(map)
+    .bindPopup(popupContent);
+}
+
+function unwrapCoordinates(points: [number, number][]): [number, number][] {
+  if (!points || points.length === 0) return [];
+
+  const unwrapped: [number, number][] = [points[0]];
+
+  for (let i = 1; i < points.length; i++) {
+    const [, prevLng] = unwrapped[i - 1];
+    const [currLat, currLngRaw] = points[i];
+    let currLng = currLngRaw;
+
+    const diff = currLng - prevLng;
+
+    if (diff > 180) {
+      currLng -= 360;
+    } else if (diff < -180) {
+      currLng += 360;
+    }
+
+    unwrapped.push([currLat, currLng]);
+  }
+
+  return unwrapped;
+}
+
+function addWrappedPolyline(
+  map: L.Map,
+  points: [number, number][],
+  options: L.PolylineOptions
+) {
+  L.polyline(points, options).addTo(map);
+
+  const pointsWest = points.map(([lat, lng]): [number, number] => [
+    lat,
+    lng - 360,
+  ]);
+  L.polyline(pointsWest, options).addTo(map);
+
+  const pointsEast = points.map(([lat, lng]): [number, number] => [
+    lat,
+    lng + 360,
+  ]);
+  L.polyline(pointsEast, options).addTo(map);
 }
 
 export default function TrackingMapClient({
@@ -125,9 +188,12 @@ export default function TrackingMapClient({
     let center: [number, number];
     let zoom: number;
     if (hasCurrentLocation && hasDeliveryLocation) {
+      const normalizedCurrentLng = normalizeLng(currentLocation.lng);
+      const normalizedDeliveryLng = normalizeLng(deliveryCoords.lng);
+
       center = [
         (currentLocation.lat + deliveryCoords.lat) / 2,
-        (currentLocation.lng + deliveryCoords.lng) / 2,
+        (normalizedCurrentLng + normalizedDeliveryLng) / 2,
       ];
 
       const latDiff = Math.abs(currentLocation.lat - deliveryCoords.lat);
@@ -140,10 +206,10 @@ export default function TrackingMapClient({
       else if (maxDiff < 40) zoom = 4;
       else zoom = 3;
     } else if (hasCurrentLocation) {
-      center = [currentLocation.lat, currentLocation.lng];
+      center = [currentLocation.lat, normalizeLng(currentLocation.lng)];
       zoom = 10;
     } else {
-      center = [deliveryCoords!.lat, deliveryCoords!.lng];
+      center = [deliveryCoords!.lat, normalizeLng(deliveryCoords!.lng)];
       zoom = 10;
     }
 
@@ -154,6 +220,7 @@ export default function TrackingMapClient({
       zoomControl: true,
       minZoom: 2,
       maxZoom: 18,
+      worldCopyJump: true,
     });
     mapInstanceRef.current = map;
 
@@ -170,7 +237,7 @@ export default function TrackingMapClient({
       html: `
         <div style="position: relative;">
           <div style="position: absolute; top: -20px; left: -15px; width: 30px; height: 30px; background: #4285f4; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
               <rect x="1" y="3" width="15" height="13"></rect>
               <path d="M16 8h5l3 3v5h-2"></path>
               <circle cx="5.5" cy="18.5" r="2.5"></circle>
@@ -189,7 +256,7 @@ export default function TrackingMapClient({
       html: `
         <div style="position: relative;">
           <div style="position: absolute; top: -20px; left: -15px; width: 30px; height: 30px; background: #34a853; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="white" stroke="white" stroke-width="2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="2">
               <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
               <circle cx="12" cy="10" r="3" fill="#34a853"></circle>
             </svg>
@@ -203,28 +270,35 @@ export default function TrackingMapClient({
     });
 
     if (hasCurrentLocation)
-      L.marker([currentLocation.lat, currentLocation.lng], {
-        icon: currentIcon,
-      })
-        .addTo(map)
-        .bindPopup(
-          `<strong>Current</strong><br/>${currentLocation.city}, ${currentLocation.country}`
-        );
+      addMarkerWithDuplicates(
+        map,
+        currentLocation.lat,
+        currentLocation.lng,
+        currentIcon,
+        `<strong>Current</strong><br/>${currentLocation.city}, ${currentLocation.country}`
+      );
     if (hasDeliveryLocation)
-      L.marker([deliveryCoords.lat, deliveryCoords.lng], { icon: deliveryIcon })
-        .addTo(map)
-        .bindPopup(
-          `<strong>Delivery</strong><br/>${deliveryAddress?.city}, ${deliveryAddress?.country}`
-        );
+      addMarkerWithDuplicates(
+        map,
+        deliveryCoords.lat,
+        deliveryCoords.lng,
+        deliveryIcon,
+        `<strong>Delivery</strong><br/>${deliveryAddress?.city}, ${deliveryAddress?.country}`
+      );
 
     if (hasCurrentLocation && hasDeliveryLocation) {
       const start: [number, number] = [
         currentLocation.lat,
-        currentLocation.lng,
+        normalizeLng(currentLocation.lng),
       ];
-      const end: [number, number] = [deliveryCoords.lat, deliveryCoords.lng];
+      const end: [number, number] = [
+        deliveryCoords.lat,
+        normalizeLng(deliveryCoords.lng),
+      ];
 
       const usesAir = needsAirFreight(start[0], start[1], end[0], end[1]);
+
+      const allRoutePoints: [number, number][] = [start, end];
 
       if (usesAir) {
         console.log("✈️ Using air freight routing");
@@ -238,36 +312,66 @@ export default function TrackingMapClient({
         const originAirport = flightRoute[0];
         const destAirport = flightRoute[flightRoute.length - 1];
 
-        fetchRoadRoute(start, [originAirport.lat, originAirport.lng]).then(
-          (road) => {
-            if (!isMounted || !mapInstanceRef.current) return;
-            if (road) {
-              L.polyline(road, {
-                color: "#1a73e8",
-                weight: 6,
-                opacity: 1,
-                lineCap: "round",
-                lineJoin: "round",
-              }).addTo(map);
+        flightRoute.forEach((airport) => {
+          allRoutePoints.push([airport.lat, normalizeLng(airport.lng)]);
+        });
 
-              L.polyline(road, {
-                color: "#4285f4",
-                weight: 4,
-                opacity: 1,
-                lineCap: "round",
-                lineJoin: "round",
-              }).addTo(map);
+        fetchRoadRoute(start, [
+          originAirport.lat,
+          normalizeLng(originAirport.lng),
+        ]).then((road) => {
+          if (!isMounted || !mapInstanceRef.current) return;
+          if (road) {
+            const unwrapped = unwrapCoordinates(road);
 
-              console.log(`🚗 Ground to ${originAirport.code}`);
-            }
+            addWrappedPolyline(map, unwrapped, {
+              color: "#1a73e8",
+              weight: 6,
+              opacity: 1,
+              lineCap: "round",
+              lineJoin: "round",
+            });
+
+            addWrappedPolyline(map, unwrapped, {
+              color: "#4285f4",
+              weight: 4,
+              opacity: 1,
+              lineCap: "round",
+              lineJoin: "round",
+            });
+
+            console.log(`🚗 Ground to ${originAirport.code}`);
           }
-        );
+        });
 
         for (let i = 0; i < flightRoute.length - 1; i++) {
           const airportA = flightRoute[i];
           const airportB = flightRoute[i + 1];
 
-          L.circleMarker([airportA.lat, airportA.lng], {
+          const airportLat = airportA.lat;
+          const airportLng = normalizeLng(airportA.lng);
+
+          L.circleMarker([airportLat, airportLng], {
+            radius: 4,
+            color: "#0891b2",
+            fillColor: "#fff",
+            fillOpacity: 1,
+            weight: 2,
+          })
+            .bindPopup(`✈️ ${airportA.name} (${airportA.code})`)
+            .addTo(map);
+
+          L.circleMarker([airportLat, airportLng - 360], {
+            radius: 4,
+            color: "#0891b2",
+            fillColor: "#fff",
+            fillOpacity: 1,
+            weight: 2,
+          })
+            .bindPopup(`✈️ ${airportA.name} (${airportA.code})`)
+            .addTo(map);
+
+          L.circleMarker([airportLat, airportLng + 360], {
             radius: 4,
             color: "#0891b2",
             fillColor: "#fff",
@@ -278,24 +382,27 @@ export default function TrackingMapClient({
             .addTo(map);
 
           const flightPath = createFlightPath(
-            [airportA.lat, airportA.lng],
-            [airportB.lat, airportB.lng],
+            [airportA.lat, normalizeLng(airportA.lng)],
+            [airportB.lat, normalizeLng(airportB.lng)],
             100
           );
 
-          L.polyline(flightPath, {
+          addWrappedPolyline(map, flightPath, {
             color: "#0891b2",
             weight: 3,
             opacity: 0.85,
             lineCap: "round",
             lineJoin: "round",
-          }).addTo(map);
+          });
 
           console.log(`✈️ Flight: ${airportA.code} → ${airportB.code}`);
         }
 
         const lastAirport = flightRoute[flightRoute.length - 1];
-        L.circleMarker([lastAirport.lat, lastAirport.lng], {
+        const lastAirportLat = lastAirport.lat;
+        const lastAirportLng = normalizeLng(lastAirport.lng);
+
+        L.circleMarker([lastAirportLat, lastAirportLng], {
           radius: 4,
           color: "#0891b2",
           fillColor: "#fff",
@@ -305,24 +412,49 @@ export default function TrackingMapClient({
           .bindPopup(`✈️ ${lastAirport.name} (${lastAirport.code})`)
           .addTo(map);
 
-        fetchRoadRoute([destAirport.lat, destAirport.lng], end).then((road) => {
+        L.circleMarker([lastAirportLat, lastAirportLng - 360], {
+          radius: 4,
+          color: "#0891b2",
+          fillColor: "#fff",
+          fillOpacity: 1,
+          weight: 2,
+        })
+          .bindPopup(`✈️ ${lastAirport.name} (${lastAirport.code})`)
+          .addTo(map);
+
+        L.circleMarker([lastAirportLat, lastAirportLng + 360], {
+          radius: 4,
+          color: "#0891b2",
+          fillColor: "#fff",
+          fillOpacity: 1,
+          weight: 2,
+        })
+          .bindPopup(`✈️ ${lastAirport.name} (${lastAirport.code})`)
+          .addTo(map);
+
+        fetchRoadRoute(
+          [destAirport.lat, normalizeLng(destAirport.lng)],
+          end
+        ).then((road) => {
           if (!isMounted || !mapInstanceRef.current) return;
           if (road) {
-            L.polyline(road, {
+            const unwrapped = unwrapCoordinates(road);
+
+            addWrappedPolyline(map, unwrapped, {
               color: "#1a73e8",
               weight: 6,
               opacity: 1,
               lineCap: "round",
               lineJoin: "round",
-            }).addTo(map);
+            });
 
-            L.polyline(road, {
+            addWrappedPolyline(map, unwrapped, {
               color: "#4285f4",
               weight: 4,
               opacity: 1,
               lineCap: "round",
               lineJoin: "round",
-            }).addTo(map);
+            });
 
             console.log(`🚗 Ground from ${destAirport.code}`);
           }
@@ -333,26 +465,34 @@ export default function TrackingMapClient({
         fetchRoadRoute(start, end).then((road) => {
           if (!isMounted || !mapInstanceRef.current) return;
           if (road) {
-            L.polyline(road, {
+            const unwrapped = unwrapCoordinates(road);
+
+            addWrappedPolyline(map, unwrapped, {
               color: "#1a73e8",
               weight: 6,
               opacity: 1,
               lineCap: "round",
               lineJoin: "round",
-            }).addTo(map);
+            });
 
-            L.polyline(road, {
+            addWrappedPolyline(map, unwrapped, {
               color: "#4285f4",
               weight: 4,
               opacity: 1,
               lineCap: "round",
               lineJoin: "round",
-            }).addTo(map);
+            });
           }
         });
       }
 
-      map.fitBounds(L.latLngBounds(start, end), { padding: [50, 50] });
+      if (allRoutePoints.length >= 2) {
+        const bounds = L.latLngBounds(allRoutePoints);
+        map.fitBounds(bounds, {
+          padding: [50, 50],
+          maxZoom: 10,
+        });
+      }
     }
 
     return () => {

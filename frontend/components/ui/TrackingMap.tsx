@@ -125,8 +125,8 @@ export function TrackingMap({
 
           if (structuredData && structuredData[0]) {
             bestResult = {
-              lat: parseFloat(structuredData[0].lat),
-              lng: parseFloat(structuredData[0].lon),
+              lat: Number.parseFloat(structuredData[0].lat),
+              lng: Number.parseFloat(structuredData[0].lon),
             };
             console.log(
               "✅ Nominatim structured success:",
@@ -152,8 +152,8 @@ export function TrackingMap({
 
           if (postalData && postalData[0]) {
             bestResult = {
-              lat: parseFloat(postalData[0].lat),
-              lng: parseFloat(postalData[0].lon),
+              lat: Number.parseFloat(postalData[0].lat),
+              lng: Number.parseFloat(postalData[0].lon),
             };
             console.log(
               "✅ Postal code success:",
@@ -188,8 +188,8 @@ export function TrackingMap({
 
         if (freeFormData && freeFormData[0]) {
           bestResult = {
-            lat: parseFloat(freeFormData[0].lat),
-            lng: parseFloat(freeFormData[0].lon),
+            lat: Number.parseFloat(freeFormData[0].lat),
+            lng: Number.parseFloat(freeFormData[0].lon),
           };
           console.log(
             "✅ Free-form success:",
@@ -213,8 +213,8 @@ export function TrackingMap({
 
         if (cityData && cityData[0]) {
           bestResult = {
-            lat: parseFloat(cityData[0].lat),
-            lng: parseFloat(cityData[0].lon),
+            lat: Number.parseFloat(cityData[0].lat),
+            lng: Number.parseFloat(cityData[0].lon),
           };
           console.log("⚠️ Using city fallback:", bestResult);
           setDeliveryCoords(bestResult);
