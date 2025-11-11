@@ -21,6 +21,7 @@ import { ChatSidebar } from "@/components/ui/chat-sidebar";
 import { useChat } from "@/context/ChatContext";
 import { useCallback } from "react";
 import { ThemeSelector } from "@/components/ui/theme-selector";
+import { FlaggedSessionsButton } from "@/components/ui/flagged-sessions";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -257,19 +258,30 @@ export default function ProductPage() {
       ],
     };
 
-    if (messages.length === 0) {
-      setMessages([
-        {
-          id: "0",
-          type: "assistant" as const,
-          content: `Hello! Welcome to ${currentStore}. How can I help you today?`,
-          timestamp: new Date(),
-        },
-        productMessage,
-      ]);
-    } else {
-      setMessages((prev) => [...prev, productMessage]);
-    }
+    setMessages((prev) => {
+      let normalizedMessages = prev;
+
+      if (prev.length === 0) {
+        normalizedMessages = [
+          {
+            id: "0",
+            type: "assistant" as const,
+            content: `Hello! Welcome to ${currentStore}. How can I help you today?`,
+            timestamp: new Date(),
+          },
+        ];
+      }
+
+      const lastMessage = normalizedMessages[normalizedMessages.length - 1];
+      const shouldReplaceLastProduct =
+        lastMessage?.type === "assistant" && lastMessage.products?.length;
+
+      if (shouldReplaceLastProduct) {
+        return [...normalizedMessages.slice(0, -1), productMessage];
+      }
+
+      return [...normalizedMessages, productMessage];
+    });
 
     setIsAssistantOpen((prev) => !prev);
   };
@@ -421,6 +433,7 @@ export default function ProductPage() {
 
                 <div className="flex items-center space-x-1">
                   <ThemeSelector />
+                  <FlaggedSessionsButton />
 
                   <Button
                     variant="ghost"

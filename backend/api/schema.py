@@ -73,6 +73,36 @@ class ListOrdersResponse(BaseModel):
     orders: List[OrderStatus]
 
 
+class FlaggedSessionReview(BaseModel):
+    id: uuid.UUID
+    session_id: str
+    user_id: uuid.UUID
+    user_name: Optional[str] = None
+    store: str
+    user_query: str
+    assistant_response: str
+    confidence_score: Optional[float] = None
+    requires_human: bool
+    is_context_relevant: bool
+    warning_message: Optional[str] = None
+    assessment_reasoning: Optional[str] = None
+    message_history: Optional[List[Any]] = None
+    flagged_at: datetime
+    reviewed: bool
+    reviewed_at: Optional[datetime] = None
+    reviewed_by: Optional[str] = None
+    review_notes: Optional[str] = None
+
+
+class FlaggedSessionsResponse(BaseModel):
+    sessions: List[FlaggedSessionReview]
+
+
+class ReviewFlaggedSessionRequest(BaseModel):
+    reviewed_by: str
+    notes: Optional[str] = None
+
+
 class ProductVariant(BaseModel):
     id: str
     color: Optional[str] = None

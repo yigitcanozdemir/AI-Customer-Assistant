@@ -4,8 +4,16 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 import traceback
 import random
+from typing import Optional
 from backend.services.session_manager import get_message_history, add_message
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    Query,
+)
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from backend.api.chat import handle_chat_event
 from backend.api.schema import (
@@ -18,6 +26,9 @@ from backend.api.schema import (
     OrderStatus,
     CurrentLocation,
     DeliveryAddress,
+    FlaggedSessionsResponse,
+    ReviewFlaggedSessionRequest,
+    FlaggedSessionReview,
 )
 from backend.api.convert import convert_messages
 from datetime import datetime
@@ -41,7 +52,11 @@ from backend.utility.utils import (
     EXCEPTIONS,
 )
 from backend.config import settings
-from backend.services.flagged_sessions import store_flagged_session
+from backend.services.flagged_sessions import (
+    store_flagged_session,
+    get_flagged_sessions_for_user,
+    mark_reviewed,
+)
 
 tracer = trace.get_tracer(__name__)
 logger = logging.getLogger(__name__)
@@ -104,6 +119,29 @@ def log_chat_interaction(
             "duration_ms": duration_ms,
             "trace_id": trace_id,
         },
+    )
+
+
+def serialize_flagged_session(session) -> FlaggedSessionReview:
+    return FlaggedSessionReview(
+        id=session.id,
+        session_id=session.session_id,
+        user_id=session.user_id,
+        user_name=session.user_name,
+        store=session.store,
+        user_query=session.user_query,
+        assistant_response=session.assistant_response,
+        confidence_score=session.confidence_score,
+        requires_human=session.requires_human,
+        is_context_relevant=session.is_context_relevant,
+        warning_message=session.warning_message,
+        assessment_reasoning=session.assessment_reasoning,
+        message_history=session.message_history,
+        flagged_at=session.flagged_at,
+        reviewed=session.reviewed,
+        reviewed_at=session.reviewed_at,
+        reviewed_by=session.reviewed_by,
+        review_notes=session.review_notes,
     )
 
 
@@ -515,3 +553,70 @@ async def create_order(request: CreateOrderRequest):
         await session.commit()
 
     return CreateOrderResponse(orders=created_orders)
+
+
+@router.get("/flagged-sessions", response_model=FlaggedSessionsResponse)
+async def list_flagged_sessions(
+    user_id: str,
+    store: Optional[str] = Query(default=None),
+    user_name: Optional[str] = None,
+    limit: int = 25,
+):
+    try:
+        try:
+            uuid.UUID(user_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid user_id")
+
+        safe_limit = max(1, min(limit, 100))
+        store_filter = None
+        if store and store.lower() != "all":
+            store_filter = store
+        sessions = await get_flagged_sessions_for_user(
+            user_id=user_id,
+            user_name=user_name,
+            store=store_filter,
+            limit=safe_limit,
+        )
+
+        serialized = [serialize_flagged_session(session) for session in sessions]
+        return FlaggedSessionsResponse(sessions=serialized)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "Failed to list flagged sessions",
+            extra={
+                "user_id": user_id,
+                "store": store if store else "all",
+                "error": str(e),
+            },
+        )
+        raise HTTPException(status_code=500, detail="Unable to fetch flagged sessions")
+
+
+@router.post("/flagged-sessions/{flagged_id}/review")
+async def review_flagged_session(
+    flagged_id: str, payload: ReviewFlaggedSessionRequest
+):
+    if not payload.reviewed_by:
+        raise HTTPException(status_code=400, detail="reviewed_by is required")
+
+    try:
+        success = await mark_reviewed(
+            flagged_id=flagged_id,
+            reviewed_by=payload.reviewed_by,
+            notes=payload.notes,
+        )
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to mark reviewed")
+
+        return {"status": "reviewed"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "Failed to review flagged session",
+            extra={"flagged_id": flagged_id, "error": str(e)},
+        )
+        raise HTTPException(status_code=500, detail="Unable to review session")

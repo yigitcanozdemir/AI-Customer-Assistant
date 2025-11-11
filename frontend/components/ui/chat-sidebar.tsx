@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -110,11 +110,13 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     selectedOrder,
     setSelectedOrder,
   } = useChat();
-
+  useEffect(() => {
+  hasSentInitialMessage.current = false;
+}, [sessionId]);
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
+  
   useEffect(() => {
     if (isAssistantOpen && typeof window !== "undefined") {
       const isMobile = window.innerWidth < 1024;
@@ -177,44 +179,23 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       const connectingTimer = setTimeout(() => {
         setConnectionStatus("connecting");
       }, 200);
-
       console.log("Attempting WebSocket connection...");
       const websocket = new WebSocket(`${wsBase}/events/ws/chat/${sessionId}`);
-
       websocket.onopen = () => {
         clearTimeout(connectingTimer);
         console.log("WebSocket connected successfully");
         setConnectionStatus("connected");
         setWs(websocket);
         wsRef.current = websocket;
-
-        if (messages.length > 0 && !hasSentInitialMessage.current) {
-          const assistantMessages = messages.filter(
-            (msg) => msg.type === "assistant"
-          );
-          if (assistantMessages.length > 0) {
-            console.log(
-              "Sending initial assistant messages to backend on connect:",
-              assistantMessages.length
-            );
-            assistantMessages.forEach((message) => {
-              sendInitialMessageToBackend(message, websocket);
-            });
-            hasSentInitialMessage.current = true;
-          }
-        }
       };
-
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           console.log("WebSocket message received:", data);
-
           if (data.pending_action) {
             setPendingAction(data.pending_action);
             console.log("Pending action received:", data.pending_action);
           }
-
           const assistantMessage = {
             id: uuidv4(),
             type: "assistant" as const,
@@ -229,7 +210,6 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             requires_human: data.requires_human,
             confidence_score: data.confidence_score,
           };
-
           setIsTyping(false);
           setMessages((prev) => [...prev, assistantMessage]);
         } catch (error) {
@@ -237,29 +217,23 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
           setIsTyping(false);
         }
       };
-
       websocket.onclose = (event) => {
         clearTimeout(connectingTimer);
         console.log("WebSocket disconnected:", event.code, event.reason);
-
         setTimeout(() => {
           if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
             setConnectionStatus("disconnected");
           }
         }, 300);
-
         setWs(null);
         wsRef.current = null;
         setIsTyping(false);
-        hasSentInitialMessage.current = false;
       };
-
       websocket.onerror = (error) => {
         clearTimeout(connectingTimer);
         console.error("WebSocket error:", error);
         setConnectionStatus("disconnected");
         setIsTyping(false);
-
         setMessages((prev) => [
           ...prev,
           {
@@ -279,7 +253,6 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     sessionId,
-    messages,
     setConnectionStatus,
     setWs,
     setIsTyping,
@@ -297,8 +270,6 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       wsRef.current = null;
     }
     setWs(null);
-    hasSentInitialMessage.current = false;
-
     const timer = setTimeout(() => {
       connectWebSocket();
     }, 100);
@@ -321,25 +292,16 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   }, [isAssistantOpen, ws]);
 
   useEffect(() => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    if (messages.length === 0) return;
-    if (hasSentInitialMessage.current) return;
-
-    const assistantMessages = messages.filter(
-      (msg) => msg.type === "assistant"
-    );
-
+    if (!isAssistantOpen || !ws || ws.readyState !== WebSocket.OPEN || hasSentInitialMessage.current) return;
+    const assistantMessages = messages.filter((msg) => msg.type === "assistant");
     if (assistantMessages.length > 0) {
-      console.log(
-        "Sending initial assistant messages to backend:",
-        assistantMessages.length
-      );
+      console.log("Sending initial assistant messages to backend:", assistantMessages.length);
       assistantMessages.forEach((message) => {
         sendInitialMessageToBackend(message, ws);
       });
       hasSentInitialMessage.current = true;
     }
-  }, [messages, ws, sendInitialMessageToBackend]);
+  }, [messages, ws, sendInitialMessageToBackend, isAssistantOpen]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -510,6 +472,46 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     sendWebSocketMessage("User cancelled the action");
   };
 
+  const latestProductMessageId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const candidate = messages[i];
+      if (candidate.type === "assistant" && candidate.products?.length) {
+        return candidate.id;
+      }
+    }
+    return null;
+  }, [messages]);
+
+  const handleRemoveProductMessage = useCallback(
+    (messageId: string) => {
+      let removed = false;
+
+      setMessages((prev) => {
+        const latest = (() => {
+          for (let i = prev.length - 1; i >= 0; i -= 1) {
+            const candidate = prev[i];
+            if (candidate.type === "assistant" && candidate.products?.length) {
+              return candidate.id;
+            }
+          }
+          return null;
+        })();
+
+        if (latest !== messageId) {
+          return prev;
+        }
+
+        removed = true;
+        return prev.filter((message) => message.id !== messageId);
+      });
+
+      if (removed) {
+        setSelectedProduct(null);
+      }
+    },
+    [setMessages, setSelectedProduct]
+  );
+
   return (
     <div
       className={`fixed top-0 h-full bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out ${
@@ -564,8 +566,12 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
         <div className="flex-1 overflow-hidden">
           <ScrollArea className="h-full p-4">
             <div className="space-y-4">
-              {messages.map((message) => (
-                <div key={message.id} className="space-y-3">
+              {messages.map((message) => {
+                const isLatestProductMessage =
+                  message.id === latestProductMessageId;
+
+                return (
+                  <div key={message.id} className="space-y-3">
                   <div
                     className={`flex ${
                       message.type === "user" ? "justify-end" : "justify-start"
@@ -602,14 +608,14 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                   )}
 
                   {message.products && message.products.length > 0 && (
-                    <div className="space-y-2 ml-2">
+                    <div className="space-y-1 ml-2">
                       {message.products.map((product) => (
                         <Card
                           key={product.id}
                           className="border-0 shadow-sm bg-card"
                         >
-                          <CardContent className="p-3">
-                            <div className="flex space-x-3">
+                          <CardContent className="px-3 py-1.5">
+                            <div className="flex items-center space-x-3">
                               <Image
                                 src={product.image || "/placeholder.svg"}
                                 alt={product.name}
@@ -618,8 +624,8 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                 className="w-12 h-16 object-cover rounded"
                                 unoptimized={false}
                               />
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-medium text-sm text-card-foreground mb-1 line-clamp-2 font-modern-body">
+                              <div className="flex-1 min-w-0 space-y-0.5">
+                                <h4 className="font-medium text-sm text-card-foreground line-clamp-2 font-modern-body">
                                   {product.name}
                                 </h4>
                                 <div className="flex items-center justify-between">
@@ -632,15 +638,24 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                   <Button
                                     size="sm"
                                     className="h-6 px-2 text-xs"
-                                    onClick={() =>
-                                      handleViewProduct(product.id)
-                                    }
+                                    onClick={() => handleViewProduct(product.id)}
                                   >
                                     View
                                   </Button>
                                 </div>
                               </div>
                             </div>
+                            {isLatestProductMessage && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleRemoveProductMessage(message.id)
+                                }
+                                className="mt-1.5 text-[11px] text-foreground hover:text-primary bg-transparent hover:bg-transparent transition-colors text-left w-full"
+                              >
+                                · Remove product from chat
+                              </button>
+                            )}
                           </CardContent>
                         </Card>
                       ))}
@@ -929,7 +944,8 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
 
               {pendingAction && (
                 <div className="relative">

@@ -1,5 +1,4 @@
 "use client";
-
 import React, { createContext, useContext, useEffect, useState } from "react";
 
 type Theme = "ocean" | "purple" | "emerald" | "rose";
@@ -17,7 +16,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
-    const savedTheme = localStorage.getItem("theme") as Theme | null;
+    const savedTheme = sessionStorage.getItem("theme") as Theme | null;
     if (
       savedTheme &&
       ["ocean", "purple", "emerald", "rose"].includes(savedTheme)
@@ -28,16 +27,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!mounted) return;
-
     const root = document.documentElement;
-
     root.removeAttribute("data-theme");
-
     if (theme !== "ocean") {
       root.setAttribute("data-theme", theme);
     }
-
-    localStorage.setItem("theme", theme);
+    sessionStorage.setItem("theme", theme);
   }, [theme, mounted]);
 
   const setTheme = (newTheme: Theme) => {

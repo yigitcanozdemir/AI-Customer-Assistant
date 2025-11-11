@@ -1,9 +1,11 @@
 import logging
+import uuid
 from backend.db.session import get_session
 from backend.db.schema import FlaggedSession
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +87,6 @@ async def store_flagged_session(
 async def get_pending_reviews(limit: int = 50):
     try:
         async with get_session() as session:
-            from sqlalchemy import select
-
             stmt = (
                 select(FlaggedSession)
                 .where(FlaggedSession.reviewed == False)
@@ -100,11 +100,44 @@ async def get_pending_reviews(limit: int = 50):
         return []
 
 
+async def get_flagged_sessions_for_user(
+    user_id: str,
+    user_name: Optional[str] = None,
+    store: Optional[str] = None,
+    limit: int = 50,
+):
+    try:
+        user_uuid = uuid.UUID(str(user_id))
+    except ValueError:
+        logger.error("Invalid user_id supplied for flagged session lookup", extra={"user_id": user_id})
+        return []
+
+    try:
+        async with get_session() as session:
+            stmt = select(FlaggedSession).where(FlaggedSession.user_id == user_uuid)
+
+            if user_name:
+                stmt = stmt.where(FlaggedSession.user_name == user_name)
+            if store:
+                stmt = stmt.where(FlaggedSession.store == store)
+
+            stmt = stmt.order_by(FlaggedSession.flagged_at.desc()).limit(limit)
+
+            result = await session.execute(stmt)
+            return result.scalars().all()
+    except Exception as e:
+        logger.error(
+            "Error fetching flagged sessions for user",
+            extra={"user_id": str(user_id), "store": store, "error": str(e)},
+        )
+        return []
+
+
 async def mark_reviewed(flagged_id: str, reviewed_by: str, notes: Optional[str] = None):
     try:
         async with get_session() as session:
             async with session.begin():
-                from sqlalchemy import select, update
+                from sqlalchemy import update
 
                 stmt = (
                     update(FlaggedSession)
