@@ -39,6 +39,8 @@ Evaluate this interaction and provide:
    - Low confidence: "I'm not completely certain about this answer."
    - Tool skipped: "I noticed your question required a tool to provide accurate info. A human agent may be better suited."
 
+Short referential phrases like "this", "that one", or "this one" are normal when the UI surfaces the relevant order/product. If the **Order Context** field is populated, assume those pronouns refer to that context and treat the request as a valid e-commerce interaction. Do **not** mark these inputs as off-topic or low confidence solely because they are brief—evaluate them based on whether the assistant used the provided context and tools appropriately.
+
 **BE STRICT**: If the user asks about anything OTHER than shopping/products/orders, this requires human review. We're an e-commerce assistant, not a general chatbot.
 
 **EXCEPTION**: Normal greetings and pleasantries are OKAY and should NOT be flagged.

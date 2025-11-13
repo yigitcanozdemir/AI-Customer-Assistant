@@ -92,6 +92,8 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(
     null
   );
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const {
     messages,
     setMessages,
@@ -115,10 +117,37 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     setSessionLockReason,
   } = useChat();
   useEffect(() => {
-  hasSentInitialMessage.current = false;
-}, [sessionId]);
+    hasSentInitialMessage.current = false;
+  }, [sessionId]);
   useEffect(() => {
     setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const updateViewportMetrics = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+        const inset = Math.max(window.innerHeight - window.visualViewport.height, 0);
+        setKeyboardInset(inset);
+      } else {
+        setViewportHeight(window.innerHeight);
+        setKeyboardInset(0);
+      }
+    };
+
+    updateViewportMetrics();
+
+    window.addEventListener("resize", updateViewportMetrics);
+    window.visualViewport?.addEventListener("resize", updateViewportMetrics);
+    window.visualViewport?.addEventListener("scroll", updateViewportMetrics);
+
+    return () => {
+      window.removeEventListener("resize", updateViewportMetrics);
+      window.visualViewport?.removeEventListener("resize", updateViewportMetrics);
+      window.visualViewport?.removeEventListener("scroll", updateViewportMetrics);
+    };
   }, []);
   
   useEffect(() => {
@@ -128,7 +157,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
         document.body.style.overflow = "hidden";
         document.body.style.position = "fixed";
         document.body.style.width = "100%";
-        document.body.style.height = "100%";
+        document.body.style.height = "100dvh";
       }
     } else {
       document.body.style.overflow = "";
@@ -331,6 +360,12 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (keyboardInset > 0) {
+      scrollToBottom();
+    }
+  }, [keyboardInset]);
 
   useEffect(() => {
     if (isAssistantOpen) {
@@ -549,6 +584,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       style={{
         right: isMounted ? right : -450,
         width: isMounted ? sideWidth : 450,
+        height: viewportHeight ? `${viewportHeight}px` : "100vh",
         transition:
           "right 300ms ease-in-out, width 300ms ease-in-out, transform 300ms ease-in-out",
       }}
@@ -593,11 +629,31 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
         </div>
 
         <div className="flex-1 overflow-hidden">
-          <ScrollArea className="h-full p-4">
+          <ScrollArea
+            className="h-full p-4"
+            style={{
+              paddingBottom:
+                keyboardInset > 0 ? `${keyboardInset + 32}px` : undefined,
+            }}
+          >
             <div className="space-y-4">
               {messages.map((message) => {
                 const isLatestProductMessage =
                   message.id === latestProductMessageId;
+                const trackingStatus = message.tracking_data?.status
+                  ? message.tracking_data.status.toLowerCase()
+                  : null;
+                const shouldShowTrackingMap =
+                  Boolean(message.tracking_data) &&
+                  trackingStatus !== "created" &&
+                  Boolean(
+                    message.tracking_data?.current_location ||
+                      message.tracking_data?.delivery_address
+                  );
+                const showCurrentLocationDetails =
+                  Boolean(message.tracking_data?.current_location) &&
+                  trackingStatus !== "created";
+                const currentLocation = message.tracking_data?.current_location;
 
                 return (
                   <div key={message.id} className="space-y-3">
@@ -754,8 +810,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                     <div className="ml-2">
                       <Card className="border-0 shadow-sm bg-card overflow-hidden">
                         <CardContent className="p-0">
-                          {(message.tracking_data.current_location ||
-                            message.tracking_data.delivery_address) && (
+                          {shouldShowTrackingMap && (
                             <TrackingMap
                               currentLocation={
                                 message.tracking_data.current_location
@@ -847,7 +902,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                               </div>
 
                               <div className="grid grid-cols-1 gap-3">
-                                {message.tracking_data.current_location && (
+                                {showCurrentLocationDetails && currentLocation && (
                                   <div className="p-3 bg-primary-light border border-primary-medium rounded-lg">
                                     <div className="flex items-start space-x-2">
                                       <MapPin className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
@@ -856,21 +911,12 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                           Current Location
                                         </div>
                                         <div className="text-sm text-card-foreground">
-                                          {
-                                            message.tracking_data
-                                              .current_location.city
-                                          }
+                                          {currentLocation.city}
                                           ,{" "}
-                                          {
-                                            message.tracking_data
-                                              .current_location.region
-                                          }
+                                          {currentLocation.region}
                                         </div>
                                         <div className="text-sm text-muted-foreground">
-                                          {
-                                            message.tracking_data
-                                              .current_location.country
-                                          }
+                                          {currentLocation.country}
                                         </div>
                                         <div className="text-xs text-muted-foreground mt-1">
                                           {new Date(
@@ -935,6 +981,43 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                     </div>
                                   </div>
                                 )}
+                                {trackingStatus === "created" &&
+                                  message.tracking_data.delivery_address && (
+                                    <div className="p-3 bg-muted/40 border border-dashed rounded-lg">
+                                      <div className="flex items-start space-x-2">
+                                        <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                                        <div className="flex-1">
+                                          <div className="text-xs font-medium text-muted-foreground mb-1">
+                                            Shipment will depart soon
+                                          </div>
+                                          <div className="text-sm text-card-foreground">
+                                            We&apos;ll send this order to{" "}
+                                            <span className="font-semibold">
+                                              {
+                                                message.tracking_data
+                                                  .delivery_address.city
+                                              }
+                                            </span>
+                                            {message.tracking_data
+                                              .delivery_address.state && (
+                                              <>
+                                                ,{" "}
+                                                {
+                                                  message.tracking_data
+                                                    .delivery_address.state
+                                                }
+                                              </>
+                                            )}
+                                            {", "}
+                                            {
+                                              message.tracking_data
+                                                .delivery_address.country
+                                            }
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
                               </div>
 
                               <div className="flex items-center justify-between p-3 bg-muted/20 rounded-lg border">
@@ -1048,7 +1131,12 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
           </ScrollArea>
         </div>
 
-        <div className="p-4 border-t bg-muted/30">
+        <div
+          className="p-4 border-t bg-muted/30"
+          style={{
+            paddingBottom: `${keyboardInset + 16}px`,
+          }}
+        >
           {selectedOrderId && (
             <div className="mb-2 p-2 bg-primary/10 border border-primary/20 rounded-lg flex items-center justify-between">
               <span className="text-xs text-foreground flex items-center">

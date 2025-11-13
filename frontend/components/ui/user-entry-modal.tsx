@@ -16,6 +16,8 @@ export function UserEntryModal() {
   const [lastName, setLastName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
 
   useEffect(() => {
     setMounted(true);
@@ -26,6 +28,36 @@ export function UserEntryModal() {
       requestGeolocation();
     }
   }, [mounted, isUserSet]);
+
+  useEffect(() => {
+    if (!mounted || typeof window === "undefined") return;
+
+    const updateViewportMetrics = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+        const inset = Math.max(
+          window.innerHeight - window.visualViewport.height,
+          0
+        );
+        setKeyboardInset(inset);
+      } else {
+        setViewportHeight(window.innerHeight);
+        setKeyboardInset(0);
+      }
+    };
+
+    updateViewportMetrics();
+
+    window.visualViewport?.addEventListener("resize", updateViewportMetrics);
+    window.visualViewport?.addEventListener("scroll", updateViewportMetrics);
+    window.addEventListener("resize", updateViewportMetrics);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateViewportMetrics);
+      window.visualViewport?.removeEventListener("scroll", updateViewportMetrics);
+      window.removeEventListener("resize", updateViewportMetrics);
+    };
+  }, [mounted]);
 
   const requestGeolocation = async () => {
     try {
@@ -38,6 +70,12 @@ export function UserEntryModal() {
 
   if (!mounted || isUserSet) return null;
 
+  const isKeyboardOpen = keyboardInset > 0;
+  const containerHeight = viewportHeight ? `${viewportHeight}px` : "100vh";
+  const cardMaxHeight = viewportHeight
+    ? `calc(${viewportHeight}px - ${isKeyboardOpen ? keyboardInset + 24 : 64}px)`
+    : undefined;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName.trim() || !lastName.trim()) return;
@@ -48,8 +86,23 @@ export function UserEntryModal() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-      <Card className="w-full max-w-md mx-auto shadow-2xl">
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex justify-center p-4"
+      style={{
+        height: containerHeight,
+        minHeight: containerHeight,
+        alignItems: isKeyboardOpen ? "flex-start" : "center",
+        paddingTop: isKeyboardOpen ? "1rem" : "4rem",
+        paddingBottom: `${Math.max(keyboardInset, 24)}px`,
+      }}
+    >
+      <Card
+        className="w-full max-w-md mx-auto shadow-2xl"
+        style={{
+          maxHeight: cardMaxHeight,
+          overflowY: "auto",
+        }}
+      >
         <CardHeader className="text-center pb-4">
           <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
             <User className="w-6 h-6 text-primary" />

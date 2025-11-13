@@ -10,9 +10,11 @@ from backend.api.schema import (
     Message,
     ListOrdersResponse,
     OrderLocation,
+    DeliveryAddress,
+    CurrentLocation,
 )
 from fastapi.encoders import jsonable_encoder
-from typing import List, Any
+from typing import List, Any, Optional
 from backend.api.convert import convert_messages
 import logging
 import time
@@ -475,6 +477,55 @@ async def handle_chat_event(
                     }
                 )
 
+        if not tracking_data and selected_order_id:
+            try:
+                selected_uuid = uuid.UUID(str(selected_order_id))
+                fallback_tracking = await call_tool(
+                    "fetch_order_location",
+                    {"order_id": selected_uuid, "store": store},
+                )
+                if isinstance(fallback_tracking, OrderLocation):
+                    tracking_data = fallback_tracking
+                    logger.info(
+                        "Auto-fetched tracking data for selected order",
+                        extra={
+                            "event": "auto_tracking_fetch",
+                            "order_id": str(selected_uuid),
+                            "store": store,
+                        },
+                    )
+            except Exception as autofetch_error:
+                logger.error(
+                    "Failed to auto-fetch tracking data",
+                    extra={
+                        "event": "auto_tracking_fetch_failed",
+                        "order_id": selected_order_id,
+                        "error": str(autofetch_error),
+                    },
+                )
+
+        tracking_guidance_message = None
+
+        if tracking_data:
+            normalized_status = (tracking_data.status or "").lower()
+            sanitized_tracking = tracking_data.model_copy(deep=True)
+
+            if normalized_status == "created":
+                sanitized_tracking.current_location = None
+
+            tracking_data = sanitized_tracking
+            tracking_guidance_message = build_tracking_guidance_message(
+                sanitized_tracking
+            )
+
+            if tracking_guidance_message:
+                input_list.append(
+                    {
+                        "role": "system",
+                        "content": tracking_guidance_message,
+                    }
+                )
+
         if tool_calls_found:
             followup = await client.responses.create(
                 model=settings.openai_model,
@@ -558,6 +609,58 @@ async def handle_chat_event(
             is_context_relevant=True,
             warning_message="System error - human assistance required",
         )
+
+
+def summarize_delivery_address(
+    address: Optional[DeliveryAddress],
+) -> str:
+    if not address:
+        return "the saved delivery address on file"
+
+    parts = [address.city, address.state, address.country]
+    summary = ", ".join(part for part in parts if part)
+    return summary or "the saved delivery address on file"
+
+
+def summarize_current_location(
+    location: Optional[CurrentLocation],
+) -> str:
+    if not location:
+        return "the last recorded transit hub"
+
+    parts = [location.city, location.region, location.country]
+    summary = ", ".join(part for part in parts if part)
+    return summary or "the carrier facility"
+
+
+def build_tracking_guidance_message(
+    tracking_data: OrderLocation,
+) -> Optional[str]:
+    status = (tracking_data.status or "").lower()
+    delivery_summary = summarize_delivery_address(tracking_data.delivery_address)
+    current_summary = summarize_current_location(tracking_data.current_location)
+
+    if status == "created":
+        return (
+            "Tracking guidance: The selected order is still in CREATED status. "
+            f"Explain that the package has not shipped yet and reassure the user it will "
+            f"ship to {delivery_summary}. Do not mention live maps or in-transit markers."
+        )
+
+    if status == "shipped":
+        return (
+            "Tracking guidance: The selected order is SHIPPED. "
+            f"Let the user know the package is around {current_summary} and headed toward "
+            f"{delivery_summary}. Mention that the tracking card/map shows the latest path."
+        )
+
+    if status == "delivered":
+        return (
+            "Tracking guidance: The selected order is DELIVERED. "
+            f"Confirm it arrived at {delivery_summary} and reference the delivered marker on the map."
+        )
+
+    return None
 
 
 def extract_recent_products(message_history: List[Message]) -> List[dict]:

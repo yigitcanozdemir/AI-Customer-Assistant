@@ -13,6 +13,7 @@ import { useCart } from "@/context/CartContext";
 import { useUser } from "@/context/UserContext";
 import { useChat } from "@/context/ChatContext";
 import Image from "next/image";
+import { cn } from "@/lib/utils";
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -67,6 +68,27 @@ export function CheckoutModal({
     postal_code: "",
     country: "",
   });
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<keyof DeliveryAddress, string>>
+  >({});
+  const [showValidationHint, setShowValidationHint] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  const REQUIRED_FIELDS: Array<keyof DeliveryAddress> = [
+    "address_line1",
+    "city",
+    "state",
+    "country",
+  ];
+  const FIELD_LABELS: Record<keyof DeliveryAddress, string> = {
+    full_name: "Full Name",
+    address_line1: "Address Line 1",
+    address_line2: "Address Line 2",
+    city: "City",
+    state: "Province / State",
+    postal_code: "Postal Code",
+    country: "Country",
+  };
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -79,14 +101,14 @@ export function CheckoutModal({
       document.body.style.overflow = "hidden";
       document.body.style.position = "fixed";
       document.body.style.width = "100%";
-      document.body.style.height = "100%";
+      document.body.style.height = "100dvh";
     } else {
       const isMobile = windowWidth < 1024;
       if (isMobile && state.isOpen) {
         document.body.style.overflow = "hidden";
         document.body.style.position = "fixed";
         document.body.style.width = "100%";
-        document.body.style.height = "100%";
+        document.body.style.height = "100dvh";
       } else {
         document.body.style.overflow = "";
         document.body.style.position = "";
@@ -105,12 +127,66 @@ export function CheckoutModal({
     };
   }, [isOpen, state.isOpen, windowWidth]);
 
+  useEffect(() => {
+    if (!isOpen || typeof window === "undefined") return;
+
+    const updateViewportMetrics = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+        const inset = Math.max(
+          window.innerHeight - window.visualViewport.height,
+          0
+        );
+        setKeyboardInset(inset);
+      } else {
+        setViewportHeight(window.innerHeight);
+        setKeyboardInset(0);
+      }
+    };
+
+    updateViewportMetrics();
+
+    window.visualViewport?.addEventListener("resize", updateViewportMetrics);
+    window.visualViewport?.addEventListener("scroll", updateViewportMetrics);
+    window.addEventListener("resize", updateViewportMetrics);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateViewportMetrics);
+      window.visualViewport?.removeEventListener("scroll", updateViewportMetrics);
+      window.removeEventListener("resize", updateViewportMetrics);
+    };
+  }, [isOpen]);
+
   const handleInputChange = (field: keyof DeliveryAddress, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const validateForm = () => {
+    const errors: Partial<Record<keyof DeliveryAddress, string>> = {};
+
+    REQUIRED_FIELDS.forEach((field) => {
+      if (!formData[field]?.trim()) {
+        errors[field] = `${FIELD_LABELS[field]} is required`;
+      }
+    });
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) {
+      setShowValidationHint(true);
+      return;
+    }
+    setShowValidationHint(false);
     await onCheckout(formData);
   };
 
@@ -139,6 +215,9 @@ export function CheckoutModal({
   const availableWidth = windowWidth - totalOffset;
   const useMobileLayout = windowWidth < 1024 || availableWidth < 700;
 
+  const isKeyboardOpen = keyboardInset > 0;
+  const overlayHeight = viewportHeight ? `${viewportHeight}px` : "100vh";
+
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center"
@@ -146,14 +225,23 @@ export function CheckoutModal({
         zIndex: 60,
         overflow: "hidden",
         touchAction: "none",
+        height: overlayHeight,
+        minHeight: overlayHeight,
+        alignItems: isKeyboardOpen ? "flex-start" : "center",
         paddingLeft: shouldShowFullScreen ? "0" : "1rem",
         paddingRight: shouldShowFullScreen
           ? "0"
           : windowWidth >= 1024
           ? `calc(${totalOffset}px + 1rem)`
           : "1rem",
-        paddingTop: shouldShowFullScreen ? "0" : "1rem",
-        paddingBottom: shouldShowFullScreen ? "0" : "1rem",
+        paddingTop: shouldShowFullScreen
+          ? isKeyboardOpen
+            ? "0.5rem"
+            : "0"
+          : "1rem",
+        paddingBottom: shouldShowFullScreen
+          ? `${keyboardInset}px`
+          : `${Math.max(keyboardInset, 16)}px`,
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
@@ -165,8 +253,12 @@ export function CheckoutModal({
         className="bg-background rounded-lg shadow-xl w-full flex flex-col"
         style={{
           maxWidth: shouldShowFullScreen ? "100%" : "56rem",
-          maxHeight: shouldShowFullScreen ? "100%" : "90vh",
-          height: shouldShowFullScreen ? "100%" : "auto",
+          maxHeight: shouldShowFullScreen
+            ? overlayHeight
+            : viewportHeight
+            ? `min(90vh, ${viewportHeight - 32}px)`
+            : "90vh",
+          height: shouldShowFullScreen ? overlayHeight : "auto",
           borderRadius: shouldShowFullScreen ? "0" : undefined,
           touchAction: "auto",
           overflowX: "hidden",
@@ -185,14 +277,19 @@ export function CheckoutModal({
           </Button>
         </div>
 
-        <div 
+        <div
           className="flex-1"
           style={{
-            overflowY: 'auto',
-            overflowX: 'hidden',
+            overflowY: "auto",
+            overflowX: "hidden",
+            paddingBottom: isKeyboardOpen ? `${keyboardInset}px` : undefined,
           }}
         >
-          <div className={`gap-6 p-4 sm:p-6 ${useMobileLayout ? 'grid grid-cols-1' : 'grid md:grid-cols-2'}`}>
+          <div
+            className={`gap-6 p-4 sm:p-6 ${
+              useMobileLayout ? "grid grid-cols-1" : "grid md:grid-cols-2"
+            }`}
+          >
             {/* Left Column - Forms */}
             <div className="space-y-6">
               <form onSubmit={handleSubmit} className="space-y-6">
@@ -240,7 +337,15 @@ export function CheckoutModal({
                       />
                     </div>
                     <div>
-                      <Label htmlFor="address_line1" className="text-sm">Address Line 1 *</Label>
+                      <Label
+                        htmlFor="address_line1"
+                        className={cn(
+                          "text-sm",
+                          fieldErrors.address_line1 && "text-destructive"
+                        )}
+                      >
+                        Address Line 1 *
+                      </Label>
                       <Input
                         id="address_line1"
                         value={formData.address_line1}
@@ -249,8 +354,18 @@ export function CheckoutModal({
                         }
                         placeholder="123 Main Street"
                         required
-                        className="text-sm"
+                        className={cn(
+                          "text-sm",
+                          fieldErrors.address_line1 &&
+                            "border-destructive focus-visible:ring-destructive/60"
+                        )}
+                        aria-invalid={Boolean(fieldErrors.address_line1)}
                       />
+                      {fieldErrors.address_line1 && (
+                        <p className="mt-1 text-xs text-destructive">
+                          {fieldErrors.address_line1}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="address_line2" className="text-sm">Address Line 2 (Optional)</Label>
@@ -266,7 +381,15 @@ export function CheckoutModal({
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="city" className="text-sm">City *</Label>
+                        <Label
+                          htmlFor="city"
+                          className={cn(
+                            "text-sm",
+                            fieldErrors.city && "text-destructive"
+                          )}
+                        >
+                          City *
+                        </Label>
                         <Input
                           id="city"
                           value={formData.city}
@@ -275,11 +398,29 @@ export function CheckoutModal({
                           }
                           placeholder="New York"
                           required
-                          className="text-sm"
+                          className={cn(
+                            "text-sm",
+                            fieldErrors.city &&
+                              "border-destructive focus-visible:ring-destructive/60"
+                          )}
+                          aria-invalid={Boolean(fieldErrors.city)}
                         />
+                        {fieldErrors.city && (
+                          <p className="mt-1 text-xs text-destructive">
+                            {fieldErrors.city}
+                          </p>
+                        )}
                       </div>
                       <div>
-                        <Label htmlFor="state" className="text-sm">State/Province *</Label>
+                        <Label
+                          htmlFor="state"
+                          className={cn(
+                            "text-sm",
+                            fieldErrors.state && "text-destructive"
+                          )}
+                        >
+                          State/Province *
+                        </Label>
                         <Input
                           id="state"
                           value={formData.state}
@@ -288,8 +429,18 @@ export function CheckoutModal({
                           }
                           placeholder="NY"
                           required
-                          className="text-sm"
+                          className={cn(
+                            "text-sm",
+                            fieldErrors.state &&
+                              "border-destructive focus-visible:ring-destructive/60"
+                          )}
+                          aria-invalid={Boolean(fieldErrors.state)}
                         />
+                        {fieldErrors.state && (
+                          <p className="mt-1 text-xs text-destructive">
+                            {fieldErrors.state}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -307,7 +458,15 @@ export function CheckoutModal({
                         />
                       </div>
                       <div>
-                        <Label htmlFor="country" className="text-sm">Country *</Label>
+                        <Label
+                          htmlFor="country"
+                          className={cn(
+                            "text-sm",
+                            fieldErrors.country && "text-destructive"
+                          )}
+                        >
+                          Country *
+                        </Label>
                         <Input
                           id="country"
                           value={formData.country}
@@ -316,12 +475,28 @@ export function CheckoutModal({
                           }
                           placeholder="United States"
                           required
-                          className="text-sm"
+                          className={cn(
+                            "text-sm",
+                            fieldErrors.country &&
+                              "border-destructive focus-visible:ring-destructive/60"
+                          )}
+                          aria-invalid={Boolean(fieldErrors.country)}
                         />
+                        {fieldErrors.country && (
+                          <p className="mt-1 text-xs text-destructive">
+                            {fieldErrors.country}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </CardContent>
                 </Card>
+
+                {showValidationHint && (
+                  <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                    Please fill in the highlighted fields before placing your order.
+                  </div>
+                )}
               </form>
             </div>
 
@@ -411,6 +586,7 @@ export function CheckoutModal({
 
                   {/* Place Order Button */}
                   <Button
+                    type="button"
                     onClick={handleSubmit}
                     className="w-full text-sm sm:text-base"
                     size="lg"
