@@ -92,6 +92,8 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(
     null
   );
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const {
     messages,
     setMessages,
@@ -119,6 +121,39 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   }, [sessionId]);
   useEffect(() => {
     setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const updateViewportMetrics = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+        const inset = Math.max(
+          window.innerHeight - window.visualViewport.height,
+          0
+        );
+        setKeyboardInset(inset);
+      } else {
+        setViewportHeight(window.innerHeight);
+        setKeyboardInset(0);
+      }
+    };
+
+    const handleResize = () => {
+      updateViewportMetrics();
+    };
+
+    updateViewportMetrics();
+    window.visualViewport?.addEventListener("resize", updateViewportMetrics);
+    window.visualViewport?.addEventListener("scroll", updateViewportMetrics);
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateViewportMetrics);
+      window.visualViewport?.removeEventListener("scroll", updateViewportMetrics);
+      window.removeEventListener("resize", handleResize);
+    };
   }, []);
 
   useEffect(() => {
@@ -543,13 +578,14 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
   return (
     <div
-      className={`fixed top-0 min-h-[100dvh] bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out ${
+      className={`fixed top-0 bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out ${
         isAssistantOpen ? "translate-x-0" : "translate-x-full"
       }`}
       style={{
         right: isMounted ? right : -450,
         width: isMounted ? sideWidth : 450,
-        height: "100dvh",
+        height: viewportHeight ? `${viewportHeight}px` : "100vh",
+        minHeight: viewportHeight ? `${viewportHeight}px` : "100vh",
         transition:
           "right 300ms ease-in-out, width 300ms ease-in-out, transform 300ms ease-in-out",
       }}
@@ -598,7 +634,10 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             <div
               className="space-y-4 pb-28"
               style={{
-                paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 4rem)",
+                paddingBottom:
+                  keyboardInset > 0
+                    ? `${keyboardInset + 56}px`
+                    : "calc(env(safe-area-inset-bottom, 0px) + 4rem)",
               }}
             >
               {messages.map((message) => {
@@ -1098,7 +1137,10 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
         <div
           className="p-4 border-t bg-muted/30"
           style={{
-            paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1rem)",
+            paddingBottom:
+              keyboardInset > 0
+                ? `${keyboardInset + 16}px`
+                : "calc(env(safe-area-inset-bottom, 0px) + 1rem)",
           }}
         >
           {selectedOrderId && (

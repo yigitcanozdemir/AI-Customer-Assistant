@@ -122,7 +122,7 @@ export function UserEntryModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex w-full items-start justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex w-full items-stretch justify-center bg-black/60 backdrop-blur-sm"
       style={{
         height: containerHeight,
         minHeight: containerHeight,
@@ -141,7 +141,7 @@ export function UserEntryModal() {
     >
       <Card
         className={`mx-auto flex w-full flex-col overflow-hidden shadow-2xl ${
-          shouldForceFullScreen ? "" : "rounded-2xl"
+          shouldForceFullScreen ? "flex-1" : "rounded-2xl"
         }`}
         style={{
           maxWidth: shouldForceFullScreen ? "100%" : "420px",
@@ -170,7 +170,14 @@ export function UserEntryModal() {
           )}
         </CardHeader>
 
-        <CardContent className="flex-1 space-y-4 overflow-y-auto px-4 pb-6 sm:px-6">
+        <CardContent
+          className="flex-1 space-y-4 overflow-y-auto px-4 pb-6 sm:px-6"
+          style={{
+            paddingBottom: isKeyboardOpen
+              ? `${Math.max(keyboardInset, 24)}px`
+              : undefined,
+          }}
+        >
           <form onSubmit={handleSubmit} className="space-y-3">
             <div className="space-y-2">
               <Label htmlFor="firstName" className="text-sm font-medium">

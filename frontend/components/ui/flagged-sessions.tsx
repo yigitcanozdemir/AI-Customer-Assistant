@@ -30,6 +30,7 @@ import {
   Loader2,
   MessageSquareText,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 const STORE_OPTIONS = [
@@ -91,6 +92,11 @@ export function FlaggedSessionsButton() {
   const [reviewNotes, setReviewNotes] = useState<ReviewNotesState>({});
   const [reviewLoading, setReviewLoading] = useState<LoadingMap>({});
   const [storeFilter, setStoreFilter] = useState<string>(store || "all");
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1200
+  );
 
   const hasUserProfile = Boolean(userId);
 
@@ -141,6 +147,74 @@ export function FlaggedSessionsButton() {
       void fetchSessions();
     }
   }, [isOpen, storeFilter, fetchSessions]);
+
+  useEffect(() => {
+    if (!isOpen || typeof window === "undefined") return;
+
+    const updateViewportMetrics = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+        const inset = Math.max(
+          window.innerHeight - window.visualViewport.height,
+          0
+        );
+        setKeyboardInset(inset);
+      } else {
+        setViewportHeight(window.innerHeight);
+        setKeyboardInset(0);
+      }
+    };
+
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+      updateViewportMetrics();
+    };
+
+    updateViewportMetrics();
+    handleResize();
+
+    window.visualViewport?.addEventListener("resize", updateViewportMetrics);
+    window.visualViewport?.addEventListener("scroll", updateViewportMetrics);
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateViewportMetrics);
+      window.visualViewport?.removeEventListener("scroll", updateViewportMetrics);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const lockBody = () => {
+      document.body.style.overflow = "hidden";
+      document.body.style.position = "fixed";
+      document.body.style.width = "100%";
+      document.body.style.height = "100vh";
+    };
+
+    const unlockBody = () => {
+      document.body.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.width = "";
+      document.body.style.height = "";
+    };
+
+    const isMobile = windowWidth < 1024;
+
+    if (isOpen && isMobile) {
+      lockBody();
+    } else if (!isOpen) {
+      unlockBody();
+    }
+
+    return () => {
+      if (!isOpen) {
+        unlockBody();
+      }
+    };
+  }, [isOpen, windowWidth]);
 
   const handleReviewSubmit = async (flaggedId: string) => {
     if (!apiUrl) {
@@ -283,8 +357,13 @@ export function FlaggedSessionsButton() {
           </div>
 
           {session.assessment_reasoning && (
-            <div className="rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
-              {session.assessment_reasoning}
+            <div className="rounded-md bg-muted/40 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Assessment Reasoning
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {session.assessment_reasoning}
+              </p>
             </div>
           )}
 
@@ -381,6 +460,10 @@ export function FlaggedSessionsButton() {
     );
   };
 
+  const isMobileViewport = windowWidth < 1024;
+  const isKeyboardOpen = keyboardInset > 0;
+  const sheetHeight = viewportHeight ? `${viewportHeight}px` : "100vh";
+
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
@@ -394,7 +477,23 @@ export function FlaggedSessionsButton() {
           <Flag className="h-4 w-4" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="flex h-full w-full flex-col sm:max-w-xl">
+      <SheetContent
+        side="right"
+        className={cn(
+          "flex h-full w-full flex-col sm:max-w-xl",
+          isMobileViewport && "rounded-none"
+        )}
+        style={{
+          height: sheetHeight,
+          minHeight: sheetHeight,
+          maxWidth: isMobileViewport ? "100%" : undefined,
+          width: isMobileViewport ? "100%" : undefined,
+          paddingBottom: isMobileViewport
+            ? `${Math.max(keyboardInset, 16)}px`
+            : undefined,
+          paddingTop: isMobileViewport && isKeyboardOpen ? "0.75rem" : undefined,
+        }}
+      >
         <SheetHeader className="border-b">
           <SheetTitle className="flex items-center gap-2">
             <MessageSquareText className="h-4 w-4 text-primary" /> Flagged Sessions
@@ -428,7 +527,15 @@ export function FlaggedSessionsButton() {
         </div>
 
         <div className="flex-1 overflow-hidden">
-          <ScrollArea className="h-full space-y-3 p-4">
+          <ScrollArea
+            className="h-full space-y-3 p-4"
+            style={{
+              paddingBottom:
+                isMobileViewport && isKeyboardOpen
+                  ? `${keyboardInset + 80}px`
+                  : undefined,
+            }}
+          >
             {!hasUserProfile && (
               <div className="rounded-md border border-dashed border-border/60 bg-muted/30 p-6 text-center text-sm text-muted-foreground">
                 Set your user profile to review flagged sessions.

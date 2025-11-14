@@ -106,6 +106,7 @@ export function ShoppingCart({ right, sideWidth }: ShoppingCartProps) {
   const { store: selectedStore } = useStore();
   const [isOrderSuccessOpen, setIsOrderSuccessOpen] = useState(false);
   const [orderData, setOrderData] = useState<CreateOrderResponse | null>(null);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -132,6 +133,31 @@ export function ShoppingCart({ right, sideWidth }: ShoppingCartProps) {
       document.body.style.position = "";
       document.body.style.width = "";
       document.body.style.height = "";
+    };
+  }, [state.isOpen]);
+
+  useEffect(() => {
+    if (!state.isOpen || typeof window === "undefined") return;
+
+    const updateViewportMetrics = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+      } else {
+        setViewportHeight(window.innerHeight);
+      }
+    };
+
+    const handleResize = () => updateViewportMetrics();
+
+    updateViewportMetrics();
+    window.visualViewport?.addEventListener("resize", updateViewportMetrics);
+    window.visualViewport?.addEventListener("scroll", updateViewportMetrics);
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateViewportMetrics);
+      window.visualViewport?.removeEventListener("scroll", updateViewportMetrics);
+      window.removeEventListener("resize", handleResize);
     };
   }, [state.isOpen]);
 
@@ -215,6 +241,8 @@ export function ShoppingCart({ right, sideWidth }: ShoppingCartProps) {
         style={{
           right: isMounted ? right : -450,
           width: isMounted ? sideWidth : 450,
+          height: viewportHeight ? `${viewportHeight}px` : "100vh",
+          minHeight: viewportHeight ? `${viewportHeight}px` : "100vh",
         }}
         onClick={(e) => e.stopPropagation()}
       >

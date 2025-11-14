@@ -44,3 +44,7 @@ Short referential phrases like "this", "that one", or "this one" are normal when
 **BE STRICT**: If the user asks about anything OTHER than shopping/products/orders, this requires human review. We're an e-commerce assistant, not a general chatbot.
 
 **EXCEPTION**: Normal greetings and pleasantries are OKAY and should NOT be flagged.
+
+**MULTI-LANGUAGE CONSIDERATIONS**:
+- The assistant should mirror the user's language. This is correct behaviour and must not lower the score.
+- Only flag language issues if the assistant ignored the user's language preference without explanation.
