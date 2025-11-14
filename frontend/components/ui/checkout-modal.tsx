@@ -72,8 +72,6 @@ export function CheckoutModal({
     Partial<Record<keyof DeliveryAddress, string>>
   >({});
   const [showValidationHint, setShowValidationHint] = useState(false);
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
-  const [keyboardInset, setKeyboardInset] = useState(0);
   const REQUIRED_FIELDS: Array<keyof DeliveryAddress> = [
     "address_line1",
     "city",
@@ -126,36 +124,6 @@ export function CheckoutModal({
       }
     };
   }, [isOpen, state.isOpen, windowWidth]);
-
-  useEffect(() => {
-    if (!isOpen || typeof window === "undefined") return;
-
-    const updateViewportMetrics = () => {
-      if (window.visualViewport) {
-        setViewportHeight(window.visualViewport.height);
-        const inset = Math.max(
-          window.innerHeight - window.visualViewport.height,
-          0
-        );
-        setKeyboardInset(inset);
-      } else {
-        setViewportHeight(window.innerHeight);
-        setKeyboardInset(0);
-      }
-    };
-
-    updateViewportMetrics();
-
-    window.visualViewport?.addEventListener("resize", updateViewportMetrics);
-    window.visualViewport?.addEventListener("scroll", updateViewportMetrics);
-    window.addEventListener("resize", updateViewportMetrics);
-
-    return () => {
-      window.visualViewport?.removeEventListener("resize", updateViewportMetrics);
-      window.visualViewport?.removeEventListener("scroll", updateViewportMetrics);
-      window.removeEventListener("resize", updateViewportMetrics);
-    };
-  }, [isOpen]);
 
   const handleInputChange = (field: keyof DeliveryAddress, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -215,33 +183,21 @@ export function CheckoutModal({
   const availableWidth = windowWidth - totalOffset;
   const useMobileLayout = windowWidth < 1024 || availableWidth < 700;
 
-  const isKeyboardOpen = keyboardInset > 0;
-  const overlayHeight = viewportHeight ? `${viewportHeight}px` : "100vh";
-
   return (
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center"
+      className="fixed inset-0 z-[60] flex min-h-[100dvh] w-full items-start justify-center bg-black/50"
       style={{
-        zIndex: 60,
         overflow: "hidden",
         touchAction: "none",
-        height: overlayHeight,
-        minHeight: overlayHeight,
-        alignItems: isKeyboardOpen ? "flex-start" : "center",
+        alignItems: useMobileLayout ? "flex-start" : "center",
         paddingLeft: shouldShowFullScreen ? "0" : "1rem",
         paddingRight: shouldShowFullScreen
           ? "0"
           : windowWidth >= 1024
           ? `calc(${totalOffset}px + 1rem)`
           : "1rem",
-        paddingTop: shouldShowFullScreen
-          ? isKeyboardOpen
-            ? "0.5rem"
-            : "0"
-          : "1rem",
-        paddingBottom: shouldShowFullScreen
-          ? `${keyboardInset}px`
-          : `${Math.max(keyboardInset, 16)}px`,
+        paddingTop: shouldShowFullScreen ? "0.5rem" : "1rem",
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1rem)",
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
@@ -250,15 +206,14 @@ export function CheckoutModal({
       }}
     >
       <div
-        className="bg-background rounded-lg shadow-xl w-full flex flex-col"
+        className={cn(
+          "flex w-full flex-col bg-background shadow-xl sm:rounded-lg",
+          useMobileLayout && !shouldShowFullScreen ? "h-full" : ""
+        )}
         style={{
           maxWidth: shouldShowFullScreen ? "100%" : "56rem",
-          maxHeight: shouldShowFullScreen
-            ? overlayHeight
-            : viewportHeight
-            ? `min(90vh, ${viewportHeight - 32}px)`
-            : "90vh",
-          height: shouldShowFullScreen ? overlayHeight : "auto",
+          maxHeight: shouldShowFullScreen ? "100dvh" : "min(90dvh, 900px)",
+          height: shouldShowFullScreen ? "100dvh" : undefined,
           borderRadius: shouldShowFullScreen ? "0" : undefined,
           touchAction: "auto",
           overflowX: "hidden",
@@ -277,14 +232,7 @@ export function CheckoutModal({
           </Button>
         </div>
 
-        <div
-          className="flex-1"
-          style={{
-            overflowY: "auto",
-            overflowX: "hidden",
-            paddingBottom: isKeyboardOpen ? `${keyboardInset}px` : undefined,
-          }}
-        >
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
           <div
             className={`gap-6 p-4 sm:p-6 ${
               useMobileLayout ? "grid grid-cols-1" : "grid md:grid-cols-2"

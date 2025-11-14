@@ -1,4 +1,5 @@
 import type React from "react";
+import type { Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Suspense } from "react";
 import { Providers } from "@/components/providers";
@@ -10,6 +11,12 @@ const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  interactiveWidget: "resizes-content",
+};
 
 export default function RootLayout({
   children,

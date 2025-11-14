@@ -213,8 +213,14 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    height: 100%;
+    min-height: 100dvh;
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 
   .font-modern-heading {

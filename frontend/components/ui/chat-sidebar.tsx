@@ -92,8 +92,6 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(
     null
   );
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
-  const [keyboardInset, setKeyboardInset] = useState(0);
   const {
     messages,
     setMessages,
@@ -123,33 +121,6 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     setIsMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const updateViewportMetrics = () => {
-      if (window.visualViewport) {
-        setViewportHeight(window.visualViewport.height);
-        const inset = Math.max(window.innerHeight - window.visualViewport.height, 0);
-        setKeyboardInset(inset);
-      } else {
-        setViewportHeight(window.innerHeight);
-        setKeyboardInset(0);
-      }
-    };
-
-    updateViewportMetrics();
-
-    window.addEventListener("resize", updateViewportMetrics);
-    window.visualViewport?.addEventListener("resize", updateViewportMetrics);
-    window.visualViewport?.addEventListener("scroll", updateViewportMetrics);
-
-    return () => {
-      window.removeEventListener("resize", updateViewportMetrics);
-      window.visualViewport?.removeEventListener("resize", updateViewportMetrics);
-      window.visualViewport?.removeEventListener("scroll", updateViewportMetrics);
-    };
-  }, []);
-  
   useEffect(() => {
     if (isAssistantOpen && typeof window !== "undefined") {
       const isMobile = window.innerWidth < 1024;
@@ -362,12 +333,6 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   }, [messages]);
 
   useEffect(() => {
-    if (keyboardInset > 0) {
-      scrollToBottom();
-    }
-  }, [keyboardInset]);
-
-  useEffect(() => {
     if (isAssistantOpen) {
       document.body.classList.add("sidebar-open");
     } else {
@@ -578,13 +543,13 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
   return (
     <div
-      className={`fixed top-0 h-full bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out ${
+      className={`fixed top-0 min-h-[100dvh] bg-background border-l z-50 shadow-xl transition-all duration-300 ease-in-out ${
         isAssistantOpen ? "translate-x-0" : "translate-x-full"
       }`}
       style={{
         right: isMounted ? right : -450,
         width: isMounted ? sideWidth : 450,
-        height: viewportHeight ? `${viewportHeight}px` : "100vh",
+        height: "100dvh",
         transition:
           "right 300ms ease-in-out, width 300ms ease-in-out, transform 300ms ease-in-out",
       }}
@@ -629,14 +594,13 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
         </div>
 
         <div className="flex-1 overflow-hidden">
-          <ScrollArea
-            className="h-full p-4"
-            style={{
-              paddingBottom:
-                keyboardInset > 0 ? `${keyboardInset + 32}px` : undefined,
-            }}
-          >
-            <div className="space-y-4">
+          <ScrollArea className="h-full p-4">
+            <div
+              className="space-y-4 pb-28"
+              style={{
+                paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 4rem)",
+              }}
+            >
               {messages.map((message) => {
                 const isLatestProductMessage =
                   message.id === latestProductMessageId;
@@ -1134,7 +1098,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
         <div
           className="p-4 border-t bg-muted/30"
           style={{
-            paddingBottom: `${keyboardInset + 16}px`,
+            paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1rem)",
           }}
         >
           {selectedOrderId && (
