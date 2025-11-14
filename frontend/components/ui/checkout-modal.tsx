@@ -72,6 +72,8 @@ export function CheckoutModal({
     Partial<Record<keyof DeliveryAddress, string>>
   >({});
   const [showValidationHint, setShowValidationHint] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const REQUIRED_FIELDS: Array<keyof DeliveryAddress> = [
     "address_line1",
     "city",
@@ -95,35 +97,73 @@ export function CheckoutModal({
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
+    if (typeof window === "undefined") return;
+
+    const lockBody = () => {
       document.body.style.overflow = "hidden";
       document.body.style.position = "fixed";
       document.body.style.width = "100%";
-      document.body.style.height = "100dvh";
-    } else {
-      const isMobile = windowWidth < 1024;
-      if (isMobile && state.isOpen) {
-        document.body.style.overflow = "hidden";
-        document.body.style.position = "fixed";
-        document.body.style.width = "100%";
-        document.body.style.height = "100dvh";
-      } else {
-        document.body.style.overflow = "";
-        document.body.style.position = "";
-        document.body.style.width = "";
-        document.body.style.height = "";
-      }
-    }
+      document.body.style.height = "100vh";
+    };
 
-    return () => {
-      if (!state.isOpen) {
-        document.body.style.overflow = "";
-        document.body.style.position = "";
-        document.body.style.width = "";
-        document.body.style.height = "";
+    const unlockBody = () => {
+      document.body.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.width = "";
+      document.body.style.height = "";
+    };
+
+    const updateBodyLock = () => {
+      const isMobile = window.innerWidth < 1024;
+      if (isMobile && (isOpen || state.isOpen)) {
+        lockBody();
+      } else if (!state.isOpen && !isOpen) {
+        unlockBody();
+      } else if (!isMobile && !state.isOpen && !isOpen) {
+        unlockBody();
       }
     };
-  }, [isOpen, state.isOpen, windowWidth]);
+
+    updateBodyLock();
+    window.addEventListener("resize", updateBodyLock);
+
+    return () => {
+      window.removeEventListener("resize", updateBodyLock);
+      if (!state.isOpen && !isOpen) {
+        unlockBody();
+      }
+    };
+  }, [isOpen, state.isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || typeof window === "undefined") return;
+
+    const updateViewportMetrics = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+        const inset = Math.max(
+          window.innerHeight - window.visualViewport.height,
+          0
+        );
+        setKeyboardInset(inset);
+      } else {
+        setViewportHeight(window.innerHeight);
+        setKeyboardInset(0);
+      }
+    };
+
+    updateViewportMetrics();
+
+    window.visualViewport?.addEventListener("resize", updateViewportMetrics);
+    window.visualViewport?.addEventListener("scroll", updateViewportMetrics);
+    window.addEventListener("resize", updateViewportMetrics);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateViewportMetrics);
+      window.visualViewport?.removeEventListener("scroll", updateViewportMetrics);
+      window.removeEventListener("resize", updateViewportMetrics);
+    };
+  }, [isOpen]);
 
   const handleInputChange = (field: keyof DeliveryAddress, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -182,22 +222,36 @@ export function CheckoutModal({
 
   const availableWidth = windowWidth - totalOffset;
   const useMobileLayout = windowWidth < 1024 || availableWidth < 700;
+  const isMobileViewport = windowWidth < 1024;
+  const isKeyboardOpen = keyboardInset > 0;
+  const overlayHeight = viewportHeight ? `${viewportHeight}px` : "100vh";
+  const shouldForceFullScreen = isMobileViewport || shouldShowFullScreen;
+  const alignToTop = shouldForceFullScreen || isKeyboardOpen;
+  const cardMaxHeight = alignToTop
+    ? overlayHeight
+    : viewportHeight
+    ? `min(90vh, ${viewportHeight - 32}px)`
+    : "90vh";
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex min-h-[100dvh] w-full items-start justify-center bg-black/50"
+      className="fixed inset-0 z-[60] flex w-full items-start justify-center bg-black/50"
       style={{
         overflow: "hidden",
         touchAction: "none",
-        alignItems: useMobileLayout ? "flex-start" : "center",
-        paddingLeft: shouldShowFullScreen ? "0" : "1rem",
-        paddingRight: shouldShowFullScreen
+        height: overlayHeight,
+        minHeight: overlayHeight,
+        alignItems: alignToTop ? "flex-start" : "center",
+        paddingLeft: shouldForceFullScreen ? "0" : "1rem",
+        paddingRight: shouldForceFullScreen
           ? "0"
           : windowWidth >= 1024
           ? `calc(${totalOffset}px + 1rem)`
           : "1rem",
-        paddingTop: shouldShowFullScreen ? "0.5rem" : "1rem",
-        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1rem)",
+        paddingTop: alignToTop ? "0" : shouldShowFullScreen ? "0.5rem" : "1rem",
+        paddingBottom: alignToTop
+          ? `${Math.max(keyboardInset, 0)}px`
+          : "calc(env(safe-area-inset-bottom, 0px) + 1rem)",
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
@@ -208,13 +262,13 @@ export function CheckoutModal({
       <div
         className={cn(
           "flex w-full flex-col bg-background shadow-xl sm:rounded-lg",
-          useMobileLayout && !shouldShowFullScreen ? "h-full" : ""
+          alignToTop ? "h-full" : ""
         )}
         style={{
-          maxWidth: shouldShowFullScreen ? "100%" : "56rem",
-          maxHeight: shouldShowFullScreen ? "100dvh" : "min(90dvh, 900px)",
-          height: shouldShowFullScreen ? "100dvh" : undefined,
-          borderRadius: shouldShowFullScreen ? "0" : undefined,
+          maxWidth: shouldForceFullScreen ? "100%" : "56rem",
+          maxHeight: cardMaxHeight,
+          height: alignToTop ? overlayHeight : undefined,
+          borderRadius: alignToTop ? "0" : undefined,
           touchAction: "auto",
           overflowX: "hidden",
         }}

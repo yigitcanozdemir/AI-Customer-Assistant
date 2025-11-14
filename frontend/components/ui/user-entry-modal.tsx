@@ -16,6 +16,9 @@ export function UserEntryModal() {
   const [lastName, setLastName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -25,6 +28,65 @@ export function UserEntryModal() {
     if (mounted && !isUserSet) {
       requestGeolocation();
     }
+  }, [mounted, isUserSet]);
+
+  useEffect(() => {
+    if (!mounted || isUserSet || typeof window === "undefined") return;
+
+    const updateViewportMetrics = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+        const inset = Math.max(
+          window.innerHeight - window.visualViewport.height,
+          0
+        );
+        setKeyboardInset(inset);
+      } else {
+        setViewportHeight(window.innerHeight);
+        setKeyboardInset(0);
+      }
+    };
+
+    const updateViewportType = () => {
+      setIsMobileViewport(window.innerWidth < 1024);
+    };
+
+    const lockBody = () => {
+      document.body.style.overflow = "hidden";
+      document.body.style.position = "fixed";
+      document.body.style.width = "100%";
+      document.body.style.height = "100vh";
+    };
+
+    const unlockBody = () => {
+      document.body.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.width = "";
+      document.body.style.height = "";
+    };
+
+    const handleResize = () => {
+      updateViewportType();
+      if (window.innerWidth < 1024) {
+        lockBody();
+      } else {
+        unlockBody();
+      }
+    };
+
+    updateViewportMetrics();
+    handleResize();
+
+    window.visualViewport?.addEventListener("resize", updateViewportMetrics);
+    window.visualViewport?.addEventListener("scroll", updateViewportMetrics);
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateViewportMetrics);
+      window.visualViewport?.removeEventListener("scroll", updateViewportMetrics);
+      window.removeEventListener("resize", handleResize);
+      unlockBody();
+    };
   }, [mounted, isUserSet]);
 
   const requestGeolocation = async () => {
@@ -38,6 +100,13 @@ export function UserEntryModal() {
 
   if (!mounted || isUserSet) return null;
 
+  const isKeyboardOpen = keyboardInset > 0;
+  const shouldForceFullScreen = isMobileViewport || isKeyboardOpen;
+  const containerHeight = viewportHeight ? `${viewportHeight}px` : "100vh";
+  const defaultCardMaxHeight = viewportHeight
+    ? `min(90vh, ${viewportHeight - 32}px)`
+    : "90vh";
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName.trim() || !lastName.trim()) return;
@@ -49,13 +118,24 @@ export function UserEntryModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex min-h-[100dvh] w-full items-start justify-center bg-black/50 px-4 pb-6 pt-6 backdrop-blur-sm sm:items-center sm:p-6"
+      className="fixed inset-0 z-[100] flex w-full items-start justify-center bg-black/50 px-4 pb-6 pt-6 backdrop-blur-sm sm:items-center sm:p-6"
       style={{
-        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.5rem)",
+        height: containerHeight,
+        minHeight: containerHeight,
+        alignItems: shouldForceFullScreen ? "flex-start" : "center",
+        paddingTop: shouldForceFullScreen ? 0 : "4rem",
+        paddingBottom: shouldForceFullScreen
+          ? `${Math.max(keyboardInset, 16)}px`
+          : "calc(env(safe-area-inset-bottom, 0px) + 1.5rem)",
       }}
     >
       <Card
-        className="mx-auto flex h-full w-full max-w-md flex-col overflow-hidden rounded-2xl shadow-2xl sm:h-auto sm:max-h-[90dvh]"
+        className="mx-auto flex w-full max-w-md flex-col overflow-hidden rounded-2xl shadow-2xl sm:max-h-[90dvh]"
+        style={{
+          maxHeight: shouldForceFullScreen ? containerHeight : defaultCardMaxHeight,
+          height: shouldForceFullScreen ? containerHeight : undefined,
+          borderRadius: shouldForceFullScreen ? 0 : undefined,
+        }}
       >
         <CardHeader className="pb-4 text-center">
           <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
