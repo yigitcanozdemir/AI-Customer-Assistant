@@ -18,7 +18,9 @@ export function UserEntryModal() {
   const [mounted, setMounted] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [keyboardInset, setKeyboardInset] = useState(0);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1200
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -47,10 +49,6 @@ export function UserEntryModal() {
       }
     };
 
-    const updateViewportType = () => {
-      setIsMobileViewport(window.innerWidth < 1024);
-    };
-
     const lockBody = () => {
       document.body.style.overflow = "hidden";
       document.body.style.position = "fixed";
@@ -66,16 +64,13 @@ export function UserEntryModal() {
     };
 
     const handleResize = () => {
-      updateViewportType();
-      if (window.innerWidth < 1024) {
-        lockBody();
-      } else {
-        unlockBody();
-      }
+      setViewportWidth(window.innerWidth);
+      updateViewportMetrics();
     };
 
     updateViewportMetrics();
-    handleResize();
+    setViewportWidth(window.innerWidth);
+    lockBody();
 
     window.visualViewport?.addEventListener("resize", updateViewportMetrics);
     window.visualViewport?.addEventListener("scroll", updateViewportMetrics);
@@ -100,13 +95,21 @@ export function UserEntryModal() {
 
   if (!mounted || isUserSet) return null;
 
+  const MOBILE_BREAKPOINT = 640;
+  const TABLET_BREAKPOINT = 1024;
+  const isMobileViewport = viewportWidth < MOBILE_BREAKPOINT;
+  const isTabletViewport =
+    viewportWidth >= MOBILE_BREAKPOINT && viewportWidth < TABLET_BREAKPOINT;
+
   const isKeyboardOpen = keyboardInset > 0;
-  const shouldForceFullScreen = isMobileViewport || isKeyboardOpen;
+  const shouldForceFullScreen =
+    isMobileViewport || (isKeyboardOpen && viewportWidth < TABLET_BREAKPOINT);
   const containerHeight = viewportHeight ? `${viewportHeight}px` : "100vh";
   const defaultCardMaxHeight = viewportHeight
     ? `min(90vh, ${viewportHeight - 32}px)`
     : "90vh";
-  const showCompactNotices = isMobileViewport && isKeyboardOpen;
+  const showCompactNotices = isMobileViewport;
+  const showHeaderSubtext = !isMobileViewport || !isKeyboardOpen;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,37 +122,56 @@ export function UserEntryModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex w-full items-start justify-center bg-black/50 px-4 pb-6 pt-6 backdrop-blur-sm sm:items-center sm:p-6"
+      className="fixed inset-0 z-[100] flex w-full items-start justify-center bg-black/60 backdrop-blur-sm"
       style={{
         height: containerHeight,
         minHeight: containerHeight,
         alignItems: shouldForceFullScreen ? "flex-start" : "center",
-        paddingTop: shouldForceFullScreen ? 0 : "4rem",
+        paddingLeft: shouldForceFullScreen ? 0 : "1.5rem",
+        paddingRight: shouldForceFullScreen ? 0 : "1.5rem",
+        paddingTop: shouldForceFullScreen
+          ? 0
+          : isTabletViewport
+          ? "3rem"
+          : "4rem",
         paddingBottom: shouldForceFullScreen
           ? `${Math.max(keyboardInset, 16)}px`
           : "calc(env(safe-area-inset-bottom, 0px) + 1.5rem)",
       }}
     >
       <Card
-        className="mx-auto flex w-full max-w-md flex-col overflow-hidden rounded-2xl shadow-2xl sm:max-h-[90dvh]"
+        className={`mx-auto flex w-full flex-col overflow-hidden shadow-2xl ${
+          shouldForceFullScreen ? "" : "rounded-2xl"
+        }`}
         style={{
-          maxHeight: shouldForceFullScreen ? containerHeight : defaultCardMaxHeight,
+          maxWidth: shouldForceFullScreen ? "100%" : "420px",
+          maxHeight: shouldForceFullScreen
+            ? containerHeight
+            : defaultCardMaxHeight,
           height: shouldForceFullScreen ? containerHeight : undefined,
           borderRadius: shouldForceFullScreen ? 0 : undefined,
         }}
       >
-        <CardHeader className="pb-4 text-center">
-          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+        <CardHeader
+          className={`text-center ${
+            shouldForceFullScreen ? "px-4 pt-4 pb-2" : "px-6 pt-6 pb-4"
+          }`}
+        >
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <User className="w-6 h-6 text-primary" />
           </div>
-          <CardTitle className="text-xl font-modern-heading">Welcome</CardTitle>
-          <p className="text-sm text-muted-foreground mt-2">
-            Please enter your name to continue.
-          </p>
+          <CardTitle className="text-lg font-modern-heading sm:text-xl">
+            Welcome
+          </CardTitle>
+          {showHeaderSubtext && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Please enter your name to continue.
+            </p>
+          )}
         </CardHeader>
 
-        <CardContent className="flex-1 space-y-4 overflow-y-auto">
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <CardContent className="flex-1 space-y-4 overflow-y-auto px-4 pb-6 sm:px-6">
+          <form onSubmit={handleSubmit} className="space-y-3">
             <div className="space-y-2">
               <Label htmlFor="firstName" className="text-sm font-medium">
                 First Name *
@@ -183,7 +205,7 @@ export function UserEntryModal() {
 
             <Button
               type="submit"
-              className="w-full h-10"
+              className="w-full h-11 text-sm font-semibold"
               disabled={!firstName.trim() || !lastName.trim() || isSubmitting}
             >
               {isSubmitting ? "Setting up..." : "Continue"}
