@@ -146,12 +146,10 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
     updateViewportMetrics();
     window.visualViewport?.addEventListener("resize", updateViewportMetrics);
-    window.visualViewport?.addEventListener("scroll", updateViewportMetrics);
     window.addEventListener("resize", handleResize);
 
     return () => {
       window.visualViewport?.removeEventListener("resize", updateViewportMetrics);
-      window.visualViewport?.removeEventListener("scroll", updateViewportMetrics);
       window.removeEventListener("resize", handleResize);
     };
   }, []);
