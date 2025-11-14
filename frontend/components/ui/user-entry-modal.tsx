@@ -106,6 +106,7 @@ export function UserEntryModal() {
   const defaultCardMaxHeight = viewportHeight
     ? `min(90vh, ${viewportHeight - 32}px)`
     : "90vh";
+  const showCompactNotices = isMobileViewport && isKeyboardOpen;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,31 +149,6 @@ export function UserEntryModal() {
         </CardHeader>
 
         <CardContent className="flex-1 space-y-4 overflow-y-auto">
-          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-start space-x-2">
-            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-            <div className="text-xs text-amber-800 dark:text-amber-200">
-              <p className="font-medium mb-1">Demonstration Platform Notice</p>
-              <p>
-                This system is a demonstration of a Retrieval-Augmented
-                Generation (RAG) e-commerce experience. It does not represent a
-                real store, and any personal data you enter will be
-                automatically deleted when you close your browser tab.
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-start space-x-2">
-            <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-            <div className="text-xs text-blue-800 dark:text-blue-200">
-              <p className="font-medium mb-1">Location Data</p>
-              <p>
-                We collect your approximate location for order tracking and
-                delivery purposes. This data is stored temporarily and deleted
-                when you close the tab.
-              </p>
-            </div>
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="firstName" className="text-sm font-medium">
@@ -213,6 +189,59 @@ export function UserEntryModal() {
               {isSubmitting ? "Setting up..." : "Continue"}
             </Button>
           </form>
+
+          {showCompactNotices ? (
+            <>
+              <details className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20 text-xs text-amber-800 dark:text-amber-200">
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  Demo Platform Notice
+                </summary>
+                <div className="px-3 pb-3">
+                  This system is a demonstration of a Retrieval-Augmented Generation (RAG)
+                  e-commerce experience. It does not represent a real store, and any personal
+                  data you enter will be automatically deleted when you close your browser tab.
+                </div>
+              </details>
+              <details className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20 text-xs text-blue-800 dark:text-blue-200">
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium">
+                  <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  Location Data
+                </summary>
+                <div className="px-3 pb-3">
+                  We collect your approximate location for order tracking and delivery purposes. This
+                  data is stored temporarily and deleted when you close the tab.
+                </div>
+              </details>
+            </>
+          ) : (
+            <>
+              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-start space-x-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-amber-800 dark:text-amber-200">
+                  <p className="font-medium mb-1">Demonstration Platform Notice</p>
+                  <p>
+                    This system is a demonstration of a Retrieval-Augmented
+                    Generation (RAG) e-commerce experience. It does not represent a
+                    real store, and any personal data you enter will be
+                    automatically deleted when you close your browser tab.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-start space-x-2">
+                <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-blue-800 dark:text-blue-200">
+                  <p className="font-medium mb-1">Location Data</p>
+                  <p>
+                    We collect your approximate location for order tracking and
+                    delivery purposes. This data is stored temporarily and deleted
+                    when you close the tab.
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
