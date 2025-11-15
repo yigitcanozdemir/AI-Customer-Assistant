@@ -377,7 +377,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   }, [isAssistantOpen]);
 
   const sendMessage = async (content: string) => {
-    if (!content.trim() || isSessionLocked) return;
+    if (!content.trim() || isSessionLocked || isTyping) return;
 
     const userMessage = {
       id: Date.now().toString(),
@@ -462,6 +462,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     suggestion: string,
     messageProducts?: Product[]
   ) => {
+    if (isTyping) return;
     if (messageProducts && messageProducts.length > 0) {
       setSelectedProduct(messageProducts[0]);
       console.log(
@@ -491,7 +492,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   };
 
   const handleSendWithSelectedOrder = () => {
-    if (!selectedOrder || !inputValue.trim()) return;
+    if (!selectedOrder || !inputValue.trim() || isTyping) return;
 
     sendMessage(inputValue);
 
@@ -1050,6 +1051,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                             handleSuggestionClick(suggestion, message.products)
                           }
                           className="text-xs h-7 px-2 rounded-full border-border/50 hover:border-primary/50"
+                          disabled={isTyping}
                         >
                           {suggestion}
                         </Button>
@@ -1174,12 +1176,14 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
               placeholder={
                 isSessionLocked
                   ? "Chat is paused due to policy violations."
+                  : isTyping
+                  ? "Hold tight, I'm replying..."
                   : selectedOrderId
                   ? "What would you like to do with this order?"
                   : "Ask about products, sizing, or styling..."
               }
               onKeyPress={(e) => {
-                if (e.key === "Enter" && !isSessionLocked) {
+                if (e.key === "Enter" && !isSessionLocked && !isTyping) {
                   if (selectedOrderId) {
                     handleSendWithSelectedOrder();
                   } else {
@@ -1188,7 +1192,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                 }
               }}
               className="flex-1 h-9 text-sm bg-background border-border/50"
-              disabled={isSessionLocked}
+              disabled={isSessionLocked || isTyping}
             />
             <Button
               onClick={() => {
@@ -1198,13 +1202,16 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                   sendMessage(inputValue);
                 }
               }}
-              disabled={!inputValue.trim() || isSessionLocked}
+              disabled={!inputValue.trim() || isSessionLocked || isTyping}
               size="sm"
               className="h-9 px-3"
             >
               <Send className="w-4 h-4" />
             </Button>
           </div>
+          <p className="mt-2 text-[11px] text-muted-foreground text-center">
+            Keep in mind AI can make mistakes
+          </p>
         </div>
       </div>
     </div>
