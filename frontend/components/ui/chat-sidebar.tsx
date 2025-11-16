@@ -92,6 +92,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(
     null
   );
+  const pendingActionsRef = useRef<Record<string, PendingAction | null>>({});
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [keyboardInset, setKeyboardInset] = useState(0);
   const {
@@ -116,6 +117,11 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     sessionLockReason,
     setSessionLockReason,
   } = useChat();
+  const sessionStateKey = useMemo(
+    () => `${selectedStore || "default"}:${sessionId}`,
+    [selectedStore, sessionId]
+  );
+
   useEffect(() => {
     hasSentInitialMessage.current = false;
   }, [sessionId]);
@@ -236,9 +242,13 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
         try {
           const data = JSON.parse(event.data);
           console.log("WebSocket message received:", data);
-          if (data.pending_action) {
-            setPendingAction(data.pending_action);
-            console.log("Pending action received:", data.pending_action);
+          if ("pending_action" in data) {
+            const action = data.pending_action ?? null;
+            pendingActionsRef.current[sessionStateKey] = action;
+            setPendingAction(action);
+            if (action) {
+              console.log("Pending action received:", action);
+            }
           }
           if (typeof data.session_locked === "boolean") {
             setIsSessionLocked(data.session_locked);
@@ -308,6 +318,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     setIsTyping,
     setMessages,
     sendInitialMessageToBackend,
+    sessionStateKey,
   ]);
 
   useEffect(() => {
@@ -364,6 +375,10 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    setPendingAction(pendingActionsRef.current[sessionStateKey] ?? null);
+  }, [sessionStateKey]);
 
   useEffect(() => {
     if (isAssistantOpen) {
@@ -515,6 +530,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     sendWebSocketMessage("User confirmed the action", pendingAction.action_id);
 
     setPendingAction(null);
+    pendingActionsRef.current[sessionStateKey] = null;
   };
 
   const handleCancelAction = () => {
@@ -527,6 +543,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
     setMessages((prev) => [...prev, userMessage]);
     setPendingAction(null);
+    pendingActionsRef.current[sessionStateKey] = null;
 
     sendWebSocketMessage("User cancelled the action");
   };

@@ -214,7 +214,8 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
 
                 product_context = product_data
                 order_context = order_data if order_data else None
-                message_history = get_message_history(session_id)
+                message_history = await get_message_history(session_id)
+                next_message_id = len(message_history) + 1
 
                 if is_initial_message:
                     logger.info(
@@ -235,19 +236,21 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         timestamp=datetime.utcnow(),
                         products=[product_context] if product_context else None,
                     )
-                    add_message(session_id, initial_message)
+                    await add_message(session_id, initial_message)
 
                     logger.info(
                         "Stored initial assistant message in session",
                         extra={
                             "session_id": session_id,
-                            "message_count": len(get_message_history(session_id)),
+                            "message_count": len(
+                                await get_message_history(session_id)
+                            ),
                         },
                     )
 
                     continue
 
-                if is_session_locked(session_id):
+                if await is_session_locked(session_id):
                     locked_response = MessageResponse(
                         content=(
                             "This chat session is paused due to repeated policy violations. "
@@ -283,10 +286,10 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     continue
 
                 if order_context:
-                    add_message(
+                    await add_message(
                         session_id,
                         Message(
-                            id=str(len(message_history) + 1),
+                            id=str(next_message_id),
                             type="user",
                             content=f"User selected order: {order_context.order_id}",
                             timestamp=datetime.utcnow(),
@@ -297,26 +300,28 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                             ),
                         ),
                     )
+                    next_message_id += 1
                 if product_context:
-                    add_message(
+                    await add_message(
                         session_id,
                         Message(
-                            id=str(len(message_history) + 1),
+                            id=str(next_message_id),
                             type="user",
                             content=f"User selected product: {product_context.name}",
                             timestamp=datetime.utcnow(),
                             products=[product_context],
                         ),
                     )
+                    next_message_id += 1
 
                 user_message = Message(
-                    id=str(len(message_history) + 1),
+                    id=str(next_message_id),
                     type="user",
                     content=question,
                     timestamp=datetime.utcnow(),
                 )
-                add_message(session_id, user_message)
-                message_history = get_message_history(session_id)
+                await add_message(session_id, user_message)
+                message_history = await get_message_history(session_id)
 
                 abusive_language = contains_abusive_language(question)
 
@@ -419,7 +424,8 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     requires_human=response.requires_human,
                     confidence_score=response.confidence_score,
                 )
-                add_message(session_id, assistant_message)
+                await add_message(session_id, assistant_message)
+                message_history.append(assistant_message)
 
                 if response.requires_human:
                     logger.warning(
@@ -456,7 +462,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         flag_count = await get_flag_count_for_session(session_id)
 
                     if flag_count >= 4:
-                        lock_session(session_id)
+                        await lock_session(session_id)
                         response.session_locked = True
                         response.lock_reason = "policy_violation"
                         response.content = (
