@@ -139,5 +139,36 @@ class CacheManager:
             logger.error(f"Error deleting pending action: {e}")
             return False
 
+    async def get(self, key: str) -> Optional[str]:
+        """Generic get method for string values"""
+        try:
+            cached = await self.redis.get(key)
+            if cached:
+                # Try to decode as string
+                if isinstance(cached, bytes):
+                    return cached.decode('utf-8')
+                return cached
+        except Exception as e:
+            logger.error(f"Cache get error for key {key}: {e}")
+        return None
+
+    async def set(self, key: str, value: str, ttl: int = 3600) -> bool:
+        """Generic set method for string values"""
+        try:
+            await self.redis.setex(key, ttl, value)
+            return True
+        except Exception as e:
+            logger.error(f"Cache set error for key {key}: {e}")
+            return False
+
+    async def delete(self, key: str) -> bool:
+        """Generic delete method"""
+        try:
+            await self.redis.delete(key)
+            return True
+        except Exception as e:
+            logger.error(f"Cache delete error for key {key}: {e}")
+            return False
+
 
 cache_manager = CacheManager()

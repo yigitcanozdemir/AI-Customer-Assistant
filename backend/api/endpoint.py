@@ -21,6 +21,7 @@ from fastapi import (
 )
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from backend.api.chat import handle_chat_event
+from backend.api.two_pass_agent import two_pass_agent
 from backend.api.schema import (
     MessageResponse,
     ProductContext,
@@ -340,15 +341,36 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         assessment_reasoning="Detected prohibited language",
                     )
                 else:
-                    response = await handle_chat_event(
-                        user_input=question,
-                        store=store,
-                        message_history=message_history,
-                        user_id=user_id,
-                        user_name=user_name,
-                        confirm_action_id=confirm_action_id,
-                        selected_order=order_data,
-                    )
+                    use_two_pass = getattr(settings, 'use_two_pass_agent', True)
+
+                    if use_two_pass:
+                        logger.info(
+                            "[Two-Pass] Using new two-pass agent architecture",
+                            extra={"session_id": session_id}
+                        )
+                        response = await two_pass_agent.execute(
+                            user_input=question,
+                            session_id=session_id,
+                            store=store,
+                            user_id=str(user_id),
+                            user_name=user_name,
+                            selected_order=order_data,
+                            confirm_action_id=confirm_action_id,
+                        )
+                    else:
+                        logger.info(
+                            "[Legacy] Using legacy chat handler",
+                            extra={"session_id": session_id}
+                        )
+                        response = await handle_chat_event(
+                            user_input=question,
+                            store=store,
+                            message_history=message_history,
+                            user_id=str(user_id),
+                            user_name=user_name,
+                            confirm_action_id=confirm_action_id,
+                            selected_order=order_data,
+                        )
 
                 span_context = trace.get_current_span().get_span_context()
                 trace_id_str = (

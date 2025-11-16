@@ -5,6 +5,7 @@ Assistant Response: "{assistant_response}"
 Order Context: "{order_context}"
 Tools Used: {tools_used}
 Products Found: {products_found}
+Orders Found: {orders_found}
 
 Evaluate this interaction and provide:
 
@@ -14,6 +15,8 @@ Evaluate this interaction and provide:
    - 0.7-0.9: High confidence, grounded in product/order/FAQ data.
    - 1.0: Complete certainty with verified information.
    - **IMPORTANT**: If the question is NOT about shopping or tools should have been used but were skipped, score should be 0.0-0.3.
+   - **IMPORTANT**: If "Orders Found" > 0, this means order data WAS FOUND and IS AVAILABLE. The assistant has access to the order. Confidence should be HIGH (0.8+) if the response is relevant.
+   - **IMPORTANT**: If "Products Found" > 0, the UI is displaying product data to the user. The assistant's text doesn't need to list details - confidence should be HIGH (0.8+) as long as the text guides the user appropriately.
 
 2. **is_context_relevant**: Is the user's question relevant to e-commerce shopping (products, orders, returns, sizing, availability)?
    - True if about: products, orders, returns, exchanges, shipping, delivery updates, carrier tracking, order status.
@@ -36,8 +39,9 @@ Evaluate this interaction and provide:
 
 5. **warning_message**: If there are concerns, what should we tell the user?
    - Off-topic: "This question is outside my shopping expertise. A team member can help with non-shopping questions."
-   - Low confidence: "I'm not completely certain about this answer."
+   - Low confidence (BUT NOT when Orders Found > 0 or Products Found > 0): "I'm not completely certain about this answer."
    - Tool skipped: "I noticed your question required a tool to provide accurate info. A human agent may be better suited."
+   - **NEVER** warn "couldn't find order" when Orders Found > 0 - the order WAS found!
 
 Short referential phrases like "this", "that one", or "this one" are normal when the UI surfaces the relevant order/product. If the **Order Context** field is populated, assume those pronouns refer to that context and treat the request as a valid e-commerce interaction. Do **not** mark these inputs as off-topic or low confidence solely because they are brief—evaluate them based on whether the assistant used the provided context and tools appropriately.
 

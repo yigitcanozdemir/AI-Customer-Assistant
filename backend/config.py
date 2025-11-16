@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     )
     openai_model: str
     tempo_endpoint: str = "tempo:4317"
+    use_two_pass_agent: bool = True
 
 
 settings = Settings()
