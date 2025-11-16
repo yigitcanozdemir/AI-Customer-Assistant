@@ -144,9 +144,9 @@ class TwoPassAgent:
             if (pass1_output.context_understanding.referenced_order is None and
                 any(tc.tool_name == ToolName.LIST_ORDERS for tc in pass1_output.tool_calls)):
                 self.logger.info(f"[Context] Clearing current_order - user requested to see all orders")
-                await context_manager.update_context(
+                await context_manager.clear_order_context(
                     session_id=session_id,
-                    selected_order=None,
+                    reason="User requested to see all orders"
                 )
                 # CRITICAL: Re-fetch context so Pass 2 uses the cleared context
                 context = await context_manager.get_context(session_id)
@@ -1024,6 +1024,13 @@ CRITICAL RULES FOR VALIDATION:
             # Generate response about the completed action
             action_type = tool_params.get('action', 'process')
             order_id = tool_params.get('order_id', 'unknown')
+            await context_manager.clear_order_context(
+                session_id=context.session_id,
+                reason=f"Order operation completed: {action_type} for order {order_id}"
+            )
+            self.logger.info(
+                f"[Context] Cleared order context after successful {action_type} operation on order {order_id}"
+            )
 
             content = f"Your {action_type} request for order {order_id} has been processed successfully. Is there anything else I can help you with?"
 

@@ -368,6 +368,49 @@ class ContextManager:
             return "No prior context in this conversation."
 
         return "\n".join(f"- {part}" for part in summary_parts)
+    
+    async def clear_order_context(
+        self,
+        session_id: str,
+        reason: str = "Manual clear"
+    ) -> bool:
+        """
+        Clear the current order from context.
+        This is called when:
+        - User completes an order operation (cancel, return)
+        - User explicitly requests to see all orders
+        - Order context becomes stale or invalid
+        Args:
+            session_id: Session identifier
+            reason: Reason for clearing (for logging)
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            context = await self.get_context(session_id)
+
+            if not context:
+                self.logger.warning(f"[Context Clear] No context found for session {session_id}")
+                return True  # Nothing to clear
+
+            # Log the clearing action
+            if context.current_order:
+                order_id = context.current_order.get('order_id', 'unknown')
+                self.logger.info(
+                    f"[Context Clear] Clearing order {order_id} from context. Reason: {reason}"
+                )
+
+            # Clear current order
+            context.current_order = None
+
+            # Save updated context
+            await self.save_context(context)
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"[Context Clear] Error clearing order context: {e}")
+            return False
 
     async def store_pending_confirmation(
         self,
