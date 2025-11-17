@@ -489,17 +489,19 @@ The user is referring to this order when they say "this order", "it", "that one"
                 order_created = context.current_order.get('created_at', 'unknown')
 
                 # Build intent-specific context guidance
+                # When using context.current_order, provide neutral guidance
+                # because user intent may have changed since last interaction
                 intent_guidance = ""
                 if context.last_intent == IntentType.ORDER_MODIFICATION:
                     intent_guidance = """
-**CRITICAL CONTEXT**: The user previously requested to RETURN or CANCEL an order.
-They are now selecting THIS specific order for that modification action.
-When they say "this order", "it", "that one", etc., they want to MODIFY/RETURN/CANCEL it - NOT track it.
-If they confirm selection, call process_order with action=return, NOT fetch_order_location.
+**PREVIOUS CONTEXT**: The user previously requested to RETURN or CANCEL an order.
+This order may be the target of that modification request.
+IMPORTANT: Check the CURRENT user message to determine if they still want to modify, or if intent has changed.
 """
                 elif context.last_intent == IntentType.ORDER_TRACKING:
                     intent_guidance = """
-**CONTEXT**: The user is tracking this order.
+**PREVIOUS CONTEXT**: The user previously tracked this order.
+IMPORTANT: Check the CURRENT user message to determine current intent (they may now want to modify/return it).
 """
 
                 order_context_info = f"""
