@@ -120,6 +120,47 @@ class ContextUnderstanding(StrictModel):
     conversation_flow: Optional[str] = None
 
 
+class AssessmentInfo(StrictModel):
+    """
+    Self-assessment information from Pass 1.
+    This replaces the separate assessment LLM call for better performance.
+    """
+
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score 0.0-1.0 for intent recognition quality"
+    )
+
+    flagging_reason: Literal["none", "potential_error", "off_topic", "unclear_request"] = Field(
+        default="none",
+        description="Reason for flagging this response for attention"
+    )
+
+    orders_found: int = Field(
+        default=0,
+        ge=0,
+        description="Number of orders found in context or tools"
+    )
+
+    products_found: int = Field(
+        default=0,
+        ge=0,
+        description="Number of products found in context or tools"
+    )
+
+    context_used: bool = Field(
+        default=False,
+        description="Whether conversation context was used in this response"
+    )
+
+    suggested_fallback: Optional[str] = Field(
+        None,
+        description="Suggested fallback response if confidence is low or flagged"
+    )
+
+
 class Pass1Output(StrictModel):
     """
     Pass 1 Output Schema - LLM Intent Recognition & Tool Planning
@@ -132,6 +173,7 @@ class Pass1Output(StrictModel):
     2. Determine which tools (if any) need to be called
     3. Extract the necessary parameters for each tool
     4. Understand context from conversation history
+    5. Provide self-assessment for quality and flagging
     """
     model_config = ConfigDict(extra="forbid")  # Strict validation for OpenAI
 
@@ -155,11 +197,9 @@ class Pass1Output(StrictModel):
         description="Whether this action requires user confirmation before execution"
     )
 
-    confidence: float = Field(
-        default=1.0,
-        ge=0.0,
-        le=1.0,
-        description="Confidence in intent recognition (0.0-1.0)"
+    assessment: AssessmentInfo = Field(
+        ...,
+        description="Self-assessment of intent recognition quality and potential issues"
     )
 
     @field_validator('tool_calls')

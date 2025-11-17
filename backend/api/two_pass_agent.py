@@ -41,7 +41,6 @@ from backend.api.schema import (
     MessageResponse,
     Message,
     PendingAction,
-    ResponseAssessment,
 )
 from backend.services.tool import call_tool as execute_tool
 from backend.services.context_manager import context_manager
@@ -199,9 +198,26 @@ class TwoPassAgent:
                     selected_order=order_dict,
                 )
 
+            # Update context with Pass 1 understanding
             tool_names = [tc.tool_name.value for tc in pass1_output.tool_calls]
+
+            # CRITICAL: If Pass 1 set referenced_order to null (intent switch), clear current_order from context
+            if pass1_output.context_understanding.referenced_order is None and context.current_order is not None:
+                self.logger.info(
+                    f"[Context] Pass 1 cleared order reference (intent switch detected). "
+                    f"Clearing current_order from context. Conversation flow: {pass1_output.context_understanding.conversation_flow}"
+                )
+                await context_manager.clear_order_context(
+                    session_id=session_id,
+                    reason=f"Intent switch detected: {pass1_output.context_understanding.conversation_flow}"
+                )
+                # Refresh context after clearing
+                context = await context_manager.get_context(session_id)
+
+            # Update context with Pass 1 output (includes intent) and tool calls
             await context_manager.update_context(
                 session_id=session_id,
+                pass1_output=pass1_output,
                 tool_calls=tool_names,
             )
 
@@ -256,34 +272,96 @@ class TwoPassAgent:
                 trace.pass2_completed_at = time.perf_counter()
                 trace.pass2_output = pass2_output
 
-            # Assessment
-            assessment = await self._assess_response(
-                user_input=user_input,
-                pass1_output=pass1_output,
-                response_content=trace.pass2_output or "Pending confirmation",
-                tool_results=tool_results,
-                selected_order=selected_order,
-                context=context,
+            # Use assessment from Pass 1 (no separate LLM call needed)
+            pass1_assessment = pass1_output.assessment
+
+            # Determine if human intervention is needed based on Pass 1 assessment
+            # CRITICAL: Don't flag if policy successfully denied an action - that's working as intended
+            policy_denial = (
+                pass1_output.requires_confirmation and
+                any(tc.tool_name == ToolName.PROCESS_ORDER for tc in pass1_output.tool_calls) and
+                trace.pass2_output and
+                "VALIDATION:DENIED" in trace.pass2_output
+            )
+
+            requires_human = (
+                pass1_assessment.confidence < 0.5 or
+                pass1_assessment.flagging_reason in ["off_topic", "unclear_request"]
+            ) and not policy_denial  # Don't flag successful policy denials
+
+            # Use suggested fallback if provided and confidence is low
+            response_content = trace.pass2_output or "Please confirm the action above."
+            if pass1_assessment.suggested_fallback and pass1_assessment.confidence < 0.7:
+                response_content = pass1_assessment.suggested_fallback
+
+            # Convert flagging reason to warning message
+            warning_message = None
+            if pass1_assessment.flagging_reason == "potential_error":
+                warning_message = "There may be an issue with your request."
+            elif pass1_assessment.flagging_reason == "unclear_request":
+                warning_message = "Your request needs clarification."
+
+            self.logger.info(
+                f"[Assessment] From Pass 1: confidence={pass1_assessment.confidence:.2f}, "
+                f"flagging={pass1_assessment.flagging_reason}, requires_human={requires_human}"
             )
 
             # Build final response
             trace.current_state = AgentState.COMPLETE
             trace.total_duration_ms = (time.perf_counter() - start_time) * 1000
 
+            # Build detailed natural language assessment reasoning
+            reasoning_parts = []
+
+            # Main intent and confidence
+            intent_name = pass1_output.intent.value.replace('_', ' ').title()
+            reasoning_parts.append(f"Detected {intent_name} request with {pass1_assessment.confidence:.0%} confidence")
+
+            # Context usage
+            if pass1_assessment.context_used:
+                context_details = []
+                if pass1_assessment.orders_found > 0:
+                    context_details.append(f"{pass1_assessment.orders_found} order(s)")
+                if pass1_assessment.products_found > 0:
+                    context_details.append(f"{pass1_assessment.products_found} product(s)")
+
+                if context_details:
+                    reasoning_parts.append(f"using conversation context with {' and '.join(context_details)}")
+
+            # Tool usage
+            if len(pass1_output.tool_calls) > 0:
+                tool_names = [tc.tool_name.value.replace('_', ' ') for tc in pass1_output.tool_calls]
+                reasoning_parts.append(f"Called: {', '.join(tool_names)}")
+
+            # Flagging reason (if any)
+            if pass1_assessment.flagging_reason != "none":
+                flag_messages = {
+                    "potential_error": "Potential issue detected",
+                    "off_topic": "Request outside e-commerce domain",
+                    "unclear_request": "Request needs clarification"
+                }
+                reasoning_parts.append(flag_messages.get(pass1_assessment.flagging_reason, pass1_assessment.flagging_reason))
+
+            assessment_reasoning = ". ".join(reasoning_parts) + "."
+
+            # Extract tool names for logging
+            tools_used = [tc.tool_name.value for tc in pass1_output.tool_calls] if pass1_output.tool_calls else []
+
             final_response = MessageResponse(
-                content=trace.pass2_output or "Please confirm the action above.",
+                content=response_content,
                 store=store,
                 suggestions=[],
                 products=products,
                 orders=orders,
                 tracking_data=tracking_data,
                 timestamp=datetime.now(timezone.utc),
-                requires_human=assessment.requires_human,
-                confidence_score=assessment.confidence_score,
-                is_context_relevant=assessment.is_context_relevant,
+                requires_human=requires_human,
+                confidence_score=pass1_assessment.confidence,
+                is_context_relevant=(pass1_assessment.flagging_reason != "off_topic"),
                 pending_action=pending_action,
-                warning_message=assessment.warning_message,
-                assessment_reasoning=assessment.reasoning,
+                warning_message=warning_message,
+                assessment_reasoning=assessment_reasoning,
+                tools_used=tools_used,
             )
 
             trace.final_response = final_response.model_dump()
@@ -415,8 +493,24 @@ The user is referring to this order when they say "this order", "it", "that one"
             trace.pass1_raw_output = json.dumps(pass1_output.model_dump(), indent=2)
 
             self.logger.info(
-                f"[Pass 1] Intent: {pass1_output.intent}, Tools: {len(pass1_output.tool_calls)}, Confidence: {pass1_output.confidence}"
+                f"[Pass 1] Intent: {pass1_output.intent}, Tools: {len(pass1_output.tool_calls)}, Confidence: {pass1_output.assessment.confidence:.2f}, Flagging: {pass1_output.assessment.flagging_reason}"
             )
+
+            # Log detailed Pass 1 output for debugging
+            tool_names = [tc.tool_name.value for tc in pass1_output.tool_calls]
+            self.logger.info(
+                f"[Pass 1 Details] Tools: {tool_names}, "
+                f"Referenced Order: {pass1_output.context_understanding.referenced_order}, "
+                f"Referenced Product: {pass1_output.context_understanding.referenced_product}, "
+                f"Conversation Flow: {pass1_output.context_understanding.conversation_flow}"
+            )
+
+            # Log raw JSON for debugging (truncated if too long)
+            raw_json = json.dumps(pass1_output.model_dump(), indent=2)
+            if len(raw_json) > 2000:
+                self.logger.debug(f"[Pass 1 Raw JSON] {raw_json[:2000]}... (truncated)")
+            else:
+                self.logger.debug(f"[Pass 1 Raw JSON] {raw_json}")
 
             return pass1_output
 
@@ -1055,72 +1149,6 @@ CRITICAL RULES FOR VALIDATION:
                 is_context_relevant=True,
             )
 
-    async def _assess_response(
-        self,
-        user_input: str,
-        pass1_output: Pass1Output,
-        response_content: str,
-        tool_results: List[ToolResult],
-        selected_order: Any,
-        context: 'ConversationContext' = None,
-    ) -> ResponseAssessment:
-        """Assess the quality of the response"""
-        try:
-            # Import here to avoid circular dependency
-            from backend.api.chat import get_llm_assessment
-
-            tools_used = len(tool_results) > 0
-            products_found = sum(
-                1 for r in tool_results
-                if r.tool_name == ToolName.PRODUCT_SEARCH and r.success
-            )
-            orders_found = 0
-            for r in tool_results:
-                if r.tool_name == ToolName.LIST_ORDERS and r.success:
-                    if hasattr(r.data, 'orders'):
-                        orders_found = len(r.data.orders)
-                # Also count tracking as "order data present"
-                elif r.tool_name == ToolName.FETCH_ORDER_LOCATION and r.success and r.data:
-                    orders_found = 1
-
-            # If frontend provided selected_order, count it as order data present
-            if selected_order and orders_found == 0:
-                orders_found = 1
-
-            # CRITICAL: If context has current_order but tools didn't find any, count it
-            if orders_found == 0 and context and context.current_order:
-                orders_found = 1
-                self.logger.info(f"[Assessment] Counted context.current_order as orders_found=1")
-
-            selected_order_id = str(selected_order.order_id) if selected_order else None
-            product_name = (
-                selected_order.product.name
-                if selected_order and hasattr(selected_order, 'product')
-                else ""
-            )
-
-            assessment = await get_llm_assessment(
-                user_input=user_input,
-                assistant_response=response_content,
-                tool_calls_used=tools_used,
-                products_found=products_found,
-                orders_found=orders_found,
-                selected_order_id=selected_order_id,
-                product_name=product_name,
-            )
-
-            return assessment
-
-        except Exception as e:
-            self.logger.error(f"Error in assessment: {e}")
-
-            return ResponseAssessment(
-                confidence_score=0.7,
-                is_context_relevant=True,
-                requires_human=False,
-                reasoning="Assessment failed, using default values",
-                warning_message=None,
-            )
 
     async def _create_fallback_response(
         self,

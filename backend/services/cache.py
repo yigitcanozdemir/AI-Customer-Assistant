@@ -30,7 +30,20 @@ class CacheManager:
             await self.redis.close()
 
     def _hash_key(self, text: str) -> str:
-        return hashlib.md5(text.encode()).hexdigest()
+        """
+        Generate MD5 hash for cache key with text normalization.
+        Normalization improves cache hit rate by treating similar queries as identical.
+        """
+        # Normalize text for better cache hits:
+        # 1. Convert to lowercase
+        # 2. Strip leading/trailing whitespace
+        # 3. Collapse multiple spaces into single space
+        # 4. Remove trailing punctuation (?, !, ., etc.)
+        normalized = text.lower().strip()
+        normalized = ' '.join(normalized.split())  # Collapse spaces
+        normalized = normalized.rstrip('?!.,;:')  # Remove trailing punctuation
+
+        return hashlib.md5(normalized.encode()).hexdigest()
 
     async def get_embedding(self, text: str) -> Optional[List[float]]:
         try:
@@ -81,6 +94,44 @@ class CacheManager:
                 await self.redis.delete(key)
         except Exception as e:
             logger.error(f"Cache invalidate error: {e}")
+
+    async def get_faq_search(
+        self, query: str, store: str, top_k: int
+    ) -> Optional[List]:
+        try:
+            key = f"faq:{store}:{top_k}:{self._hash_key(query)}"
+            cached = await self.redis.get(key)
+            if cached:
+                return pickle.loads(cached)
+        except Exception as e:
+            logger.error(f"Cache get FAQ search error: {e}")
+        return None
+
+    async def set_faq_search(
+        self, query: str, store: str, top_k: int, results: List
+    ):
+        try:
+            key = f"faq:{store}:{top_k}:{self._hash_key(query)}"
+            await self.redis.setex(
+                key, settings.redis_ttl_search, pickle.dumps(results)
+            )
+        except Exception as e:
+            logger.error(f"Cache set FAQ search error: {e}")
+
+    async def invalidate_faq_cache(self, store: str):
+        """
+        Invalidate all FAQ search cache entries for a specific store.
+        Call this when FAQ content is updated in the database.
+        """
+        try:
+            pattern = f"faq:{store}:*"
+            count = 0
+            async for key in self.redis.scan_iter(match=pattern):
+                await self.redis.delete(key)
+                count += 1
+            logger.info(f"Invalidated {count} FAQ cache entries for store: {store}")
+        except Exception as e:
+            logger.error(f"FAQ cache invalidate error: {e}")
 
     async def get_product_list(self, store: str, limit: int) -> Optional[List]:
         try:

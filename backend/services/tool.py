@@ -4,6 +4,7 @@ from backend.db.session import get_session
 from backend.db.schema import Product, Variant, Embedding, FAQ, Order
 from backend.services.embedding import create_embedding
 from backend.api.helper import format_products
+from backend.services.cache import cache_manager
 import logging
 import uuid
 from datetime import datetime
@@ -23,6 +24,14 @@ logger = logging.getLogger(__name__)
 
 async def product_search(query: str, store=str, top_k: int = 1):
     try:
+        # Check cache first
+        cached_results = await cache_manager.get_product_search(query, store, top_k)
+        if cached_results is not None:
+            logger.info(f"[Product Search] Cache HIT for query='{query}', store={store}")
+            return cached_results
+
+        logger.debug(f"[Product Search] Cache MISS - Executing search for query='{query}', store={store}")
+
         embedding_vector = await create_embedding(query)
 
         async with get_session() as session:
@@ -92,7 +101,14 @@ async def product_search(query: str, store=str, top_k: int = 1):
                 product_map[pid] for pid in product_ids if pid in product_map
             ]
 
-            return format_products(ordered_products)
+            # Format results
+            results = format_products(ordered_products)
+
+            # Store in cache
+            await cache_manager.set_product_search(query, store, top_k, results)
+            logger.debug(f"[Product Search] Cached results for query='{query}', store={store}")
+
+            return results
 
     except Exception as e:
         logger.error(f"Product search error: {e}")
@@ -115,6 +131,14 @@ async def product_search(query: str, store=str, top_k: int = 1):
 
 async def faq_search(query: str, store: str, top_k: int = 1):
     try:
+        # Check cache first
+        cached_results = await cache_manager.get_faq_search(query, store, top_k)
+        if cached_results is not None:
+            logger.info(f"[FAQ Search] Cache HIT for query='{query}', store={store}")
+            return cached_results
+
+        logger.debug(f"[FAQ Search] Cache MISS - Executing search for query='{query}', store={store}")
+
         embedding_vector = await create_embedding(query)
 
         async with get_session() as session:
@@ -137,7 +161,14 @@ async def faq_search(query: str, store: str, top_k: int = 1):
                     extra={"query": query, "top_k": top_k},
                 )
 
-        return [{"id": faq.id, "content": faq.content} for faq in faqs_with_distance]
+        # Format results
+        results = [{"id": faq.id, "content": faq.content} for faq in faqs_with_distance]
+
+        # Store in cache
+        await cache_manager.set_faq_search(query, store, top_k, results)
+        logger.debug(f"[FAQ Search] Cached results for query='{query}', store={store}")
+
+        return results
 
     except Exception as e:
         logger.error(f"FAQ search error: {e}")

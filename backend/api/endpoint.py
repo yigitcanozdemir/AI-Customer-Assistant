@@ -383,7 +383,6 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     if span_context
                     else "N/A"
                 )
-                tools_used = []
 
                 log_chat_interaction(
                     session_id=session_id,
@@ -396,7 +395,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     requires_human=response.requires_human,
                     products_found=len(response.products) if response.products else 0,
                     orders_found=len(response.orders) if response.orders else 0,
-                    tools_used=tools_used,
+                    tools_used=response.tools_used if response.tools_used else [],
                     trace_id=trace_id_str,
                     duration_ms=round((time.perf_counter() - msg_start) * 1000, 2),
                 )

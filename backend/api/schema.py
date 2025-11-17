@@ -178,6 +178,7 @@ class MessageResponse(BaseModel):
     assessment_reasoning: Optional[str] = None
     session_locked: bool = False
     lock_reason: Optional[str] = None
+    tools_used: Optional[List[str]] = None
 
 
 class Message(BaseModel):

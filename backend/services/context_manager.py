@@ -158,7 +158,9 @@ class ContextManager:
                     product_id = product.id if hasattr(product, 'id') else product.get('id')
 
                     if product_id not in existing_ids:
-                        context.recent_products.append(product)
+                        # Convert Product model to dict for Pydantic serialization compatibility
+                        product_dict = product.model_dump() if hasattr(product, 'model_dump') else product
+                        context.recent_products.append(product_dict)
 
                 # Keep only last N products
                 context.recent_products = context.recent_products[-self.MAX_RECENT_PRODUCTS:]
@@ -361,8 +363,12 @@ class ContextManager:
 
         # Pending confirmation
         if context.pending_confirmation:
-            action = context.pending_confirmation.get('action_type', 'unknown')
-            summary_parts.append(f"Pending confirmation: {action}")
+            parameters = context.pending_confirmation.get('parameters', {})
+            specific_action = parameters.get('action', 'unknown')
+            order_id = parameters.get('order_id', 'unknown')
+            summary_parts.append(
+                f"Pending confirmation: {specific_action} order {order_id} (user must say 'confirm' or select from UI)"
+            )
 
         if not summary_parts:
             return "No prior context in this conversation."
