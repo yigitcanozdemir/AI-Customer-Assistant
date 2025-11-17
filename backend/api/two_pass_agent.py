@@ -203,33 +203,66 @@ class TwoPassAgent:
                 )
 
             # Update current_order when tracking is fetched
+            # BUT: Don't overwrite if user is in modification flow (selecting order to return/cancel)
             if tracking_data:
-                # Convert tracking_data to dict for context storage
-                order_dict = {
-                    'order_id': str(tracking_data.order_id),
-                    'status': tracking_data.status,
-                    'created_at': str(tracking_data.created_at),
-                }
-                await context_manager.update_context(
-                    session_id=session_id,
-                    selected_order=order_dict,
+                # Only update current_order if intent is ORDER_TRACKING
+                # This prevents tracking data from overwriting a modification target
+                should_update_current_order = (
+                    pass1_output.intent == IntentType.ORDER_TRACKING or
+                    context.current_order is None
                 )
+
+                if should_update_current_order:
+                    # Convert tracking_data to dict for context storage
+                    order_dict = {
+                        'order_id': str(tracking_data.order_id),
+                        'status': tracking_data.status,
+                        'created_at': str(tracking_data.created_at),
+                    }
+                    await context_manager.update_context(
+                        session_id=session_id,
+                        selected_order=order_dict,
+                    )
+                    self.logger.info(
+                        f"[Context] Updated current_order from tracking data "
+                        f"(order_id={tracking_data.order_id}, intent={pass1_output.intent})"
+                    )
+                else:
+                    self.logger.info(
+                        f"[Context] Skipping current_order update from tracking_data - "
+                        f"user in non-tracking flow (intent={pass1_output.intent}, current_order exists)"
+                    )
 
             # Update context with Pass 1 understanding
             tool_names = [tc.tool_name.value for tc in pass1_output.tool_calls]
 
             # CRITICAL: If Pass 1 set referenced_order to null (intent switch), clear current_order from context
+            # BUT: Don't clear if user is in modification flow (they're selecting an order to modify)
             if pass1_output.context_understanding.referenced_order is None and context.current_order is not None:
-                self.logger.info(
-                    f"[Context] Pass 1 cleared order reference (intent switch detected). "
-                    f"Clearing current_order from context. Conversation flow: {pass1_output.context_understanding.conversation_flow}"
+                # Check if this is part of an order modification flow (same check as above)
+                is_modification_flow = (
+                    pass1_output.intent == IntentType.ORDER_MODIFICATION or
+                    context.last_intent == IntentType.ORDER_MODIFICATION
                 )
-                await context_manager.clear_order_context(
-                    session_id=session_id,
-                    reason=f"Intent switch detected: {pass1_output.context_understanding.conversation_flow}"
-                )
-                # Refresh context after clearing
-                context = await context_manager.get_context(session_id)
+
+                if not is_modification_flow:
+                    # True intent switch - clear stale order context
+                    self.logger.info(
+                        f"[Context] Pass 1 cleared order reference (intent switch detected). "
+                        f"Clearing current_order from context. Conversation flow: {pass1_output.context_understanding.conversation_flow}"
+                    )
+                    await context_manager.clear_order_context(
+                        session_id=session_id,
+                        reason=f"Intent switch detected: {pass1_output.context_understanding.conversation_flow}"
+                    )
+                    # Refresh context after clearing
+                    context = await context_manager.get_context(session_id)
+                else:
+                    # User is in modification flow - preserve context for order selection
+                    self.logger.info(
+                        f"[Context] NOT clearing current_order despite referenced_order=None - "
+                        f"user in modification flow (current_intent={pass1_output.intent}, last_intent={context.last_intent})"
+                    )
 
             # Update context with Pass 1 output (includes intent) and tool calls
             await context_manager.update_context(
