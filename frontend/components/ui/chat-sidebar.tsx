@@ -23,8 +23,9 @@ import { useUser } from "@/context/UserContext";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import dynamic from "next/dynamic";
+import type { TrackingMapProps } from "@/components/ui/TrackingMap";
 
-const TrackingMap = dynamic(
+const TrackingMap = dynamic<TrackingMapProps>(
   () =>
     import("@/components/ui/TrackingMap").then((mod) => ({
       default: mod.TrackingMap,
@@ -75,6 +76,44 @@ const formatCurrency = (price: number, currency: string): string => {
   }
 };
 
+const ORDER_STATUS_STEPS = ["created", "shipped", "delivered"] as const;
+
+const formatStatusLabel = (status?: string | null) => {
+  if (!status) return "";
+  return status
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+};
+
+const getStatusAccentClass = (status?: string | null) => {
+  const normalized = (status || "").toLowerCase();
+  if (normalized === "delivered") return "text-success";
+  if (normalized === "created" || normalized === "returned") return "text-warning";
+  if (normalized === "cancelled") return "text-destructive";
+  return "text-primary";
+};
+
+const getStepClassForStatus = (status: string, index: number) => {
+  const normalized = status.toLowerCase();
+  if (normalized === "delivered") {
+    return index <= 2 ? "bg-success" : "bg-border/70";
+  }
+  if (normalized === "shipped") {
+    return index <= 1 ? "bg-primary" : "bg-border/70";
+  }
+  if (normalized === "returned") {
+    return index === 0 ? "bg-warning" : "bg-border/70";
+  }
+  if (normalized === "cancelled") {
+    return index === 0 ? "bg-destructive" : "bg-border/70";
+  }
+  if (normalized === "created") {
+    return index === 0 ? "bg-warning" : "bg-border/70";
+  }
+  return index === 0 ? "bg-primary" : "bg-border/70";
+};
+
 interface ChatSidebarProps {
   right: number;
   sideWidth: number;
@@ -93,6 +132,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     null
   );
   const pendingActionsRef = useRef<Record<string, PendingAction | null>>({});
+  const ordersRegistryRef = useRef<Record<string, Order>>({});
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [keyboardInset, setKeyboardInset] = useState(0);
   const {
@@ -377,6 +417,14 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   }, [messages]);
 
   useEffect(() => {
+    messages.forEach((message) => {
+      message.orders?.forEach((order) => {
+        ordersRegistryRef.current[order.order_id] = order;
+      });
+    });
+  }, [messages]);
+
+  useEffect(() => {
     setPendingAction(pendingActionsRef.current[sessionStateKey] ?? null);
   }, [sessionStateKey]);
 
@@ -394,11 +442,18 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   const sendMessage = async (content: string) => {
     if (!content.trim() || isSessionLocked || isTyping) return;
 
+    const replyProductSnapshot = selectedProduct
+      ? { ...selectedProduct }
+      : null;
+    const replyOrderSnapshot = selectedOrder ? { ...selectedOrder } : null;
+
     const userMessage = {
       id: Date.now().toString(),
       type: "user" as const,
       content,
       timestamp: new Date(),
+      reply_product: replyProductSnapshot,
+      reply_order: replyOrderSnapshot,
     };
 
     setMessages((prev) => [...prev, userMessage]);
@@ -562,6 +617,22 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     return null;
   }, [messages]);
 
+  const pendingOrderId = (() => {
+    if (!pendingAction) return null;
+    const rawOrderId = (pendingAction.parameters || {}).order_id as
+      | string
+      | number
+      | undefined;
+    if (typeof rawOrderId === "string") return rawOrderId;
+    if (typeof rawOrderId === "number") return rawOrderId.toString();
+    return null;
+  })();
+
+  const pendingOrderPreview =
+    pendingOrderId && ordersRegistryRef.current[pendingOrderId]
+      ? ordersRegistryRef.current[pendingOrderId]
+      : null;
+
   const handleRemoveProductMessage = useCallback(
     (messageId: string) => {
       let removed = false;
@@ -662,20 +733,137 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                 const trackingStatus = message.tracking_data?.status
                   ? message.tracking_data.status.toLowerCase()
                   : null;
+                const isReturned = trackingStatus === "returned";
+                const isCancelled = trackingStatus === "cancelled";
+                const currentLocation = message.tracking_data?.current_location;
+                const deliveryAddress = message.tracking_data?.delivery_address;
+                const hasCurrentLocationData = Boolean(currentLocation);
+                const hasDeliveryAddressData = Boolean(deliveryAddress);
                 const shouldShowTrackingMap =
                   Boolean(message.tracking_data) &&
-                  trackingStatus !== "created" &&
+                  !isCancelled &&
+                  (trackingStatus !== "created" || isReturned) &&
                   Boolean(
-                    message.tracking_data?.current_location ||
-                      message.tracking_data?.delivery_address
+                    (isReturned && (hasDeliveryAddressData || hasCurrentLocationData)) ||
+                      (!isReturned &&
+                        (hasCurrentLocationData || hasDeliveryAddressData))
                   );
                 const showCurrentLocationDetails =
-                  Boolean(message.tracking_data?.current_location) &&
-                  trackingStatus !== "created";
-                const currentLocation = message.tracking_data?.current_location;
+                  !isCancelled &&
+                  ((isReturned && hasDeliveryAddressData) ||
+                    (!isReturned &&
+                      trackingStatus !== "created" &&
+                      hasCurrentLocationData));
+                const showDeliveryAddressDetails = isReturned
+                  ? hasCurrentLocationData
+                  : hasDeliveryAddressData;
+                const trackingOrder = message.tracking_data?.order_id
+                  ? ordersRegistryRef.current[message.tracking_data.order_id]
+                  : null;
+                const statusLabel =
+                  trackingStatus === "created"
+                    ? "Order Placed"
+                    : trackingStatus === "shipped"
+                    ? "In Transit"
+                    : trackingStatus === "delivered"
+                    ? "Delivered"
+                    : trackingStatus === "returned"
+                    ? "Return Pending"
+                    : trackingStatus === "cancelled"
+                    ? "Cancelled"
+                    : "Order Update";
+                const statusIndicatorClass =
+                  trackingStatus === "delivered"
+                    ? "bg-success"
+                    : trackingStatus === "shipped"
+                    ? "bg-primary animate-pulse"
+                    : trackingStatus === "cancelled"
+                    ? "bg-muted-foreground"
+                    : "bg-warning";
+                const showEta =
+                  trackingStatus === "created" || trackingStatus === "shipped";
+                const truckColorClass =
+                  trackingStatus === "delivered"
+                    ? "text-success"
+                    : trackingStatus === "cancelled"
+                    ? "text-muted-foreground"
+                    : "text-primary";
 
                 return (
                   <div key={message.id} className="space-y-3">
+                    {message.reply_product && (
+                      <div
+                        className={`flex ${
+                          message.type === "user"
+                            ? "justify-end"
+                            : "justify-start"
+                        }`}
+                      >
+                        <div className="max-w-[80%] mb-1">
+                          <div className="flex items-center space-x-3 rounded-2xl border border-border/60 bg-card/90 backdrop-blur px-3 py-2 shadow-sm">
+                            <Image
+                              src={message.reply_product.image || "/placeholder.svg"}
+                              alt={message.reply_product.name}
+                              width={48}
+                              height={48}
+                              className="w-10 h-10 object-cover rounded-lg border border-border/40"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Product selected
+                              </p>
+                              <p className="text-sm font-medium text-card-foreground line-clamp-1">
+                                {message.reply_product.name}
+                              </p>
+                              <p className="text-xs font-semibold text-primary">
+                                {formatCurrency(
+                                  message.reply_product.price,
+                                  message.reply_product.currency
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {message.reply_order && (
+                      <div
+                        className={`flex ${
+                          message.type === "user"
+                            ? "justify-end"
+                            : "justify-start"
+                        }`}
+                      >
+                        <div className="max-w-[80%] mb-1">
+                          <div className="flex items-center space-x-3 rounded-2xl border border-border/60 bg-card/90 backdrop-blur px-3 py-2 shadow-sm">
+                            <Image
+                              src={
+                                message.reply_order.product.image || "/placeholder.svg"
+                              }
+                              alt={message.reply_order.product.name}
+                              width={48}
+                              height={48}
+                              className="w-10 h-10 object-cover rounded-lg border border-border/40"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Selected Order
+                              </p>
+                              <p className="text-sm font-medium text-card-foreground line-clamp-1">
+                                {message.reply_order.product.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatCurrency(
+                                  message.reply_order.product.price,
+                                  message.reply_order.product.currency
+                                )}{" "}
+                                • {formatStatusLabel(message.reply_order.status)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   <div
                     className={`flex ${
                       message.type === "user" ? "justify-end" : "justify-start"
@@ -814,9 +1002,26 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                     ).toLocaleDateString()}
                                   </span>
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Status: {order.status}
-                                </p>
+                                <div className="mt-2">
+                                  <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
+                                    <span>Tracking</span>
+                                    <span className="text-[11px] font-semibold text-foreground">
+                                      {order.status}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center space-x-1 mt-1">
+                                    {ORDER_STATUS_STEPS.map((step, index) => {
+                                      return (
+                                        <span
+                                          key={`${order.order_id}-${step}`}
+                                          className={`flex-1 h-1.5 rounded-full ${
+                                            getStepClassForStatus(order.status, index)
+                                          }`}
+                                        ></span>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </CardContent>
@@ -829,14 +1034,51 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                     <div className="ml-2">
                       <Card className="border-0 shadow-sm bg-card overflow-hidden">
                         <CardContent className="p-0">
+                          {trackingOrder && (
+                            <div className="px-4 py-2 border-b border-border/60">
+                              <div className="flex items-center space-x-3">
+                                <Image
+                                  src={trackingOrder.product.image || "/placeholder.svg"}
+                                  alt={trackingOrder.product.name}
+                                  width={48}
+                                  height={48}
+                                  className="w-12 h-12 object-cover rounded-lg border border-border/30"
+                                  unoptimized={false}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold text-card-foreground line-clamp-1">
+                                    {trackingOrder.product.name}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {formatCurrency(
+                                      trackingOrder.product.price,
+                                      trackingOrder.product.currency
+                                    )}
+                                    {" • "}
+                                    {new Date(
+                                      trackingOrder.created_at
+                                    ).toLocaleDateString()}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p
+                                    className={`text-sm font-semibold ${getStatusAccentClass(
+                                      trackingStatus || trackingOrder.status
+                                    )}`}
+                                  >
+                                    {formatStatusLabel(
+                                      trackingStatus || trackingOrder.status
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                           {shouldShowTrackingMap && (
                             <TrackingMap
-                              currentLocation={
-                                message.tracking_data.current_location
-                              }
-                              deliveryAddress={
-                                message.tracking_data.delivery_address
-                              }
+                              currentLocation={currentLocation}
+                              deliveryAddress={deliveryAddress}
+                              isReturnRoute={isReturned}
                             />
                           )}
 
@@ -867,37 +1109,20 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                               <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                                 <div className="flex items-center space-x-3">
                                   <div
-                                    className={`w-2 h-2 rounded-full ${
-                                      message.tracking_data.status ===
-                                      "delivered"
-                                        ? "bg-success"
-                                        : message.tracking_data.status ===
-                                          "shipped"
-                                        ? "bg-primary animate-pulse"
-                                        : "bg-warning"
-                                    }`}
+                                    className={`w-2 h-2 rounded-full ${statusIndicatorClass}`}
                                   />
                                   <div>
                                     <div className="text-sm font-medium">
-                                      {message.tracking_data.status ===
-                                        "created" && "Order Placed"}
-                                      {message.tracking_data.status ===
-                                        "shipped" && "In Transit"}
-                                      {message.tracking_data.status ===
-                                        "delivered" && "Delivered"}
+                                      {statusLabel}
                                     </div>
-                                    {message.tracking_data.status !==
-                                      "delivered" && (
+                                    {showEta && (
                                       <div className="text-xs text-muted-foreground">
                                         Est. Delivery:{" "}
                                         {new Date(
                                           new Date(
                                             message.tracking_data.created_at
                                           ).getTime() +
-                                            (message.tracking_data.status ===
-                                            "created"
-                                              ? 5
-                                              : 2) *
+                                            (trackingStatus === "created" ? 5 : 2) *
                                               24 *
                                               60 *
                                               60 *
@@ -911,17 +1136,11 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                     )}
                                   </div>
                                 </div>
-                                <Truck
-                                  className={`w-5 h-5 ${
-                                    message.tracking_data.status === "delivered"
-                                      ? "text-success"
-                                      : "text-primary"
-                                  }`}
-                                />
+                                <Truck className={`w-5 h-5 ${truckColorClass}`} />
                               </div>
 
                               <div className="grid grid-cols-1 gap-3">
-                                {showCurrentLocationDetails && currentLocation && (
+                                {showCurrentLocationDetails && (
                                   <div className="p-3 bg-primary-light border border-primary-medium rounded-lg">
                                     <div className="flex items-start space-x-2">
                                       <MapPin className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
@@ -929,30 +1148,57 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                         <div className="text-xs font-medium text-primary mb-1">
                                           Current Location
                                         </div>
-                                        <div className="text-sm text-card-foreground">
-                                          {currentLocation.city}
-                                          ,{" "}
-                                          {currentLocation.region}
-                                        </div>
-                                        <div className="text-sm text-muted-foreground">
-                                          {currentLocation.country}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground mt-1">
-                                          {new Date(
-                                            message.tracking_data.created_at
-                                          ).toLocaleString("en-US", {
-                                            month: "short",
-                                            day: "numeric",
-                                            hour: "2-digit",
-                                            minute: "2-digit",
-                                          })}
-                                        </div>
+                                        {isReturned && deliveryAddress ? (
+                                          <>
+                                            <div className="text-sm text-card-foreground">
+                                              {deliveryAddress.full_name}
+                                            </div>
+                                            <div className="text-sm text-muted-foreground">
+                                              {deliveryAddress.address_line1}
+                                              {deliveryAddress.address_line2 &&
+                                                `, ${deliveryAddress.address_line2}`}
+                                            </div>
+                                            <div className="text-sm text-muted-foreground">
+                                              {deliveryAddress.city}
+                                              {deliveryAddress.state && (
+                                                <>
+                                                  , {deliveryAddress.state}{" "}
+                                                </>
+                                              )}
+                                              {deliveryAddress.postal_code}
+                                            </div>
+                                            <div className="text-sm text-muted-foreground">
+                                              {deliveryAddress.country}
+                                            </div>
+                                          </>
+                                        ) : (
+                                          currentLocation && (
+                                            <>
+                                              <div className="text-sm text-card-foreground">
+                                                {currentLocation.city}, {currentLocation.region}
+                                              </div>
+                                              <div className="text-sm text-muted-foreground">
+                                                {currentLocation.country}
+                                              </div>
+                                              <div className="text-xs text-muted-foreground mt-1">
+                                                {new Date(
+                                                  message.tracking_data.created_at
+                                                ).toLocaleString("en-US", {
+                                                  month: "short",
+                                                  day: "numeric",
+                                                  hour: "2-digit",
+                                                  minute: "2-digit",
+                                                })}
+                                              </div>
+                                            </>
+                                          )
+                                        )}
                                       </div>
                                     </div>
                                   </div>
                                 )}
 
-                                {message.tracking_data.delivery_address && (
+                                {showDeliveryAddressDetails && (
                                   <div className="p-3 status-delivered rounded-lg">
                                     <div className="flex items-start space-x-2">
                                       <MapPin className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
@@ -960,48 +1206,46 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                         <div className="text-xs font-medium text-success mb-1">
                                           Delivery Address
                                         </div>
-                                        <div className="text-sm text-card-foreground">
-                                          {
-                                            message.tracking_data
-                                              .delivery_address.full_name
-                                          }
-                                        </div>
-                                        <div className="text-sm text-muted-foreground">
-                                          {
-                                            message.tracking_data
-                                              .delivery_address.address_line1
-                                          }
-                                          {message.tracking_data
-                                            .delivery_address.address_line2 &&
-                                            `, ${message.tracking_data.delivery_address.address_line2}`}
-                                        </div>
-                                        <div className="text-sm text-muted-foreground">
-                                          {
-                                            message.tracking_data
-                                              .delivery_address.city
-                                          }
-                                          ,{" "}
-                                          {
-                                            message.tracking_data
-                                              .delivery_address.state
-                                          }{" "}
-                                          {
-                                            message.tracking_data
-                                              .delivery_address.postal_code
-                                          }
-                                        </div>
-                                        <div className="text-sm text-muted-foreground">
-                                          {
-                                            message.tracking_data
-                                              .delivery_address.country
-                                          }
-                                        </div>
+                                        {isReturned ? (
+                                          currentLocation && (
+                                            <>
+                                              <div className="text-sm text-card-foreground">
+                                                {currentLocation.city || "Fulfillment Facility"}
+                                              </div>
+                                              <div className="text-sm text-muted-foreground">
+                                                {[currentLocation.region, currentLocation.country]
+                                                  .filter(Boolean)
+                                                  .join(", ")}
+                                              </div>
+                                            </>
+                                          )
+                                        ) : (
+                                          deliveryAddress && (
+                                            <>
+                                              <div className="text-sm text-card-foreground">
+                                                {deliveryAddress.full_name}
+                                              </div>
+                                              <div className="text-sm text-muted-foreground">
+                                                {deliveryAddress.address_line1}
+                                                {deliveryAddress.address_line2 &&
+                                                  `, ${deliveryAddress.address_line2}`}
+                                              </div>
+                                              <div className="text-sm text-muted-foreground">
+                                                {deliveryAddress.city}, {deliveryAddress.state}{" "}
+                                                {deliveryAddress.postal_code}
+                                              </div>
+                                              <div className="text-sm text-muted-foreground">
+                                                {deliveryAddress.country}
+                                              </div>
+                                            </>
+                                          )
+                                        )}
                                       </div>
                                     </div>
                                   </div>
                                 )}
                                 {trackingStatus === "created" &&
-                                  message.tracking_data.delivery_address && (
+                                  deliveryAddress && (
                                     <div className="p-3 bg-muted/40 border border-dashed rounded-lg">
                                       <div className="flex items-start space-x-2">
                                         <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
@@ -1012,31 +1256,48 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                           <div className="text-sm text-card-foreground">
                                             We&apos;ll send this order to{" "}
                                             <span className="font-semibold">
-                                              {
-                                                message.tracking_data
-                                                  .delivery_address.city
-                                              }
+                                              {deliveryAddress.city}
                                             </span>
-                                            {message.tracking_data
-                                              .delivery_address.state && (
+                                            {deliveryAddress.state && (
                                               <>
                                                 ,{" "}
-                                                {
-                                                  message.tracking_data
-                                                    .delivery_address.state
-                                                }
+                                                {deliveryAddress.state}
                                               </>
                                             )}
                                             {", "}
-                                            {
-                                              message.tracking_data
-                                                .delivery_address.country
-                                            }
+                                            {deliveryAddress.country}
                                           </div>
                                         </div>
                                       </div>
                                     </div>
                                   )}
+                                {isReturned && currentLocation && (
+                                  <div className="p-3 bg-muted/40 border border-dashed rounded-lg">
+                                    <div className="flex items-start space-x-2">
+                                      <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                                      <div className="flex-1">
+                                        <div className="text-xs font-medium text-muted-foreground mb-1">
+                                          Return shipment will depart soon
+                                        </div>
+                                        <div className="text-sm text-card-foreground">
+                                          We&apos;ll route this package back toward{" "}
+                                          <span className="font-semibold">
+                                            {currentLocation.city || "our facility"}
+                                          </span>
+                                          {currentLocation.region && `, ${currentLocation.region}`}{" "}
+                                          {currentLocation.country}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                                {isCancelled && (
+                                  <div className="p-3 bg-muted/40 border border-dashed rounded-lg text-sm text-muted-foreground">
+                                    This order was cancelled before it left the
+                                    warehouse, so there isn&apos;t any active tracking
+                                    information to display.
+                                  </div>
+                                )}
                               </div>
 
                               <div className="flex items-center justify-between p-3 bg-muted/20 rounded-lg border">
@@ -1084,6 +1345,30 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                   <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-4 h-4 bg-card dark:bg-card rotate-45 border-t border-l border-border dark:border-border"></div>
                   <Card className="bg-card dark:bg-card border-primary/30 dark:border-primary/30 shadow-lg">
                     <CardContent className="p-4 space-y-3">
+                      {pendingOrderPreview ? (
+                        <div className="flex space-x-3 border border-border/40 rounded-xl bg-muted/30 p-3">
+                          <Image
+                            src={pendingOrderPreview.product.image || "/placeholder.svg"}
+                            alt={pendingOrderPreview.product.name}
+                            width={64}
+                            height={64}
+                            className="w-12 h-12 rounded-lg object-cover border border-border/40"
+                            unoptimized={false}
+                          />
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-card-foreground line-clamp-1">
+                              {pendingOrderPreview.product.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatCurrency(
+                                pendingOrderPreview.product.price,
+                                pendingOrderPreview.product.currency
+                              )}{" "}
+                              • {pendingOrderPreview.status}
+                            </p>
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="flex items-start space-x-2">
                         <div className="w-8 h-8 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                           <span className="text-primary text-sm">⚠️</span>

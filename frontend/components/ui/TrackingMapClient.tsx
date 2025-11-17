@@ -39,6 +39,7 @@ interface TrackingMapClientProps {
     address_line2?: string;
     postal_code?: string;
   } | null;
+  isReturnRoute?: boolean;
 }
 
 async function fetchRoadRoute(
@@ -171,6 +172,7 @@ export default function TrackingMapClient({
   currentLocation,
   deliveryCoords,
   deliveryAddress,
+  isReturnRoute = false,
 }: TrackingMapClientProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -182,7 +184,40 @@ export default function TrackingMapClient({
       currentLocation && currentLocation.lat && currentLocation.lng;
     const hasDeliveryLocation = deliveryCoords;
 
-    if (!hasCurrentLocation && !hasDeliveryLocation) {
+    const currentMarkerCoords = isReturnRoute
+      ? deliveryCoords
+        ? {
+            lat: deliveryCoords.lat,
+            lng: deliveryCoords.lng,
+          }
+        : hasCurrentLocation
+        ? {
+            lat: currentLocation.lat,
+            lng: currentLocation.lng,
+          }
+        : null
+      : hasCurrentLocation
+      ? {
+          lat: currentLocation.lat,
+          lng: currentLocation.lng,
+        }
+      : null;
+
+    const deliveryMarkerCoords = isReturnRoute
+      ? hasCurrentLocation
+        ? {
+            lat: currentLocation.lat,
+            lng: currentLocation.lng,
+          }
+        : null
+      : hasDeliveryLocation
+      ? {
+          lat: deliveryCoords.lat,
+          lng: deliveryCoords.lng,
+        }
+      : null;
+
+    if (!currentMarkerCoords && !deliveryMarkerCoords) {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -199,17 +234,24 @@ export default function TrackingMapClient({
 
     let center: [number, number];
     let zoom: number;
-    if (hasCurrentLocation && hasDeliveryLocation) {
-      const normalizedCurrentLng = normalizeLng(currentLocation.lng);
-      const normalizedDeliveryLng = normalizeLng(deliveryCoords.lng);
+    const hasCurrentMarker = Boolean(currentMarkerCoords);
+    const hasDeliveryMarker = Boolean(deliveryMarkerCoords);
+
+    if (hasCurrentMarker && hasDeliveryMarker) {
+      const normalizedCurrentLng = normalizeLng(currentMarkerCoords!.lng);
+      const normalizedDeliveryLng = normalizeLng(deliveryMarkerCoords!.lng);
 
       center = [
-        (currentLocation.lat + deliveryCoords.lat) / 2,
+        (currentMarkerCoords!.lat + deliveryMarkerCoords!.lat) / 2,
         (normalizedCurrentLng + normalizedDeliveryLng) / 2,
       ];
 
-      const latDiff = Math.abs(currentLocation.lat - deliveryCoords.lat);
-      const lngDiff = Math.abs(currentLocation.lng - deliveryCoords.lng);
+      const latDiff = Math.abs(
+        currentMarkerCoords!.lat - deliveryMarkerCoords!.lat
+      );
+      const lngDiff = Math.abs(
+        currentMarkerCoords!.lng - deliveryMarkerCoords!.lng
+      );
       const maxDiff = Math.max(latDiff, lngDiff);
 
       if (maxDiff < 1) zoom = 8;
@@ -217,11 +259,17 @@ export default function TrackingMapClient({
       else if (maxDiff < 15) zoom = 5;
       else if (maxDiff < 40) zoom = 4;
       else zoom = 3;
-    } else if (hasCurrentLocation) {
-      center = [currentLocation.lat, normalizeLng(currentLocation.lng)];
+    } else if (hasCurrentMarker) {
+      center = [
+        currentMarkerCoords!.lat,
+        normalizeLng(currentMarkerCoords!.lng),
+      ];
       zoom = 10;
     } else {
-      center = [deliveryCoords!.lat, normalizeLng(deliveryCoords!.lng)];
+      center = [
+        deliveryMarkerCoords!.lat,
+        normalizeLng(deliveryMarkerCoords!.lng),
+      ];
       zoom = 10;
     }
 
@@ -281,31 +329,44 @@ export default function TrackingMapClient({
       iconAnchor: [15, 20],
     });
 
-    if (hasCurrentLocation)
+    const currentPopupCity = isReturnRoute
+      ? deliveryAddress?.city || deliveryAddress?.state || "Customer"
+      : currentLocation?.city || "Transit hub";
+    const currentPopupCountry = isReturnRoute
+      ? deliveryAddress?.country || ""
+      : currentLocation?.country || "";
+    const deliveryPopupCity = isReturnRoute
+      ? currentLocation?.city || "Warehouse"
+      : deliveryAddress?.city || deliveryAddress?.state || "";
+    const deliveryPopupCountry = isReturnRoute
+      ? currentLocation?.country || ""
+      : deliveryAddress?.country || "";
+
+    if (hasCurrentMarker)
       addMarkerWithDuplicates(
         map,
-        currentLocation.lat,
-        currentLocation.lng,
+        currentMarkerCoords!.lat,
+        currentMarkerCoords!.lng,
         currentIcon,
-        `<strong>Current</strong><br/>${currentLocation.city}, ${currentLocation.country}`
+        `<strong>Current</strong><br/>${currentPopupCity}, ${currentPopupCountry}`
       );
-    if (hasDeliveryLocation)
+    if (hasDeliveryMarker)
       addMarkerWithDuplicates(
         map,
-        deliveryCoords.lat,
-        deliveryCoords.lng,
+        deliveryMarkerCoords!.lat,
+        deliveryMarkerCoords!.lng,
         deliveryIcon,
-        `<strong>Delivery</strong><br/>${deliveryAddress?.city}, ${deliveryAddress?.country}`
+        `<strong>Delivery</strong><br/>${deliveryPopupCity}, ${deliveryPopupCountry}`
       );
 
-    if (hasCurrentLocation && hasDeliveryLocation) {
+    if (hasCurrentMarker && hasDeliveryMarker) {
       const start: [number, number] = [
-        currentLocation.lat,
-        normalizeLng(currentLocation.lng),
+        currentMarkerCoords!.lat,
+        normalizeLng(currentMarkerCoords!.lng),
       ];
       const end: [number, number] = [
-        deliveryCoords.lat,
-        normalizeLng(deliveryCoords.lng),
+        deliveryMarkerCoords!.lat,
+        normalizeLng(deliveryMarkerCoords!.lng),
       ];
 
       const usesAir = needsAirFreight(start[0], start[1], end[0], end[1]);
@@ -514,7 +575,7 @@ export default function TrackingMapClient({
         mapInstanceRef.current = null;
       }
     };
-  }, [currentLocation, deliveryCoords, deliveryAddress]);
+  }, [currentLocation, deliveryCoords, deliveryAddress, isReturnRoute]);
 
   return (
     <div className="relative w-full h-48 rounded-lg overflow-visible border border-border/50">

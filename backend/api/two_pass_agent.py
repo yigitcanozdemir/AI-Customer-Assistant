@@ -891,6 +891,16 @@ Generate your validation response now (must start with VALIDATION:ALLOWED or VAL
             return "The order is in transit and tracking information is available."
         elif status == "delivered":
             return "The order has been delivered to the destination."
+        elif status == "returned":
+            return (
+                "The order is marked as returned. Let the customer know the package is waiting to be handed to the carrier "
+                "so it can travel back to the fulfillment center, and remind them that refund/exchange steps will follow."
+            )
+        elif status == "cancelled":
+            return (
+                "The order was cancelled before shipping, so no tracking details are available. "
+                "Reassure the customer that the cancellation or refund is underway."
+            )
         else:
             return ""
 

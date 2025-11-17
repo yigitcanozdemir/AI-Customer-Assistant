@@ -650,9 +650,7 @@ async def create_order(request: CreateOrderRequest):
                     order_id = uuid.uuid4()
                     created_at = datetime.utcnow()
                     order_status = random.choice(["created", "shipped", "delivered"])
-                    location_payload = (
-                        None if order_status == "delivered" else current_location_data
-                    )
+                    location_payload = current_location_data
                     order = Order(
                         order_id=order_id,
                         user_id=request.user_id,

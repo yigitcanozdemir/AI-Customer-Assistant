@@ -20,6 +20,8 @@ export interface Message {
   products?: Product[];
   orders?: OrderStatus[];
   tracking_data?: TrackingData;
+  reply_product?: Product | null;
+  reply_order?: OrderStatus | null;
   suggestions?: string[];
   warning_message?: string;
   requires_human?: boolean;

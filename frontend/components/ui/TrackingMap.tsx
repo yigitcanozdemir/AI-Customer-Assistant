@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 
-interface TrackingMapProps {
+export type TrackingMapProps = {
   currentLocation?: {
     lat: number;
     lng: number;
@@ -20,6 +20,7 @@ interface TrackingMapProps {
     address_line2?: string;
     postal_code?: string;
   } | null;
+  isReturnRoute?: boolean;
 }
 
 const MapComponent = dynamic(
@@ -37,6 +38,7 @@ const MapComponent = dynamic(
 export function TrackingMap({
   currentLocation,
   deliveryAddress,
+  isReturnRoute = false,
 }: TrackingMapProps) {
   const [deliveryCoords, setDeliveryCoords] = useState<{
     lat: number;
@@ -250,10 +252,11 @@ export function TrackingMap({
   }
 
   return (
-    <MapComponent
-      currentLocation={currentLocation}
-      deliveryCoords={deliveryCoords}
-      deliveryAddress={deliveryAddress}
-    />
+      <MapComponent
+        currentLocation={currentLocation}
+        deliveryCoords={deliveryCoords}
+        deliveryAddress={deliveryAddress}
+        isReturnRoute={isReturnRoute}
+      />
   );
 }
