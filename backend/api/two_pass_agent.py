@@ -1130,11 +1130,15 @@ CRITICAL RULES FOR VALIDATION:
         )
         action_type = process_order_params.get('action', 'process')
 
+        # CRITICAL: Only include valid parameters for process_order
+        # Filter out user_id and other invalid parameters to prevent execution errors
         pending_parameters = {
-            **process_order_params,
             'order_id': order_id,
             'action': action_type,
+            'store': process_order_params.get('store'),
         }
+        # Remove None values
+        pending_parameters = {k: v for k, v in pending_parameters.items() if v is not None}
 
         action_payload = {
             'action_type': ToolName.PROCESS_ORDER.value,
@@ -1191,7 +1195,30 @@ CRITICAL RULES FOR VALIDATION:
             tool_name = pending_action['action_type']
             tool_params = pending_action['parameters']
 
+            # CRITICAL: Filter parameters to match tool signature
+            # This prevents "unexpected keyword argument" errors
+            valid_params = {
+                'process_order': ['order_id', 'action', 'store'],
+                'product_search': ['query', 'store'],
+                'faq_search': ['query', 'store'],
+                'variant_check': ['product_id', 'size', 'color'],
+                'list_orders': ['store', 'user_id'],
+                'fetch_order_location': ['order_id', 'store'],
+            }
+
+            if tool_name in valid_params:
+                allowed = valid_params[tool_name]
+                tool_params = {k: v for k, v in tool_params.items() if k in allowed}
+                self.logger.info(
+                    f"[Confirmation] Filtered parameters for {tool_name}: {list(tool_params.keys())}"
+                )
+
             result = await execute_tool(tool_name, tool_params)
+
+            # CRITICAL: Check if tool execution actually succeeded
+            if isinstance(result, dict) and result.get('status') == 'error':
+                error_msg = result.get('error', 'Unknown error')
+                raise Exception(f"Tool execution failed: {error_msg}")
 
             await cache_manager.delete_pending_action(confirm_action_id)
             await context_manager.clear_pending_confirmation(context.session_id)
