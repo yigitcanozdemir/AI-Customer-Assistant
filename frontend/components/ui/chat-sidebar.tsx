@@ -807,6 +807,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                               width={48}
                               height={48}
                               className="w-10 h-10 object-cover rounded-lg border border-border/40"
+                              unoptimized={false}
                             />
                             <div className="min-w-0">
                               <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -844,6 +845,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                               width={48}
                               height={48}
                               className="w-10 h-10 object-cover rounded-lg border border-border/40"
+                              unoptimized={false}
                             />
                             <div className="min-w-0">
                               <p className="text-[10px] uppercase tracking-wide text-muted-foreground">

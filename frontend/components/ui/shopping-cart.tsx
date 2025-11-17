@@ -293,7 +293,7 @@ export function ShoppingCart({ right, sideWidth }: ShoppingCartProps) {
                         fill
                         sizes="64px"
                         className="object-cover"
-                        unoptimized
+                        unoptimized={false}
                       />
                     </div>
                     <div className="flex-1 min-w-0">
