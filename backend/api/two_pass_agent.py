@@ -140,16 +140,33 @@ class TwoPassAgent:
 
             # CRITICAL: If Pass 1 explicitly set referenced_order to null, clear current_order
             # This happens when user says "my orders", "another order", etc.
+            # BUT: Don't clear if user is selecting an order for modification (return/cancel)
             if (pass1_output.context_understanding.referenced_order is None and
                 any(tc.tool_name == ToolName.LIST_ORDERS for tc in pass1_output.tool_calls)):
-                self.logger.info(f"[Context] Clearing current_order - user requested to see all orders")
-                await context_manager.clear_order_context(
-                    session_id=session_id,
-                    reason="User requested to see all orders"
+
+                # Check if this is part of an order modification flow
+                # Don't clear context if user is selecting an order to return/cancel
+                is_modification_flow = (
+                    pass1_output.intent == IntentType.ORDER_MODIFICATION or
+                    context.last_intent == IntentType.ORDER_MODIFICATION
                 )
-                # CRITICAL: Re-fetch context so Pass 2 uses the cleared context
-                context = await context_manager.get_context(session_id)
-                self.logger.info(f"[Context] Context refreshed after clearing order")
+
+                if not is_modification_flow:
+                    # User is browsing orders (not selecting for modification)
+                    self.logger.info(f"[Context] Clearing current_order - user requested to see all orders")
+                    await context_manager.clear_order_context(
+                        session_id=session_id,
+                        reason="User requested to see all orders"
+                    )
+                    # CRITICAL: Re-fetch context so Pass 2 uses the cleared context
+                    context = await context_manager.get_context(session_id)
+                    self.logger.info(f"[Context] Context refreshed after clearing order")
+                else:
+                    # User is selecting an order for modification - preserve intent context
+                    self.logger.info(
+                        f"[Context] NOT clearing current_order - user is selecting order for modification "
+                        f"(current_intent={pass1_output.intent}, last_intent={context.last_intent})"
+                    )
 
             # TOOL EXECUTION LAYER
             # Filter out process_order if confirmation is required
@@ -442,13 +459,27 @@ class TwoPassAgent:
             # Use selected_order from parameter, or fall back to context.current_order
             order_context_info = ""
             if selected_order:
+                # Build intent-specific context guidance
+                intent_guidance = ""
+                if context.last_intent == IntentType.ORDER_MODIFICATION:
+                    intent_guidance = """
+**CRITICAL CONTEXT**: The user previously requested to RETURN or CANCEL an order.
+They are now selecting THIS specific order for that modification action.
+When they say "this order", "it", "that one", etc., they want to MODIFY/RETURN/CANCEL it - NOT track it.
+If they confirm selection, call process_order with action=return, NOT fetch_order_location.
+"""
+                elif context.last_intent == IntentType.ORDER_TRACKING:
+                    intent_guidance = """
+**CONTEXT**: The user is tracking this order.
+"""
+
                 order_context_info = f"""
 **SELECTED ORDER CONTEXT**:
 - Order ID: {selected_order.order_id}
 - Status: {selected_order.status}
 - Product: {selected_order.product.name if hasattr(selected_order, 'product') else 'Unknown'}
 - Created: {selected_order.created_at}
-
+{intent_guidance}
 The user is referring to this order when they say "this order", "it", "that one", etc.
 """
             elif context.current_order:
@@ -456,12 +487,27 @@ The user is referring to this order when they say "this order", "it", "that one"
                 order_id = context.current_order.get('order_id', 'unknown')
                 order_status = context.current_order.get('status', 'unknown')
                 order_created = context.current_order.get('created_at', 'unknown')
+
+                # Build intent-specific context guidance
+                intent_guidance = ""
+                if context.last_intent == IntentType.ORDER_MODIFICATION:
+                    intent_guidance = """
+**CRITICAL CONTEXT**: The user previously requested to RETURN or CANCEL an order.
+They are now selecting THIS specific order for that modification action.
+When they say "this order", "it", "that one", etc., they want to MODIFY/RETURN/CANCEL it - NOT track it.
+If they confirm selection, call process_order with action=return, NOT fetch_order_location.
+"""
+                elif context.last_intent == IntentType.ORDER_TRACKING:
+                    intent_guidance = """
+**CONTEXT**: The user is tracking this order.
+"""
+
                 order_context_info = f"""
 **SELECTED ORDER CONTEXT** (from recent conversation):
 - Order ID: {order_id}
 - Status: {order_status}
 - Created: {order_created}
-
+{intent_guidance}
 The user is referring to this order when they say "this order", "it", "that one", etc.
 """
 
