@@ -309,6 +309,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             warning_message: data.warning_message,
             requires_human: data.requires_human,
             confidence_score: data.confidence_score,
+            flagging_reason: data.flagging_reason,
           };
           setIsTyping(false);
           setMessages((prev) => [...prev, assistantMessage]);
@@ -616,9 +617,23 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     sendWebSocketMessage("User cancelled the action");
   };
 
-  const lockedBannerMessage = sessionLockReason
-    ? "This chat is paused due to repeated policy violations. You can review previous messages, but sending new ones is disabled."
-    : "This chat is paused. You can review previous messages, but sending new ones is disabled.";
+  const lockedBannerMessage = (() => {
+    if (!sessionLockReason) {
+      return "This chat is paused. You can review previous messages, but sending new ones is disabled.";
+    }
+
+    switch (sessionLockReason) {
+      case "abusive_language":
+        return "This chat is paused due to inappropriate language. Please keep conversations respectful. Contact support if you need assistance.";
+      case "prompt_injection":
+        return "This chat is paused. Our assistant can only help with shopping-related questions. Contact support if you need help.";
+      case "repeated_policy_violations":
+      case "policy_violation":
+        return "This chat is paused due to repeated off-topic requests. Our assistant is here to help with shopping. Contact support if you need assistance.";
+      default:
+        return "This chat is paused due to repeated policy violations. You can review previous messages, but sending new ones is disabled.";
+    }
+  })();
 
   const latestProductMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -917,8 +932,21 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
                   {message.requires_human && (
                     <div className="ml-2 flex items-center space-x-1 text-xs text-muted-foreground">
-                      <span>🙋</span>
-                      <span>Flagged for team review</span>
+                      {message.flagging_reason === "policy_violation" ||
+                      message.flagging_reason === "abusive_language" ||
+                      message.flagging_reason === "prompt_injection" ? (
+                        <>
+                          <span>⚠️</span>
+                          <span className="text-orange-600 dark:text-orange-400">
+                            Policy violation detected
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🙋</span>
+                          <span>Team reviewing for assistance</span>
+                        </>
+                      )}
                     </div>
                   )}
 

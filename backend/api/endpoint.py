@@ -80,22 +80,7 @@ websocket_disconnects_total = Counter(
     "Total number of WebSocket disconnections",
 )
 
-PROFANITY_KEYWORDS = {
-    "fuck",
-    "shit",
-    "bitch",
-    "asshole",
-    "bastard",
-    "dumbass",
-    "cunt",
-    "motherfucker",
-    "fucker",
-}
-
-
-def contains_abusive_language(text: str) -> bool:
-    lowered = text.lower()
-    return any(word in lowered for word in PROFANITY_KEYWORDS)
+# Removed hardcoded profanity check - LLM handles all threat/abuse detection in Pass 1
 
 
 def log_chat_interaction(
@@ -329,59 +314,39 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 await add_message(session_id, user_message)
                 message_history = await get_message_history(session_id)
 
-                abusive_language = contains_abusive_language(question)
-
+                # All threat/abuse detection now handled by LLM in Pass 1 assessment
                 response: MessageResponse
 
-                if abusive_language:
-                    response = MessageResponse(
-                        content=(
-                            "We need to keep this conversation respectful. "
-                            "Using abusive or harassing language violates our policy and may pause this chat."
-                        ),
+                use_two_pass = getattr(settings, 'use_two_pass_agent', True)
+
+                if use_two_pass:
+                    logger.info(
+                        "[Two-Pass] Using new two-pass agent architecture",
+                        extra={"session_id": session_id}
+                    )
+                    response = await two_pass_agent.execute(
+                        user_input=question,
+                        session_id=session_id,
                         store=store,
-                        suggestions=["Browse products", "Contact support"],
-                        products=[],
-                        orders=None,
-                        tracking_data=None,
-                        timestamp=datetime.utcnow(),
-                        requires_human=True,
-                        confidence_score=0.0,
-                        is_context_relevant=True,
-                        warning_message="Abusive language detected",
-                        assessment_reasoning="Detected prohibited language",
+                        user_id=str(user_id),
+                        user_name=user_name,
+                        selected_order=order_data,
+                        confirm_action_id=confirm_action_id,
                     )
                 else:
-                    use_two_pass = getattr(settings, 'use_two_pass_agent', True)
-
-                    if use_two_pass:
-                        logger.info(
-                            "[Two-Pass] Using new two-pass agent architecture",
-                            extra={"session_id": session_id}
-                        )
-                        response = await two_pass_agent.execute(
-                            user_input=question,
-                            session_id=session_id,
-                            store=store,
-                            user_id=str(user_id),
-                            user_name=user_name,
-                            selected_order=order_data,
-                            confirm_action_id=confirm_action_id,
-                        )
-                    else:
-                        logger.info(
-                            "[Legacy] Using legacy chat handler",
-                            extra={"session_id": session_id}
-                        )
-                        response = await handle_chat_event(
-                            user_input=question,
-                            store=store,
-                            message_history=message_history,
-                            user_id=str(user_id),
-                            user_name=user_name,
-                            confirm_action_id=confirm_action_id,
-                            selected_order=order_data,
-                        )
+                    logger.info(
+                        "[Legacy] Using legacy chat handler",
+                        extra={"session_id": session_id}
+                    )
+                    response = await handle_chat_event(
+                        user_input=question,
+                        store=store,
+                        message_history=message_history,
+                        user_id=str(user_id),
+                        user_name=user_name,
+                        confirm_action_id=confirm_action_id,
+                        selected_order=order_data,
+                    )
 
                 span_context = trace.get_current_span().get_span_context()
                 trace_id_str = (
@@ -433,15 +398,26 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 message_history.append(assistant_message)
 
                 if response.requires_human:
-                    logger.warning(
-                        "Message flagged for human review",
+                    flagging_reason = getattr(response, "flagging_reason", "unclear_request")
+
+                    # Categorize flag types
+                    is_policy_violation = flagging_reason in ["policy_violation", "abusive_language", "prompt_injection"]
+                    is_technical_issue = flagging_reason in ["potential_error", "unclear_request"]
+
+                    log_level = "WARNING" if is_policy_violation else "INFO"
+                    logger.log(
+                        getattr(logging, log_level),
+                        f"Message flagged: {flagging_reason}",
                         extra={
                             "session_id": session_id,
                             "user_id": user_id,
+                            "flagging_reason": flagging_reason,
+                            "is_policy_violation": is_policy_violation,
                             "confidence_score": response.confidence_score,
                             "warning": response.warning_message,
                         },
                     )
+
                     stored_flag = await store_flagged_session(
                         session_id=session_id,
                         user_id=str(user_id),
@@ -462,21 +438,46 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         ],
                     )
 
-                    flag_count = 0
+                    # Handle policy violations and technical issues differently
                     if stored_flag:
                         flag_count = await get_flag_count_for_session(session_id)
 
-                    if flag_count >= 4:
-                        await lock_session(session_id)
-                        response.session_locked = True
-                        response.lock_reason = "policy_violation"
-                        response.content = (
-                            "This chat session is paused due to repeated policy violations. "
-                            "You can review earlier messages, but sending new ones is disabled."
-                        )
-                        response.warning_message = response.warning_message or (
-                            "Session paused after multiple policy violations"
-                        )
+                        # POLICY VIOLATIONS: Lock after 2 occurrences
+                        if is_policy_violation and flag_count >= 2:
+                            await lock_session(session_id)
+                            response.session_locked = True
+                            response.lock_reason = flagging_reason
+
+                            if flagging_reason == "abusive_language":
+                                response.content = (
+                                    "This chat has been paused due to repeated inappropriate language. "
+                                    "Please keep our conversation respectful. Contact support if you need assistance."
+                                )
+                            elif flagging_reason == "prompt_injection":
+                                response.content = (
+                                    "This chat has been paused. "
+                                    "I can only assist with shopping-related questions. Contact support if you need help."
+                                )
+                            else:  # policy_violation
+                                response.content = (
+                                    "This chat has been paused due to repeated off-topic requests. "
+                                    f"I'm here to help with shopping at {store}. Contact support if you need assistance."
+                                )
+
+                            response.warning_message = f"Session locked after repeated {flagging_reason}"
+
+                        # TECHNICAL ISSUES: Just flag for team review after 3 occurrences (no lock)
+                        # This gives users more chances when it's a technical issue, not a policy violation
+                        elif is_technical_issue and flag_count >= 3:
+                            # Don't lock - just ensure it's flagged for team attention
+                            logger.info(
+                                f"Technical issue flagged for team review after {flag_count} occurrences",
+                                extra={
+                                    "session_id": session_id,
+                                    "flagging_reason": flagging_reason,
+                                    "flag_count": flag_count,
+                                }
+                            )
 
                 await websocket.send_json(jsonable_encoder(response))
                 websocket_messages_total.labels(direction="outbound").inc()

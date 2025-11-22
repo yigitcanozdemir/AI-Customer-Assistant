@@ -27,6 +27,7 @@ export interface Message {
   requires_human?: boolean;
   confidence_score?: number;
   is_user_added?: boolean;
+  flagging_reason?: string;
 }
 
 interface TrackingData {

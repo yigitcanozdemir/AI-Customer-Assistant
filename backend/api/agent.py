@@ -353,7 +353,14 @@ class TwoPassAgent:
 
             requires_human = (
                 pass1_assessment.confidence < 0.5 or
-                pass1_assessment.flagging_reason in ["off_topic", "unclear_request"]
+                pass1_assessment.flagging_reason in [
+                    "off_topic",
+                    "unclear_request",
+                    "abusive_language",
+                    "policy_violation",
+                    "prompt_injection",
+                    "potential_error"
+                ]
             ) and not policy_denial  # Don't flag successful policy denials
 
             # Use suggested fallback if provided and confidence is low
@@ -424,11 +431,12 @@ class TwoPassAgent:
                 timestamp=datetime.now(timezone.utc),
                 requires_human=requires_human,
                 confidence_score=pass1_assessment.confidence,
-                is_context_relevant=(pass1_assessment.flagging_reason != "off_topic"),
+                is_context_relevant=(pass1_assessment.flagging_reason not in ["policy_violation", "abusive_language", "prompt_injection"]),
                 pending_action=pending_action,
                 warning_message=warning_message,
                 assessment_reasoning=assessment_reasoning,
                 tools_used=tools_used,
+                flagging_reason=pass1_assessment.flagging_reason,
             )
 
             trace.final_response = final_response.model_dump()
@@ -834,6 +842,7 @@ Generate your validation response now (must start with VALIDATION:ALLOWED or VAL
                     detected_language_name=detected_language_name,
                     user_message=user_input,
                     intent=pass1_output.intent.value,
+                    flagging_reason=pass1_output.assessment.flagging_reason,
                     tool_results_summary=tool_results_summary,
                     tracking_guidance=tracking_guidance,
                     policy_context=policy_context,

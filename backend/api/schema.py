@@ -179,6 +179,7 @@ class MessageResponse(BaseModel):
     session_locked: bool = False
     lock_reason: Optional[str] = None
     tools_used: Optional[List[str]] = None
+    flagging_reason: Optional[str] = None  # Type of flag: none, potential_error, unclear_request, policy_violation, abusive_language, prompt_injection
 
 
 class Message(BaseModel):

@@ -133,9 +133,16 @@ class AssessmentInfo(StrictModel):
         description="Confidence score 0.0-1.0 for intent recognition quality"
     )
 
-    flagging_reason: Literal["none", "potential_error", "off_topic", "unclear_request"] = Field(
+    flagging_reason: Literal[
+        "none",
+        "potential_error",
+        "unclear_request",
+        "policy_violation",
+        "abusive_language",
+        "prompt_injection"
+    ] = Field(
         default="none",
-        description="Reason for flagging this response for attention"
+        description="Reason for flagging: none, potential_error, unclear_request (technical issues) OR policy_violation, abusive_language, prompt_injection (serious violations)"
     )
 
     orders_found: int = Field(
