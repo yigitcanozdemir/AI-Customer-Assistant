@@ -439,11 +439,12 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     };
   }, [isAssistantOpen]);
 
-  const sendMessage = async (content: string) => {
+  const sendMessage = async (content: string, explicitProduct?: Product | null) => {
     if (!content.trim() || isSessionLocked || isTyping) return;
 
-    const replyProductSnapshot = selectedProduct
-      ? { ...selectedProduct }
+    const productToUse = explicitProduct !== undefined ? explicitProduct : selectedProduct;
+    const replyProductSnapshot = productToUse
+      ? { ...productToUse }
       : null;
     const replyOrderSnapshot = selectedOrder ? { ...selectedOrder } : null;
 
@@ -460,15 +461,20 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     setInputValue("");
     setIsTyping(true);
 
-    sendWebSocketMessage(content);
+    sendWebSocketMessage(content, undefined, productToUse);
   };
 
-  const sendWebSocketMessage = (content: string, confirmActionId?: string) => {
+  const sendWebSocketMessage = (
+    content: string,
+    confirmActionId?: string,
+    explicitProduct?: Product | null
+  ) => {
     if (isSessionLocked) {
       setIsTyping(false);
       return;
     }
     try {
+      const productToSend = explicitProduct !== undefined ? explicitProduct : selectedProduct;
       const eventPayload = {
         event_id: sessionId,
         event_data: {
@@ -476,12 +482,12 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
           store: selectedStore,
           user_name: userName || "Anonymous User",
           user_id: userId || "00000000-0000-0000-0000-000000000000",
-          product: selectedProduct
+          product: productToSend
             ? {
-                id: selectedProduct.id,
-                name: selectedProduct.name,
-                price: selectedProduct.price,
-                currency: selectedProduct.currency,
+                id: productToSend.id,
+                name: productToSend.name,
+                price: productToSend.price,
+                currency: productToSend.currency,
               }
             : undefined,
           order: selectedOrder
@@ -503,6 +509,9 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
         if (selectedOrder) {
           setSelectedOrder(null);
+        }
+        if (productToSend) {
+          setSelectedProduct(null);
         }
       } else {
         handleWebSocketError();
@@ -533,15 +542,19 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     messageProducts?: Product[]
   ) => {
     if (isTyping) return;
-    if (messageProducts && messageProducts.length > 0) {
-      setSelectedProduct(messageProducts[0]);
+    const productToReference = messageProducts && messageProducts.length > 0
+      ? messageProducts[0]
+      : selectedProduct;
+
+    if (productToReference) {
+      setSelectedProduct(productToReference);
       console.log(
         "Updated selected product from suggestion:",
-        messageProducts[0].name
+        productToReference.name
       );
     }
 
-    sendMessage(suggestion);
+    sendMessage(suggestion, productToReference);
   };
 
   const handleViewProduct = (productId: string) => {
@@ -610,7 +623,11 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   const latestProductMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const candidate = messages[i];
-      if (candidate.type === "assistant" && candidate.products?.length) {
+      if (
+        candidate.type === "assistant" &&
+        candidate.products?.length &&
+        candidate.is_user_added === true
+      ) {
         return candidate.id;
       }
     }
@@ -641,7 +658,11 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
         const latest = (() => {
           for (let i = prev.length - 1; i >= 0; i -= 1) {
             const candidate = prev[i];
-            if (candidate.type === "assistant" && candidate.products?.length) {
+            if (
+              candidate.type === "assistant" &&
+              candidate.products?.length &&
+              candidate.is_user_added === true
+            ) {
               return candidate.id;
             }
           }

@@ -12,6 +12,10 @@ DO NOT generate any natural language responses. ONLY output valid JSON matching 
 **CONVERSATION CONTEXT**:
 {context_summary}
 
+{product_context_info}
+
+{order_context_info}
+
 **YOUR TASK - OUTPUT JSON ONLY**:
 
 Analyze the user's message and determine:
@@ -36,12 +40,14 @@ Analyze the user's message and determine:
    - process_order(order_id: str, action: str, store: str): Cancel/return order
 
 3. **context_understanding**: Your understanding of context
-   - referenced_product: Product user is talking about (if any)
+   - referenced_product: Product user is talking about (extract Product Name from SELECTED PRODUCT CONTEXT if present, or null)
    - referenced_order: Order ID user is talking about (extract from SELECTED ORDER CONTEXT if present, or null)
    - language_detected: Detected language code (en, es, fr, etc.)
    - conversation_flow: What happened previously that's relevant
 
-   IMPORTANT: If there is a "SELECTED ORDER CONTEXT" section above, the user saying "this", "it", "that one" refers to that order. Set referenced_order to the Order ID from that context.
+   IMPORTANT:
+   - If there is a "SELECTED PRODUCT CONTEXT" section above, the user saying "similar products", "products like this", "this product" refers to that product. Set referenced_product to the Product Name from that context and use it to create a meaningful product_search query.
+   - If there is a "SELECTED ORDER CONTEXT" section above, the user saying "this", "it", "that one" refers to that order. Set referenced_order to the Order ID from that context.
 
 4. **requires_confirmation**: Does this action need user confirmation?
    - true for: process_order calls
@@ -87,7 +93,21 @@ ORDER MODIFICATION WORKFLOW (Cancel/Return):
   * Exchange → faq_search(query="exchange policy", store="{store}")
 
 PRODUCT SEARCH:
-- User asks about products → product_search
+- User asks about finding/searching for products in inventory → product_search
+- **IMPORTANT**: If user asks for "similar products" and there is a SELECTED PRODUCT CONTEXT:
+  → Use the product name/characteristics to create a meaningful search query
+  → Example: If product is "Floral Maxi Dress", search for "floral maxi dress similar" or "maxi dress floral pattern"
+  → DO NOT search for generic terms like "similar products"
+- **STYLING/PAIRING ADVICE** (NO TOOL CALLS):
+  → If user asks "which shoes/bag/accessories to combine/match/pair with this?"
+  → Set intent to "general_inquiry"
+  → Set tool_calls to EMPTY ARRAY []
+  → Set referenced_product to the product name from SELECTED PRODUCT CONTEXT
+  → In conversation_flow: "User asking styling advice for [product name] - suggest complementary items based on product color/style"
+  → Pass 2 will provide styling suggestions using product details (color, style, description)
+  → Examples:
+    * "Which shoes combine with this?" → intent: general_inquiry, tools: [], referenced_product: "Cinnamon Front Zip Dress"
+    * "What accessories match?" → intent: general_inquiry, tools: [], referenced_product from context
 - User asks about stock/availability → variant_check (need product_id)
 
 POLICY QUESTIONS:
@@ -99,12 +119,14 @@ POLICY QUESTIONS:
 - DO NOT call list_orders again if order was just listed (check last_tool_results)
 
 **INTENT SWITCHING** (CRITICAL FOR CONTEXT MANAGEMENT):
-- **If user switches from one action to another, CLEAR previous order context**
+- **If user switches from one action to another, CLEAR previous context**
+- **IMPORTANT**: Product context is automatically cleared when switching to order-related intents (backend handles this)
 - Examples of intent switches:
   * User tracks order → then says "cancel an order" = SWITCH → Set referenced_order to NULL, call list_orders
   * User tracks order → then says "return an order" = SWITCH → Set referenced_order to NULL, call list_orders
   * User cancels order → then says "track my order" = SWITCH → Set referenced_order to NULL, call list_orders
-  * User views product → then says "cancel order" = SWITCH → Set referenced_order to NULL, call list_orders
+  * User views product → then says "cancel order" / "list orders" / "track order" = SWITCH → Product context cleared automatically, set referenced_order to NULL, call list_orders
+  * User asks about product → then switches to order intent = Product context cleared automatically
 
 - **How to detect intent switch**:
   * Check last_intent in context

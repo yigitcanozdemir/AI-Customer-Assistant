@@ -21,7 +21,7 @@ from fastapi import (
 )
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from backend.api.chat import handle_chat_event
-from backend.api.two_pass_agent import two_pass_agent
+from backend.api.agent import two_pass_agent
 from backend.api.schema import (
     MessageResponse,
     ProductContext,
@@ -313,6 +313,12 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         ),
                     )
                     next_message_id += 1
+
+                    from backend.services.context_manager import context_manager
+                    await context_manager.update_context(
+                        session_id=session_id,
+                        products=[product_context.model_dump() if hasattr(product_context, 'model_dump') else product_context],
+                    )
 
                 user_message = Message(
                     id=str(next_message_id),

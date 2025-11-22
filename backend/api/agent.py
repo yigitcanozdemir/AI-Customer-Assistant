@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 
 from openai import AsyncOpenAI
 from backend.config import settings
-from backend.api.two_pass_schema import (
+from backend.api.agent_schema import (
     Pass1Output,
     Pass2Input,
     ToolCall,
@@ -137,6 +137,23 @@ class TwoPassAgent:
                 pass1_output=pass1_output,
                 language=detected_language,
             )
+
+            # CRITICAL: Clear product context when switching to order-related intents
+            # This happens when user was discussing products but now asks about orders
+            if (pass1_output.intent in [IntentType.ORDER_TRACKING, IntentType.ORDER_MODIFICATION] and
+                context.recent_products and
+                context.last_intent not in [IntentType.ORDER_TRACKING, IntentType.ORDER_MODIFICATION]):
+
+                self.logger.info(
+                    f"[Context] Clearing product context - intent switched from {context.last_intent} to {pass1_output.intent}"
+                )
+                await context_manager.clear_product_context(
+                    session_id=session_id,
+                    reason=f"Intent switched to {pass1_output.intent}"
+                )
+                # Re-fetch context so Pass 2 uses the cleared context
+                context = await context_manager.get_context(session_id)
+                self.logger.info(f"[Context] Context refreshed after clearing product context")
 
             # CRITICAL: If Pass 1 explicitly set referenced_order to null, clear current_order
             # This happens when user says "my orders", "another order", etc.
@@ -488,6 +505,26 @@ class TwoPassAgent:
             # Build context summary
             context_summary = context_manager.build_context_summary(context)
 
+            # Build product context info
+            product_context_info = ""
+            if context.recent_products:
+                # Get the most recent product
+                latest_product = context.recent_products[-1]
+                product_name = latest_product.get('name', 'Unknown')
+                product_id = latest_product.get('id', 'Unknown')
+                product_price = latest_product.get('price', 'N/A')
+                product_currency = latest_product.get('currency', 'USD')
+
+                product_context_info = f"""
+**SELECTED PRODUCT CONTEXT**:
+- Product ID: {product_id}
+- Product Name: {product_name}
+- Price: {product_price} {product_currency}
+
+The user is referring to this product when they say "similar products", "products like this", "this product", etc.
+When searching for similar products, use the product name or characteristics to guide the search query.
+"""
+
             # Build order context info
             # Use selected_order from parameter, or fall back to context.current_order
             order_context_info = ""
@@ -554,6 +591,7 @@ The user is referring to this order when they say "this order", "it", "that one"
                 session_id=context.session_id,
                 conversation_turn=context.conversation_turn,
                 context_summary=context_summary,
+                product_context_info=product_context_info,
                 order_context_info=order_context_info,
             )
 

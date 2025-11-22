@@ -223,6 +223,7 @@ export default function Store() {
         "What occasions is this perfect for?",
         "Show me similar products",
       ],
+      is_user_added: true,
     };
 
     setMessages((prev) => {
@@ -241,7 +242,9 @@ export default function Store() {
 
       const lastMessage = normalizedMessages[normalizedMessages.length - 1];
       const shouldReplaceLastProduct =
-        lastMessage?.type === "assistant" && lastMessage.products?.length;
+        lastMessage?.type === "assistant" &&
+        lastMessage.products?.length &&
+        lastMessage.is_user_added === true;
 
       if (shouldReplaceLastProduct) {
         return [...normalizedMessages.slice(0, -1), productMessage];
@@ -250,7 +253,7 @@ export default function Store() {
       return [...normalizedMessages, productMessage];
     });
 
-    setIsAssistantOpen((prev) => !prev);
+    setIsAssistantOpen(true);
   };
 
   const openProductPage = (productId: string) => {

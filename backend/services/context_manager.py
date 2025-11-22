@@ -17,7 +17,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from backend.services.cache import cache_manager
-from backend.api.two_pass_schema import ConversationContext, IntentType, Pass1Output
+from backend.api.agent_schema import ConversationContext, IntentType, Pass1Output
 from backend.api.schema import Message
 
 logger = logging.getLogger(__name__)
@@ -374,7 +374,51 @@ class ContextManager:
             return "No prior context in this conversation."
 
         return "\n".join(f"- {part}" for part in summary_parts)
-    
+
+    async def clear_product_context(
+        self,
+        session_id: str,
+        reason: str = "Manual clear"
+    ) -> bool:
+        """
+        Clear recent products from context.
+        This is called when:
+        - User switches from product context to order context (intent switch)
+        - Product context becomes stale or invalid
+
+        Args:
+            session_id: Session identifier
+            reason: Reason for clearing (for logging)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            context = await self.get_context(session_id)
+
+            if not context:
+                self.logger.warning(f"[Context Clear] No context found for session {session_id}")
+                return True  # Nothing to clear
+
+            # Log the clearing action
+            if context.recent_products:
+                product_count = len(context.recent_products)
+                self.logger.info(
+                    f"[Context Clear] Clearing {product_count} product(s) from context. Reason: {reason}"
+                )
+
+            # Clear recent products
+            context.recent_products = []
+
+            # Save updated context
+            await self.save_context(context)
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"[Context Clear] Error clearing product context: {e}")
+            return False
+
     async def clear_order_context(
         self,
         session_id: str,
