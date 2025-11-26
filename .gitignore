@@ -21,3 +21,4 @@ loki_data/
 *.log
 certbot/
 nginx/ssl/
+mcp.json

@@ -586,14 +586,25 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   const handleConfirmAction = () => {
     if (!pendingAction) return;
 
-    const userMessage = {
+    // Get order details for the confirmation card
+    const orderPreview = pendingOrderPreview || selectedOrder;
+
+    const confirmationMessage = {
       id: Date.now().toString(),
       type: "user" as const,
-      content: "✓ Confirmed",
+      content: "Confirmed",
       timestamp: new Date(),
+      confirmation_state: "accepted" as const,
+      confirmation_message: pendingAction.confirmation_message,
+      confirmation_order: orderPreview ? {
+        order_id: orderPreview.order_id,
+        status: orderPreview.status,
+        product: orderPreview.product,
+      } : undefined,
+      confirmation_action: (pendingAction.parameters as Record<string, unknown>)?.action as string,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [...prev, confirmationMessage]);
     setIsTyping(true);
 
     sendWebSocketMessage("User confirmed the action", pendingAction.action_id);
@@ -603,14 +614,25 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   };
 
   const handleCancelAction = () => {
-    const userMessage = {
+    // Get order details for the decline card
+    const orderPreview = pendingOrderPreview || selectedOrder;
+
+    const declineMessage = {
       id: Date.now().toString(),
       type: "user" as const,
-      content: "✗ Cancelled",
+      content: "Declined",
       timestamp: new Date(),
+      confirmation_state: "declined" as const,
+      confirmation_message: pendingAction?.confirmation_message,
+      confirmation_order: orderPreview ? {
+        order_id: orderPreview.order_id,
+        status: orderPreview.status,
+        product: orderPreview.product,
+      } : undefined,
+      confirmation_action: (pendingAction?.parameters as Record<string, unknown>)?.action as string,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [...prev, declineMessage]);
     setPendingAction(null);
     pendingActionsRef.current[sessionStateKey] = null;
 
@@ -902,25 +924,97 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                         </div>
                       </div>
                     )}
-                  <div
-                    className={`flex ${
-                      message.type === "user" ? "justify-end" : "justify-start"
-                    }`}
-                  >
+                  {message.confirmation_state ? (
+                    <div className="relative ml-2">
+                      <div className={`absolute -top-2 left-1/2 transform -translate-x-1/2 w-4 h-4 rotate-45 border-t border-l ${
+                        message.confirmation_state === "accepted"
+                          ? "bg-success/5 border-success/30"
+                          : "bg-destructive/5 border-destructive/30"
+                      }`}></div>
+                      <Card className={`border shadow-sm ${
+                        message.confirmation_state === "accepted"
+                          ? "bg-success/5 border-success/30"
+                          : "bg-destructive/5 border-destructive/30"
+                      }`}>
+                        <CardContent className="p-3 space-y-3">
+                          {message.confirmation_order && (
+                            <div className="flex space-x-3 border border-border/40 rounded-xl bg-muted/30 p-3">
+                              <Image
+                                src={message.confirmation_order.product.image || "/placeholder.svg"}
+                                alt={message.confirmation_order.product.name}
+                                width={64}
+                                height={64}
+                                className="w-12 h-12 rounded-lg object-cover border border-border/40"
+                                unoptimized={false}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-card-foreground line-clamp-1">
+                                  {message.confirmation_order.product.name}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatCurrency(
+                                    message.confirmation_order.product.price,
+                                    message.confirmation_order.product.currency
+                                  )}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                                  Order #{message.confirmation_order.order_id.split("-")[0].toUpperCase()}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex items-start space-x-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              message.confirmation_state === "accepted"
+                                ? "bg-success/10"
+                                : "bg-destructive/10"
+                            }`}>
+                              {message.confirmation_state === "accepted" ? (
+                                <CheckCircle2 className="w-5 h-5 text-success" />
+                              ) : (
+                                <X className="w-5 h-5 text-destructive" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-semibold mb-0.5 ${
+                                message.confirmation_state === "accepted"
+                                  ? "text-success"
+                                  : "text-destructive"
+                              }`}>
+                                {message.confirmation_state === "accepted"
+                                  ? `${message.confirmation_action ? formatStatusLabel(message.confirmation_action) : 'Order'} Request Confirmed`
+                                  : `${message.confirmation_action ? formatStatusLabel(message.confirmation_action) : 'Order'} Request Declined`
+                                }
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  ) : (
                     <div
-                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                        message.type === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-foreground"
+                      className={`flex ${
+                        message.type === "user" ? "justify-end" : "justify-start"
                       }`}
                     >
-                      <div className="prose prose-sm dark:prose-invert max-w-none font-modern-body">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {message.content}
-                        </ReactMarkdown>
+                      <div
+                        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                          message.type === "user"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-foreground"
+                        }`}
+                      >
+                        <div className="prose prose-sm dark:prose-invert max-w-none font-modern-body">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {message.content}
+                          </ReactMarkdown>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {message.warning_message && (
                     <div className="ml-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
@@ -1054,10 +1148,9 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                   </span>
                                 </div>
                                 <div className="mt-2">
-                                  <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
-                                    <span>Tracking</span>
-                                    <span className="text-[11px] font-semibold text-foreground">
-                                      {order.status}
+                                  <div className="flex items-center justify-between text-[10px] uppercase tracking-wide">
+                                    <span className={`text-[11px] font-semibold ${getStatusAccentClass(order.status)}`}>
+                                      {formatStatusLabel(order.status)}
                                     </span>
                                   </div>
                                   <div className="flex items-center space-x-1 mt-1">

@@ -28,6 +28,14 @@ export interface Message {
   confidence_score?: number;
   is_user_added?: boolean;
   flagging_reason?: string;
+  confirmation_state?: "accepted" | "declined" | null;
+  confirmation_message?: string;
+  confirmation_order?: {
+    order_id: string;
+    status: string;
+    product: OrderProduct;
+  };
+  confirmation_action?: string;
 }
 
 interface TrackingData {

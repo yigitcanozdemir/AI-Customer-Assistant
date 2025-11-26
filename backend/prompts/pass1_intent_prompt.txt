@@ -135,7 +135,9 @@ POLICY QUESTIONS:
   * Check if user uses SPECIFIC REFERENCE (this/it/that) or GENERIC REFERENCE (an order/another)
   * If last_intent was "order_tracking" and NOW user says "cancel/return AN ORDER" → SWITCH (generic)
   * If last_intent was "order_tracking" and NOW user says "cancel/return THIS" → NOT a switch (specific)
-  * If last_intent was "order_modification" and NOW user says "track" → SWITCH
+  * **CRITICAL**: If last_intent was "order_modification" and NOW user uses TRACKING keywords ("track", "where is", "delivery status", "when will it arrive", "shipping status") → ALWAYS SWITCH to order_tracking intent
+    - If an order is selected: Use fetch_order_location with that order_id
+    - If no order selected: Call list_orders first
   * If last_intent was "product_search" and NOW user says anything about orders → SWITCH
   * **CRITICAL**: Always check for specific pronouns (this/it/that/the) vs generic articles (a/an/another)
 
@@ -653,7 +655,44 @@ Output:
 
 **KEY**: Even though current_order exists in context (the tracked order), we set referenced_order to NULL because this is an INTENT SWITCH. User wants to return a DIFFERENT order, not the one they just tracked.
 
-**Example 9: Track → "Return THIS" - NOT an Intent Switch (KEEP CONTEXT)**
+**Example 9: Intent Switch - Return → Track (OPPOSITE DIRECTION)**
+User (Turn 1): "return this order" → User returns order A
+Context: last_intent = "order_modification", current_order = order A
+Output: Return confirmed, order context cleared
+
+User (Turn 2): (user selects order B from order list in UI)
+User says: "track this"
+Context: last_intent = null (CLEARED after order operation), current_order = order B (selected from UI)
+**CRITICAL**: User is switching from RETURN to TRACK - use TRACKING keywords to detect intent!
+Output:
+```json
+{{
+  "intent": "order_tracking",
+  "tool_calls": [
+    {{
+      "tool_name": "fetch_order_location",
+      "parameters": {{"order_id": "order_b_id", "store": "{store}"}},
+      "reasoning": "User wants to TRACK order B. Tracking keywords detected: 'track this'. Intent is order_tracking, not order_modification."
+    }}
+  ],
+  "context_understanding": {{
+    "referenced_order": "order_b_id",
+    "language_detected": "en",
+    "conversation_flow": "Intent switched from order_modification to order_tracking. User wants to track the selected order."
+  }},
+  "requires_confirmation": false,
+  "assessment": {{
+    "confidence": 0.95,
+    "flagging_reason": "none",
+    "orders_found": 1,
+    "products_found": 0,
+    "context_used": true,
+    "suggested_fallback": null
+  }}
+}}
+```
+
+**Example 10: Track → "Return THIS" - NOT an Intent Switch (KEEP CONTEXT)**
 User (Turn 1): "this one" → User selects order to track
 Context: last_intent = null, no orders in context yet
 Output: Track order (fetch_order_location)

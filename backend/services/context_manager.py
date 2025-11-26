@@ -453,6 +453,17 @@ class ContextManager:
             # Clear current order
             context.current_order = None
 
+            # CRITICAL FIX: Clear last_intent when order operation completes
+            # This prevents intent carryover to newly selected orders
+            # Example: User returns order A, then selects order B and says "track this"
+            # Without clearing, system thinks user wants to return order B
+            if "Order operation completed" in reason:
+                old_intent = context.last_intent
+                context.last_intent = None
+                self.logger.info(
+                    f"[Context Clear] Cleared last_intent ({old_intent}) after order operation completion to prevent intent carryover"
+                )
+
             # Save updated context
             await self.save_context(context)
 
