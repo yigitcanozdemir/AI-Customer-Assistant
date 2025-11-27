@@ -159,6 +159,29 @@ POLICY QUESTIONS:
     - "return an order" = clear context (user wants to choose different order)
     - "return another item" = clear context (user wants different order)
 
+**FOLLOW-UP QUESTIONS AFTER ORDER OPERATIONS** (CRITICAL):
+- After user returns/cancels an order, they may ask follow-up questions:
+  * "when will I get my refund?" → intent=policy_inquiry, call faq_search with "refund policy"
+  * "did it go through?" / "was it successful?" → intent=general_inquiry, use current_order context to confirm
+  * "what's the status?" → intent=order_tracking, call fetch_order_location with current_order
+  * "how do I ship it back?" → intent=policy_inquiry, call faq_search with "return shipping"
+- **IMPORTANT**: These are NOT new order operations, they're questions ABOUT the completed operation
+- Use intent=policy_inquiry or general_inquiry based on whether FAQ lookup is needed
+- Keep current_order in context so response can reference the specific order
+- DO NOT call process_order again unless user explicitly requests a new action
+
+**NEW ACTION AFTER COMPLETED OPERATION** (CRITICAL):
+- If user says "let's make a return" / "I want to return" / "make a return" WITHOUT specific reference (this/it/that):
+  * This is a GENERIC request for a NEW return (not about the just-processed order)
+  * MUST call list_orders to show all available orders
+  * Clear current_order context (set referenced_order to null)
+  * Let user SELECT which order they want to return
+- Examples:
+  * User just returned order A, then says "let's make a return" → Show order list (generic, new action)
+  * User just returned order A, then says "return this too" → ERROR, need to clarify which order
+  * User just returned order A, selects order B, says "return this" → Return order B (specific reference)
+- **CRITICAL**: NEVER assume user wants to return the same order again - orders can only be returned once!
+
 **REPEAT/RETRY REQUESTS** (CRITICAL):
 - If user says "try again", "again", "repeat", "do it again", "retry":
   → Look at last_intent in context to see what they tried before

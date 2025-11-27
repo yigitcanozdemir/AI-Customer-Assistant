@@ -113,7 +113,9 @@ class TwoPassAgent:
                 )
 
             # PASS 1: Intent Recognition & Tool Planning
-            self.logger.info(f"[Pass 1] Starting intent recognition for session {session_id}")
+            self.logger.info(
+                f"[Pass 1] Starting intent recognition for session {session_id}"
+            )
             trace.current_state = AgentState.PASS_1_INTENT_RECOGNITION
 
             pass1_output = await self._execute_pass1(
@@ -140,44 +142,54 @@ class TwoPassAgent:
 
             # CRITICAL: Clear product context when switching to order-related intents
             # This happens when user was discussing products but now asks about orders
-            if (pass1_output.intent in [IntentType.ORDER_TRACKING, IntentType.ORDER_MODIFICATION] and
-                context.recent_products and
-                context.last_intent not in [IntentType.ORDER_TRACKING, IntentType.ORDER_MODIFICATION]):
+            if (
+                pass1_output.intent
+                in [IntentType.ORDER_TRACKING, IntentType.ORDER_MODIFICATION]
+                and context.recent_products
+                and context.last_intent
+                not in [IntentType.ORDER_TRACKING, IntentType.ORDER_MODIFICATION]
+            ):
 
                 self.logger.info(
                     f"[Context] Clearing product context - intent switched from {context.last_intent} to {pass1_output.intent}"
                 )
                 await context_manager.clear_product_context(
                     session_id=session_id,
-                    reason=f"Intent switched to {pass1_output.intent}"
+                    reason=f"Intent switched to {pass1_output.intent}",
                 )
                 # Re-fetch context so Pass 2 uses the cleared context
                 context = await context_manager.get_context(session_id)
-                self.logger.info(f"[Context] Context refreshed after clearing product context")
+                self.logger.info(
+                    f"[Context] Context refreshed after clearing product context"
+                )
 
             # CRITICAL: If Pass 1 explicitly set referenced_order to null, clear current_order
             # This happens when user says "my orders", "another order", etc.
             # BUT: Don't clear if user is selecting an order for modification (return/cancel)
-            if (pass1_output.context_understanding.referenced_order is None and
-                any(tc.tool_name == ToolName.LIST_ORDERS for tc in pass1_output.tool_calls)):
+            if pass1_output.context_understanding.referenced_order is None and any(
+                tc.tool_name == ToolName.LIST_ORDERS for tc in pass1_output.tool_calls
+            ):
 
                 # Check if this is part of an order modification flow
                 # Don't clear context if user is selecting an order to return/cancel
                 is_modification_flow = (
-                    pass1_output.intent == IntentType.ORDER_MODIFICATION or
-                    context.last_intent == IntentType.ORDER_MODIFICATION
+                    pass1_output.intent == IntentType.ORDER_MODIFICATION
+                    or context.last_intent == IntentType.ORDER_MODIFICATION
                 )
 
                 if not is_modification_flow:
                     # User is browsing orders (not selecting for modification)
-                    self.logger.info(f"[Context] Clearing current_order - user requested to see all orders")
+                    self.logger.info(
+                        f"[Context] Clearing current_order - user requested to see all orders"
+                    )
                     await context_manager.clear_order_context(
-                        session_id=session_id,
-                        reason="User requested to see all orders"
+                        session_id=session_id, reason="User requested to see all orders"
                     )
                     # CRITICAL: Re-fetch context so Pass 2 uses the cleared context
                     context = await context_manager.get_context(session_id)
-                    self.logger.info(f"[Context] Context refreshed after clearing order")
+                    self.logger.info(
+                        f"[Context] Context refreshed after clearing order"
+                    )
                 else:
                     # User is selecting an order for modification - preserve intent context
                     self.logger.info(
@@ -192,10 +204,13 @@ class TwoPassAgent:
                 # Skip process_order - it will run after user confirms
                 # But execute other tools like faq_search to get policy info
                 tools_to_execute = [
-                    tc for tc in pass1_output.tool_calls
+                    tc
+                    for tc in pass1_output.tool_calls
                     if tc.tool_name != ToolName.PROCESS_ORDER
                 ]
-                self.logger.info(f"[Tools] Confirmation required - skipping process_order until confirmed")
+                self.logger.info(
+                    f"[Tools] Confirmation required - skipping process_order until confirmed"
+                )
 
             self.logger.info(f"[Tools] Executing {len(tools_to_execute)} tool(s)")
             trace.current_state = AgentState.TOOL_EXECUTION
@@ -210,7 +225,9 @@ class TwoPassAgent:
             trace.tools_completed_at = time.perf_counter()
 
             # Extract products, orders, tracking data from tool results
-            products, orders, tracking_data = self._extract_data_from_tools(tool_results)
+            products, orders, tracking_data = self._extract_data_from_tools(
+                tool_results
+            )
 
             # Update context with tool results
             if products:
@@ -225,16 +242,16 @@ class TwoPassAgent:
                 # Only update current_order if intent is ORDER_TRACKING
                 # This prevents tracking data from overwriting a modification target
                 should_update_current_order = (
-                    pass1_output.intent == IntentType.ORDER_TRACKING or
-                    context.current_order is None
+                    pass1_output.intent == IntentType.ORDER_TRACKING
+                    or context.current_order is None
                 )
 
                 if should_update_current_order:
                     # Convert tracking_data to dict for context storage
                     order_dict = {
-                        'order_id': str(tracking_data.order_id),
-                        'status': tracking_data.status,
-                        'created_at': str(tracking_data.created_at),
+                        "order_id": str(tracking_data.order_id),
+                        "status": tracking_data.status,
+                        "created_at": str(tracking_data.created_at),
                     }
                     await context_manager.update_context(
                         session_id=session_id,
@@ -255,11 +272,14 @@ class TwoPassAgent:
 
             # CRITICAL: If Pass 1 set referenced_order to null (intent switch), clear current_order from context
             # BUT: Don't clear if user is in modification flow (they're selecting an order to modify)
-            if pass1_output.context_understanding.referenced_order is None and context.current_order is not None:
+            if (
+                pass1_output.context_understanding.referenced_order is None
+                and context.current_order is not None
+            ):
                 # Check if this is part of an order modification flow (same check as above)
                 is_modification_flow = (
-                    pass1_output.intent == IntentType.ORDER_MODIFICATION or
-                    context.last_intent == IntentType.ORDER_MODIFICATION
+                    pass1_output.intent == IntentType.ORDER_MODIFICATION
+                    or context.last_intent == IntentType.ORDER_MODIFICATION
                 )
 
                 if not is_modification_flow:
@@ -270,7 +290,7 @@ class TwoPassAgent:
                     )
                     await context_manager.clear_order_context(
                         session_id=session_id,
-                        reason=f"Intent switch detected: {pass1_output.context_understanding.conversation_flow}"
+                        reason=f"Intent switch detected: {pass1_output.context_understanding.conversation_flow}",
                     )
                     # Refresh context after clearing
                     context = await context_manager.get_context(session_id)
@@ -294,7 +314,9 @@ class TwoPassAgent:
                 tc.tool_name == ToolName.PROCESS_ORDER for tc in pass1_output.tool_calls
             ):
                 # CRITICAL: Validate policy BEFORE creating pending action
-                self.logger.info(f"[Policy Validation] Checking if action is allowed by FAQ policy")
+                self.logger.info(
+                    f"[Policy Validation] Checking if action is allowed by FAQ policy"
+                )
 
                 validation_result = await self._validate_action_against_policy(
                     user_input=user_input,
@@ -317,7 +339,9 @@ class TwoPassAgent:
                     trace.pass2_output = validation_result["message"]
                 else:
                     # Action is DENIED - Pass 2 already generated denial message
-                    self.logger.info(f"[Policy Validation] Action DENIED by policy: {validation_result['reason']}")
+                    self.logger.info(
+                        f"[Policy Validation] Action DENIED by policy: {validation_result['reason']}"
+                    )
                     trace.current_state = AgentState.PASS_2_RESPONSE_GENERATION
                     trace.pass2_output = validation_result["message"]
                     trace.pass2_completed_at = time.perf_counter()
@@ -345,27 +369,34 @@ class TwoPassAgent:
             # Determine if human intervention is needed based on Pass 1 assessment
             # CRITICAL: Don't flag if policy successfully denied an action - that's working as intended
             policy_denial = (
-                pass1_output.requires_confirmation and
-                any(tc.tool_name == ToolName.PROCESS_ORDER for tc in pass1_output.tool_calls) and
-                trace.pass2_output and
-                "VALIDATION:DENIED" in trace.pass2_output
+                pass1_output.requires_confirmation
+                and any(
+                    tc.tool_name == ToolName.PROCESS_ORDER
+                    for tc in pass1_output.tool_calls
+                )
+                and trace.pass2_output
+                and "VALIDATION:DENIED" in trace.pass2_output
             )
 
             requires_human = (
-                pass1_assessment.confidence < 0.5 or
-                pass1_assessment.flagging_reason in [
+                pass1_assessment.confidence < 0.5
+                or pass1_assessment.flagging_reason
+                in [
                     "off_topic",
                     "unclear_request",
                     "abusive_language",
                     "policy_violation",
                     "prompt_injection",
-                    "potential_error"
+                    "potential_error",
                 ]
             ) and not policy_denial  # Don't flag successful policy denials
 
             # Use suggested fallback if provided and confidence is low
             response_content = trace.pass2_output or "Please confirm the action above."
-            if pass1_assessment.suggested_fallback and pass1_assessment.confidence < 0.7:
+            if (
+                pass1_assessment.suggested_fallback
+                and pass1_assessment.confidence < 0.7
+            ):
                 response_content = pass1_assessment.suggested_fallback
 
             # Convert flagging reason to warning message
@@ -388,8 +419,10 @@ class TwoPassAgent:
             reasoning_parts = []
 
             # Main intent and confidence
-            intent_name = pass1_output.intent.value.replace('_', ' ').title()
-            reasoning_parts.append(f"Detected {intent_name} request with {pass1_assessment.confidence:.0%} confidence")
+            intent_name = pass1_output.intent.value.replace("_", " ").title()
+            reasoning_parts.append(
+                f"Detected {intent_name} request with {pass1_assessment.confidence:.0%} confidence"
+            )
 
             # Context usage
             if pass1_assessment.context_used:
@@ -397,14 +430,21 @@ class TwoPassAgent:
                 if pass1_assessment.orders_found > 0:
                     context_details.append(f"{pass1_assessment.orders_found} order(s)")
                 if pass1_assessment.products_found > 0:
-                    context_details.append(f"{pass1_assessment.products_found} product(s)")
+                    context_details.append(
+                        f"{pass1_assessment.products_found} product(s)"
+                    )
 
                 if context_details:
-                    reasoning_parts.append(f"using conversation context with {' and '.join(context_details)}")
+                    reasoning_parts.append(
+                        f"using conversation context with {' and '.join(context_details)}"
+                    )
 
             # Tool usage
             if len(pass1_output.tool_calls) > 0:
-                tool_names = [tc.tool_name.value.replace('_', ' ') for tc in pass1_output.tool_calls]
+                tool_names = [
+                    tc.tool_name.value.replace("_", " ")
+                    for tc in pass1_output.tool_calls
+                ]
                 reasoning_parts.append(f"Called: {', '.join(tool_names)}")
 
             # Flagging reason (if any)
@@ -412,14 +452,23 @@ class TwoPassAgent:
                 flag_messages = {
                     "potential_error": "Potential issue detected",
                     "off_topic": "Request outside e-commerce domain",
-                    "unclear_request": "Request needs clarification"
+                    "unclear_request": "Request needs clarification",
                 }
-                reasoning_parts.append(flag_messages.get(pass1_assessment.flagging_reason, pass1_assessment.flagging_reason))
+                reasoning_parts.append(
+                    flag_messages.get(
+                        pass1_assessment.flagging_reason,
+                        pass1_assessment.flagging_reason,
+                    )
+                )
 
             assessment_reasoning = ". ".join(reasoning_parts) + "."
 
             # Extract tool names for logging
-            tools_used = [tc.tool_name.value for tc in pass1_output.tool_calls] if pass1_output.tool_calls else []
+            tools_used = (
+                [tc.tool_name.value for tc in pass1_output.tool_calls]
+                if pass1_output.tool_calls
+                else []
+            )
 
             final_response = MessageResponse(
                 content=response_content,
@@ -431,7 +480,10 @@ class TwoPassAgent:
                 timestamp=datetime.now(timezone.utc),
                 requires_human=requires_human,
                 confidence_score=pass1_assessment.confidence,
-                is_context_relevant=(pass1_assessment.flagging_reason not in ["policy_violation", "abusive_language", "prompt_injection"]),
+                is_context_relevant=(
+                    pass1_assessment.flagging_reason
+                    not in ["policy_violation", "abusive_language", "prompt_injection"]
+                ),
                 pending_action=pending_action,
                 warning_message=warning_message,
                 assessment_reasoning=assessment_reasoning,
@@ -476,16 +528,16 @@ class TwoPassAgent:
         # Update selected order if provided
         if selected_order:
             order_dict = {
-                'order_id': str(selected_order.order_id),
-                'status': selected_order.status,
-                'product_name': (
+                "order_id": str(selected_order.order_id),
+                "status": selected_order.status,
+                "product_name": (
                     selected_order.product.name
-                    if hasattr(selected_order, 'product')
-                    else 'Unknown'
+                    if hasattr(selected_order, "product")
+                    else "Unknown"
                 ),
-                'created_at': (
+                "created_at": (
                     selected_order.created_at.isoformat()
-                    if hasattr(selected_order.created_at, 'isoformat')
+                    if hasattr(selected_order.created_at, "isoformat")
                     else str(selected_order.created_at)
                 ),
             }
@@ -518,10 +570,10 @@ class TwoPassAgent:
             if context.recent_products:
                 # Get the most recent product
                 latest_product = context.recent_products[-1]
-                product_name = latest_product.get('name', 'Unknown')
-                product_id = latest_product.get('id', 'Unknown')
-                product_price = latest_product.get('price', 'N/A')
-                product_currency = latest_product.get('currency', 'USD')
+                product_name = latest_product.get("name", "Unknown")
+                product_id = latest_product.get("id", "Unknown")
+                product_price = latest_product.get("price", "N/A")
+                product_currency = latest_product.get("currency", "USD")
 
                 product_context_info = f"""
 **SELECTED PRODUCT CONTEXT**:
@@ -562,9 +614,9 @@ The user is referring to this order when they say "this order", "it", "that one"
 """
             elif context.current_order:
                 # Use the order from context (e.g., from recent tracking)
-                order_id = context.current_order.get('order_id', 'unknown')
-                order_status = context.current_order.get('status', 'unknown')
-                order_created = context.current_order.get('created_at', 'unknown')
+                order_id = context.current_order.get("order_id", "unknown")
+                order_status = context.current_order.get("status", "unknown")
+                order_created = context.current_order.get("created_at", "unknown")
 
                 # Build intent-specific context guidance
                 # When using context.current_order, provide neutral guidance
@@ -673,9 +725,7 @@ The user is referring to this order when they say "this order", "it", "that one"
                     tool_call.parameters.user_id = user_id
 
             # Execute tool
-            tool_tasks.append(
-                self._execute_single_tool(tool_call, trace)
-            )
+            tool_tasks.append(self._execute_single_tool(tool_call, trace))
 
         # Execute all tools in parallel
         results = await asyncio.gather(*tool_tasks, return_exceptions=True)
@@ -706,12 +756,12 @@ The user is referring to this order when they say "this order", "it", "that one"
             # Filter parameters to only include what each tool accepts
             # This prevents Pass 1 from accidentally including wrong parameters
             valid_params = {
-                ToolName.PRODUCT_SEARCH: ['query', 'store'],
-                ToolName.FAQ_SEARCH: ['query', 'store'],
-                ToolName.VARIANT_CHECK: ['product_id', 'size', 'color'],
-                ToolName.PROCESS_ORDER: ['order_id', 'action', 'store'],
-                ToolName.LIST_ORDERS: ['store', 'user_id'],
-                ToolName.FETCH_ORDER_LOCATION: ['order_id', 'store'],
+                ToolName.PRODUCT_SEARCH: ["query", "store"],
+                ToolName.FAQ_SEARCH: ["query", "store"],
+                ToolName.VARIANT_CHECK: ["product_id", "size", "color"],
+                ToolName.PROCESS_ORDER: ["order_id", "action", "store"],
+                ToolName.LIST_ORDERS: ["store", "user_id"],
+                ToolName.FETCH_ORDER_LOCATION: ["order_id", "store"],
             }
 
             # Keep only valid parameters for this tool
@@ -757,11 +807,13 @@ The user is referring to this order when they say "this order", "it", "that one"
             if not result.success:
                 continue
 
-            if result.tool_name == ToolName.PRODUCT_SEARCH and isinstance(result.data, list):
+            if result.tool_name == ToolName.PRODUCT_SEARCH and isinstance(
+                result.data, list
+            ):
                 products = result.data
 
             elif result.tool_name == ToolName.LIST_ORDERS:
-                if hasattr(result.data, 'orders'):
+                if hasattr(result.data, "orders"):
                     orders = result.data.orders
 
             elif result.tool_name == ToolName.FETCH_ORDER_LOCATION:
@@ -779,12 +831,14 @@ The user is referring to this order when they say "this order", "it", "that one"
         tracking_data: Any,
         trace: TwoPassExecutionTrace,
         validation_context: str = "",
+        confirmation_context: str = "",
     ) -> str:
         """
         Execute Pass 2: Natural Language Response Generation
 
         Args:
             validation_context: Optional context for policy validation mode
+            confirmation_context: Optional context for confirmation/declination responses
 
         Returns natural language response string.
         """
@@ -802,22 +856,24 @@ The user is referring to this order when they say "this order", "it", "that one"
 
             # Language mapping
             language_names = {
-                'en': 'English',
-                'es': 'Spanish',
-                'fr': 'French',
-                'de': 'German',
-                'it': 'Italian',
-                'pt': 'Portuguese',
-                'tr': 'Turkish',
-                'ar': 'Arabic',
-                'zh': 'Chinese',
-                'ja': 'Japanese',
-                'ko': 'Korean',
+                "en": "English",
+                "es": "Spanish",
+                "fr": "French",
+                "de": "German",
+                "it": "Italian",
+                "pt": "Portuguese",
+                "tr": "Turkish",
+                "ar": "Arabic",
+                "zh": "Chinese",
+                "ja": "Japanese",
+                "ko": "Korean",
             }
-            detected_language_name = language_names.get(detected_language, 'English')
+            detected_language_name = language_names.get(detected_language, "English")
 
             # Build conversation context summary
-            conversation_context_summary = context_manager.build_context_summary(context)
+            conversation_context_summary = context_manager.build_context_summary(
+                context
+            )
 
             # If validation_context is provided, use it instead of normal prompt
             if validation_context:
@@ -847,7 +903,7 @@ Generate your validation response now (must start with VALIDATION:ALLOWED or VAL
                     tracking_guidance=tracking_guidance,
                     policy_context=policy_context,
                     conversation_context_summary=conversation_context_summary,
-                    confirmation_context="",  # Will be added if needed
+                    confirmation_context=confirmation_context,
                 )
 
             # Call LLM for natural language response
@@ -903,13 +959,13 @@ Generate your validation response now (must start with VALIDATION:ALLOWED or VAL
             return "No products found"
 
         elif result.tool_name == ToolName.LIST_ORDERS:
-            if hasattr(result.data, 'orders'):
+            if hasattr(result.data, "orders"):
                 return f"Found {len(result.data.orders)} order(s)"
             return "No orders found"
 
         elif result.tool_name == ToolName.FETCH_ORDER_LOCATION:
             if result.data:
-                status = getattr(result.data, 'status', 'unknown')
+                status = getattr(result.data, "status", "unknown")
                 return f"Tracking data retrieved (status: {status})"
             return "Tracking data not available"
 
@@ -920,7 +976,9 @@ Generate your validation response now (must start with VALIDATION:ALLOWED or VAL
             return "No FAQ results"
 
         elif result.tool_name == ToolName.VARIANT_CHECK:
-            return f"Variant check completed: {json.dumps(jsonable_encoder(result.data))}"
+            return (
+                f"Variant check completed: {json.dumps(jsonable_encoder(result.data))}"
+            )
 
         else:
             return "Completed"
@@ -930,7 +988,7 @@ Generate your validation response now (must start with VALIDATION:ALLOWED or VAL
         if not tracking_data:
             return ""
 
-        status = getattr(tracking_data, 'status', '').lower()
+        status = getattr(tracking_data, "status", "").lower()
 
         if status == "created":
             return "The order is still being prepared and hasn't shipped yet."
@@ -958,7 +1016,7 @@ Generate your validation response now (must start with VALIDATION:ALLOWED or VAL
                 if isinstance(result.data, list) and result.data:
                     # FAQ tool returns all policies from the store
                     # Pass them to Pass 2 for extraction of ONLY relevant parts
-                    policies = [faq.get('content', '') for faq in result.data]
+                    policies = [faq.get("content", "") for faq in result.data]
                     return "\n\n".join(policies)
 
         return ""
@@ -990,27 +1048,36 @@ Generate your validation response now (must start with VALIDATION:ALLOWED or VAL
 
         # Extract order info from selected_order or context
         if selected_order:
-            order_id = getattr(selected_order, 'order_id', None)
-            order_status = getattr(selected_order, 'status', None)
-            order_created_at = getattr(selected_order, 'created_at', None)
-            self.logger.info(f"[Policy Validation] Using selected_order: {order_id}, status={order_status}")
+            order_id = getattr(selected_order, "order_id", None)
+            order_status = getattr(selected_order, "status", None)
+            order_created_at = getattr(selected_order, "created_at", None)
+            self.logger.info(
+                f"[Policy Validation] Using selected_order: {order_id}, status={order_status}"
+            )
         elif context.current_order:
-            order_id = context.current_order.get('order_id')
-            order_status = context.current_order.get('status')
-            order_created_at = context.current_order.get('created_at')
-            self.logger.info(f"[Policy Validation] Using context.current_order: {order_id}, status={order_status}")
+            order_id = context.current_order.get("order_id")
+            order_status = context.current_order.get("status")
+            order_created_at = context.current_order.get("created_at")
+            self.logger.info(
+                f"[Policy Validation] Using context.current_order: {order_id}, status={order_status}"
+            )
         else:
-            self.logger.warning(f"[Policy Validation] No order found in selected_order or context.current_order")
+            self.logger.warning(
+                f"[Policy Validation] No order found in selected_order or context.current_order"
+            )
 
         # Extract action from process_order tool call
         action = None
         for tc in pass1_output.tool_calls:
             if tc.tool_name == ToolName.PROCESS_ORDER:
-                action = tc.parameters.action if hasattr(tc.parameters, 'action') else None
+                action = (
+                    tc.parameters.action if hasattr(tc.parameters, "action") else None
+                )
                 break
 
         # Get current date for validation
         from datetime import datetime, timezone
+
         current_date = datetime.now(timezone.utc).date()
 
         # Calculate days elapsed since order creation
@@ -1019,12 +1086,20 @@ Generate your validation response now (must start with VALIDATION:ALLOWED or VAL
             try:
                 # Parse order_created_at (format: YYYY-MM-DD HH:MM:SS or YYYY-MM-DD)
                 if isinstance(order_created_at, str):
-                    order_date = datetime.fromisoformat(order_created_at.replace('Z', '+00:00')).date()
+                    order_date = datetime.fromisoformat(
+                        order_created_at.replace("Z", "+00:00")
+                    ).date()
                 else:
-                    order_date = order_created_at.date() if hasattr(order_created_at, 'date') else order_created_at
+                    order_date = (
+                        order_created_at.date()
+                        if hasattr(order_created_at, "date")
+                        else order_created_at
+                    )
                 days_elapsed = (current_date - order_date).days
             except Exception as e:
-                self.logger.warning(f"[Policy Validation] Could not parse order_created_at: {e}")
+                self.logger.warning(
+                    f"[Policy Validation] Could not parse order_created_at: {e}"
+                )
 
         # Build validation context for Pass 2
         validation_context = f"""
@@ -1110,7 +1185,9 @@ CRITICAL RULES FOR VALIDATION:
                 }
             else:
                 # Fallback: If response doesn't start with VALIDATION, assume allowed
-                self.logger.warning(f"[Policy Validation] Response doesn't start with VALIDATION marker, assuming ALLOWED")
+                self.logger.warning(
+                    f"[Policy Validation] Response doesn't start with VALIDATION marker, assuming ALLOWED"
+                )
                 return {
                     "allowed": True,
                     "message": response,
@@ -1118,7 +1195,9 @@ CRITICAL RULES FOR VALIDATION:
                 }
 
         except Exception as e:
-            self.logger.error(f"[Policy Validation] Error during validation: {e}", exc_info=True)
+            self.logger.error(
+                f"[Policy Validation] Error during validation: {e}", exc_info=True
+            )
             # On error, DENY for safety
             return {
                 "allowed": False,
@@ -1181,29 +1260,34 @@ CRITICAL RULES FOR VALIDATION:
             return None
 
         action_id = str(uuid.uuid4())
-        process_order_params = process_order_call.parameters.model_dump(exclude_none=True)
-        order_id = process_order_params.get('order_id') or (
+        process_order_params = process_order_call.parameters.model_dump(
+            exclude_none=True
+        )
+        order_id = process_order_params.get("order_id") or (
             str(selected_order.order_id) if selected_order else None
         )
-        action_type = process_order_params.get('action', 'process')
+        action_type = process_order_params.get("action", "process")
 
         # CRITICAL: Only include valid parameters for process_order
         # Filter out user_id and other invalid parameters to prevent execution errors
         pending_parameters = {
-            'order_id': order_id,
-            'action': action_type,
-            'store': process_order_params.get('store'),
+            "order_id": order_id,
+            "action": action_type,
+            "store": process_order_params.get("store"),
         }
         # Remove None values
-        pending_parameters = {k: v for k, v in pending_parameters.items() if v is not None}
+        pending_parameters = {
+            k: v for k, v in pending_parameters.items() if v is not None
+        }
 
         action_payload = {
-            'action_type': ToolName.PROCESS_ORDER.value,
-            'parameters': pending_parameters,
+            "action_type": ToolName.PROCESS_ORDER.value,
+            "parameters": pending_parameters,
         }
 
         # Store in cache
         from backend.services.cache import cache_manager
+
         await cache_manager.store_pending_action(
             action_id=action_id,
             action_data=action_payload,
@@ -1222,7 +1306,7 @@ CRITICAL RULES FOR VALIDATION:
             action_type=ToolName.PROCESS_ORDER.value,
             parameters=pending_parameters,
             requires_confirmation=True,
-            confirmation_message=f"Are you sure you want to {action_type} order {order_id}?",
+            confirmation_message=f"Are you sure you want to {action_type} this order?",
         )
 
     async def _handle_confirmation(
@@ -1232,7 +1316,7 @@ CRITICAL RULES FOR VALIDATION:
         trace: TwoPassExecutionTrace,
         user_input: str,
     ) -> MessageResponse:
-        """Handle confirmation of a pending action"""
+        """Handle confirmation or declination of a pending action"""
         from backend.services.cache import cache_manager
 
         pending_action = await cache_manager.get_pending_action(confirm_action_id)
@@ -1247,20 +1331,118 @@ CRITICAL RULES FOR VALIDATION:
                 is_context_relevant=True,
             )
 
-        # Execute the confirmed action
+        # Check if user declined the action
+        is_declined = "declined" in user_input.lower() or "cancel" in user_input.lower()
+
+        if is_declined:
+            # User declined the action
+            await cache_manager.delete_pending_action(confirm_action_id)
+            await context_manager.clear_pending_confirmation(context.session_id)
+
+            action_type = pending_action["parameters"].get("action", "action")
+
+            # Get FAQ context for declination response
+            from backend.api.agent_schema import ToolResult, ToolName
+
+            faq_query = f"{action_type} policy"
+            faq_result = await execute_tool(
+                "faq_search", {"query": faq_query, "store": context.store}
+            )
+
+            # Create tool result for FAQ context
+            # FAQ search returns a list directly: [{"id": "...", "content": "..."}]
+            tool_results = []
+            if isinstance(faq_result, list) and faq_result:
+                tool_results.append(
+                    ToolResult(
+                        tool_name=ToolName.FAQ_SEARCH,
+                        success=True,
+                        data=faq_result,
+                        error=None,
+                    )
+                )
+
+            # Build declination context
+            decline_context = f"""
+The user DECLINED a {action_type} request.
+
+IMPORTANT INSTRUCTIONS:
+- Acknowledge that they've chosen not to proceed with the {action_type}
+- DO NOT mention the order ID (it's shown in the UI card)
+- Keep the tone friendly and supportive
+- Briefly mention they can still {action_type} later if they change their mind (based on FAQ policy)
+- Ask if there's anything else you can help with
+- Be concise (2-3 sentences maximum)
+- Respond in the user's language
+"""
+
+            # Create a minimal Pass1Output for Pass 2
+            from backend.api.agent_schema import (
+                Pass1Output,
+                IntentType,
+                ContextUnderstanding,
+                AssessmentInfo,
+            )
+
+            pass1_output = Pass1Output(
+                intent=IntentType.ORDER_MODIFICATION,
+                tool_calls=[],
+                context_understanding=ContextUnderstanding(
+                    referenced_order=None,
+                    referenced_product=None,
+                    language_detected=context.detected_language or "en",
+                    conversation_flow=f"User declined {action_type} request",
+                ),
+                requires_confirmation=False,
+                assessment=AssessmentInfo(
+                    confidence=1.0,
+                    flagging_reason="none",
+                    orders_found=0,
+                    products_found=0,
+                    context_used=True,
+                    suggested_fallback=None,
+                ),
+            )
+
+            pass2_response = await self._execute_pass2(
+                user_input=f"Declined {action_type} request",
+                pass1_output=pass1_output,
+                tool_results=tool_results,
+                context=context,
+                detected_language=context.detected_language or "en",
+                tracking_data=None,
+                trace=trace,
+                confirmation_context=decline_context,
+            )
+
+            content = (
+                pass2_response
+                if pass2_response
+                else f"No problem! Your order will remain as-is. Feel free to reach out if you change your mind or need anything else."
+            )
+
+            return MessageResponse(
+                content=content,
+                store=context.store,
+                timestamp=datetime.now(timezone.utc),
+                requires_human=False,
+                confidence_score=1.0,
+                is_context_relevant=True,
+            )
+
+        # User confirmed the action - execute it
         try:
-            tool_name = pending_action['action_type']
-            tool_params = pending_action['parameters']
+            tool_name = pending_action["action_type"]
+            tool_params = pending_action["parameters"]
 
             # CRITICAL: Filter parameters to match tool signature
-            # This prevents "unexpected keyword argument" errors
             valid_params = {
-                'process_order': ['order_id', 'action', 'store'],
-                'product_search': ['query', 'store'],
-                'faq_search': ['query', 'store'],
-                'variant_check': ['product_id', 'size', 'color'],
-                'list_orders': ['store', 'user_id'],
-                'fetch_order_location': ['order_id', 'store'],
+                "process_order": ["order_id", "action", "store"],
+                "product_search": ["query", "store"],
+                "faq_search": ["query", "store"],
+                "variant_check": ["product_id", "size", "color"],
+                "list_orders": ["store", "user_id"],
+                "fetch_order_location": ["order_id", "store"],
             }
 
             if tool_name in valid_params:
@@ -1273,25 +1455,126 @@ CRITICAL RULES FOR VALIDATION:
             result = await execute_tool(tool_name, tool_params)
 
             # CRITICAL: Check if tool execution actually succeeded
-            if isinstance(result, dict) and result.get('status') == 'error':
-                error_msg = result.get('error', 'Unknown error')
-                raise Exception(f"Tool execution failed: {error_msg}")
+            if isinstance(result, dict) and result.get("status") == "error":
+                error_msg = result.get("message") or result.get("error") or "Unknown error"
+                self.logger.error(f"[Confirmation] Tool execution failed: {error_msg}")
+
+                # Return friendly error message to user
+                return MessageResponse(
+                    content=f"I couldn't complete that action: {error_msg}",
+                    store=context.store,
+                    timestamp=datetime.now(timezone.utc),
+                    requires_human=False,
+                    confidence_score=0.8,
+                    is_context_relevant=True,
+                )
 
             await cache_manager.delete_pending_action(confirm_action_id)
             await context_manager.clear_pending_confirmation(context.session_id)
 
-            # Generate response about the completed action
-            action_type = tool_params.get('action', 'process')
-            order_id = tool_params.get('order_id', 'unknown')
-            await context_manager.clear_order_context(
-                session_id=context.session_id,
-                reason=f"Order operation completed: {action_type} for order {order_id}"
-            )
+            # Generate dynamic response using Pass 2 with FAQ context
+            action_type = tool_params.get("action", "process")
+            order_id = tool_params.get("order_id", "unknown")
+
+            # IMPORTANT: Only clear last_intent, NOT current_order
+            # This allows users to ask follow-up questions about the processed order
+            # Example: After returning order, user might ask "when will I get my refund?"
+            # But if user says "track this" or selects different order, Pass 1 will handle new intent
+            context.last_intent = None
+            await context_manager.save_context(context)
             self.logger.info(
-                f"[Context] Cleared order context after successful {action_type} operation on order {order_id}"
+                f"[Context] Cleared last_intent after {action_type} operation. Order {order_id} remains in context for follow-up questions."
             )
 
-            content = f"Your {action_type} request for order {order_id} has been processed successfully. Is there anything else I can help you with?"
+            # Get FAQ context for next steps
+            from backend.api.agent_schema import ToolResult, ToolName
+
+            faq_query = f"{action_type} policy"
+            faq_result = await execute_tool(
+                "faq_search", {"query": faq_query, "store": context.store}
+            )
+
+            # Create tool result for FAQ context
+            # FAQ search returns a list directly: [{"id": "...", "content": "..."}]
+            tool_results = []
+            if isinstance(faq_result, list) and faq_result:
+                tool_results.append(
+                    ToolResult(
+                        tool_name=ToolName.FAQ_SEARCH,
+                        success=True,
+                        data=faq_result,
+                        error=None,
+                    )
+                )
+
+            # Build context for confirmation success message
+            success_context = f"""
+The user confirmed a {action_type} request. The action has been successfully processed.
+
+IMPORTANT INSTRUCTIONS:
+- DO NOT mention the order ID in your response (it's already shown in the UI card)
+- Confirm the {action_type} was successful
+- Provide clear NEXT STEPS based on the FAQ policy retrieved from tool results
+- Be concise but informative (3-4 sentences maximum)
+- Keep a friendly, helpful tone
+- Use the EXACT information from the FAQ (refund timelines, processing fees, return window, etc.)
+
+For RETURN actions:
+- Explain how to package the item (if mentioned in FAQ)
+- Mention return shipping instructions (if applicable)
+- State the EXACT refund timeline from FAQ (e.g., "7-10 business days")
+- Mention any processing fees from FAQ
+
+For CANCEL actions:
+- Confirm the cancellation
+- Mention refund timeline if applicable from FAQ
+- Offer to help with anything else
+"""
+
+            # Create a minimal Pass1Output for Pass 2
+            from backend.api.agent_schema import (
+                Pass1Output,
+                IntentType,
+                ContextUnderstanding,
+                AssessmentInfo,
+            )
+
+            pass1_output = Pass1Output(
+                intent=IntentType.ORDER_MODIFICATION,
+                tool_calls=[],
+                context_understanding=ContextUnderstanding(
+                    referenced_order=order_id,
+                    referenced_product=None,
+                    language_detected=context.detected_language or "en",
+                    conversation_flow=f"User confirmed {action_type} request",
+                ),
+                requires_confirmation=False,
+                assessment=AssessmentInfo(
+                    confidence=1.0,
+                    flagging_reason="none",
+                    orders_found=1,
+                    products_found=0,
+                    context_used=True,
+                    suggested_fallback=None,
+                ),
+            )
+
+            pass2_response = await self._execute_pass2(
+                user_input=f"Confirmed {action_type} request",
+                pass1_output=pass1_output,
+                tool_results=tool_results,
+                context=context,
+                detected_language=context.detected_language or "en",
+                tracking_data=None,
+                trace=trace,
+                confirmation_context=success_context,
+            )
+
+            content = (
+                pass2_response
+                if pass2_response
+                else f"Your {action_type} request has been processed successfully. Is there anything else I can help you with?"
+            )
 
             return MessageResponse(
                 content=content,
@@ -1313,7 +1596,6 @@ CRITICAL RULES FOR VALIDATION:
                 confidence_score=0.0,
                 is_context_relevant=True,
             )
-
 
     async def _create_fallback_response(
         self,

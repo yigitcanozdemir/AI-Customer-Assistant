@@ -614,6 +614,8 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   };
 
   const handleCancelAction = () => {
+    if (!pendingAction) return;
+
     // Get order details for the decline card
     const orderPreview = pendingOrderPreview || selectedOrder;
 
@@ -623,20 +625,23 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       content: "Declined",
       timestamp: new Date(),
       confirmation_state: "declined" as const,
-      confirmation_message: pendingAction?.confirmation_message,
+      confirmation_message: pendingAction.confirmation_message,
       confirmation_order: orderPreview ? {
         order_id: orderPreview.order_id,
         status: orderPreview.status,
         product: orderPreview.product,
       } : undefined,
-      confirmation_action: (pendingAction?.parameters as Record<string, unknown>)?.action as string,
+      confirmation_action: (pendingAction.parameters as Record<string, unknown>)?.action as string,
     };
 
     setMessages((prev) => [...prev, declineMessage]);
+    setIsTyping(true);
+
+    // Send cancellation with action_id to backend
+    sendWebSocketMessage("User declined the action", pendingAction.action_id);
+
     setPendingAction(null);
     pendingActionsRef.current[sessionStateKey] = null;
-
-    sendWebSocketMessage("User cancelled the action");
   };
 
   const lockedBannerMessage = (() => {
@@ -925,74 +930,76 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                       </div>
                     )}
                   {message.confirmation_state ? (
-                    <div className="relative ml-2">
-                      <div className={`absolute -top-2 left-1/2 transform -translate-x-1/2 w-4 h-4 rotate-45 border-t border-l ${
-                        message.confirmation_state === "accepted"
-                          ? "bg-success/5 border-success/30"
-                          : "bg-destructive/5 border-destructive/30"
-                      }`}></div>
-                      <Card className={`border shadow-sm ${
-                        message.confirmation_state === "accepted"
-                          ? "bg-success/5 border-success/30"
-                          : "bg-destructive/5 border-destructive/30"
-                      }`}>
-                        <CardContent className="p-3 space-y-3">
-                          {message.confirmation_order && (
-                            <div className="flex space-x-3 border border-border/40 rounded-xl bg-muted/30 p-3">
-                              <Image
-                                src={message.confirmation_order.product.image || "/placeholder.svg"}
-                                alt={message.confirmation_order.product.name}
-                                width={64}
-                                height={64}
-                                className="w-12 h-12 rounded-lg object-cover border border-border/40"
-                                unoptimized={false}
-                              />
+                    <div className="flex justify-start w-full">
+                      <div className="relative w-full">
+                        <div className={`absolute -top-2 left-1/2 transform -translate-x-1/2 w-4 h-4 rotate-45 border-t border-l ${
+                          message.confirmation_state === "accepted"
+                            ? "bg-success/5 border-success/30"
+                            : "bg-destructive/5 border-destructive/30"
+                        }`}></div>
+                        <Card className={`border shadow-sm ${
+                          message.confirmation_state === "accepted"
+                            ? "bg-success/5 border-success/30"
+                            : "bg-destructive/5 border-destructive/30"
+                        }`}>
+                          <CardContent className="p-3 space-y-3">
+                            {message.confirmation_order && (
+                              <div className="flex space-x-3 border border-border/40 rounded-xl bg-muted/30 p-3">
+                                <Image
+                                  src={message.confirmation_order.product.image || "/placeholder.svg"}
+                                  alt={message.confirmation_order.product.name}
+                                  width={64}
+                                  height={64}
+                                  className="w-12 h-12 rounded-lg object-cover border border-border/40"
+                                  unoptimized={false}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold text-card-foreground line-clamp-1">
+                                    {message.confirmation_order.product.name}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {formatCurrency(
+                                      message.confirmation_order.product.price,
+                                      message.confirmation_order.product.currency
+                                    )}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                                    {message.confirmation_order.order_id}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                            <div className="flex items-start space-x-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                message.confirmation_state === "accepted"
+                                  ? "bg-success/10"
+                                  : "bg-destructive/10"
+                              }`}>
+                                {message.confirmation_state === "accepted" ? (
+                                  <CheckCircle2 className="w-5 h-5 text-success" />
+                                ) : (
+                                  <X className="w-5 h-5 text-destructive" />
+                                )}
+                              </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-card-foreground line-clamp-1">
-                                  {message.confirmation_order.product.name}
+                                <p className={`text-sm font-semibold mb-0.5 ${
+                                  message.confirmation_state === "accepted"
+                                    ? "text-success"
+                                    : "text-destructive"
+                                }`}>
+                                  {message.confirmation_state === "accepted"
+                                    ? `${message.confirmation_action ? formatStatusLabel(message.confirmation_action) : 'Order'} Request Confirmed`
+                                    : `${message.confirmation_action ? formatStatusLabel(message.confirmation_action) : 'Order'} Request Declined`
+                                  }
                                 </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {formatCurrency(
-                                    message.confirmation_order.product.price,
-                                    message.confirmation_order.product.currency
-                                  )}
-                                </p>
-                                <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                                  Order #{message.confirmation_order.order_id.split("-")[0].toUpperCase()}
+                                <p className="text-[10px] text-muted-foreground">
+                                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </p>
                               </div>
                             </div>
-                          )}
-                          <div className="flex items-start space-x-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                              message.confirmation_state === "accepted"
-                                ? "bg-success/10"
-                                : "bg-destructive/10"
-                            }`}>
-                              {message.confirmation_state === "accepted" ? (
-                                <CheckCircle2 className="w-5 h-5 text-success" />
-                              ) : (
-                                <X className="w-5 h-5 text-destructive" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-sm font-semibold mb-0.5 ${
-                                message.confirmation_state === "accepted"
-                                  ? "text-success"
-                                  : "text-destructive"
-                              }`}>
-                                {message.confirmation_state === "accepted"
-                                  ? `${message.confirmation_action ? formatStatusLabel(message.confirmation_action) : 'Order'} Request Confirmed`
-                                  : `${message.confirmation_action ? formatStatusLabel(message.confirmation_action) : 'Order'} Request Declined`
-                                }
-                              </p>
-                              <p className="text-[10px] text-muted-foreground">
-                                {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </p>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
+                          </CardContent>
+                        </Card>
+                      </div>
                     </div>
                   ) : (
                     <div
