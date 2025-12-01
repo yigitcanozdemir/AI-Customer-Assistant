@@ -169,6 +169,173 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     setIsMounted(true);
   }, []);
 
+  const fetchUndeliveredMessages = useCallback(async () => {
+    if (!sessionId) return;
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+
+      let lastMessageId: string | null = null;
+      setMessages((currentMessages) => {
+        lastMessageId = currentMessages.length > 0 ? currentMessages[currentMessages.length - 1].id : null;
+        return currentMessages;
+      });
+
+      const url = lastMessageId
+        ? `${apiUrl}/events/chat/history/${sessionId}?after=${encodeURIComponent(lastMessageId)}`
+        : `${apiUrl}/events/chat/history/${sessionId}`;
+
+      console.log(`Fetching undelivered messages${lastMessageId ? ` after ${lastMessageId}` : ' (all messages)'}`);
+      const response = await fetch(url);
+
+      if (response.ok) {
+        const data = await response.json();
+
+        const newMessages = data.messages.map((msg: Record<string, unknown>) => {
+          const timestamp = msg.timestamp;
+          return {
+            ...msg,
+            timestamp: typeof timestamp === 'string' ? new Date(timestamp) : timestamp instanceof Date ? timestamp : new Date(),
+          };
+        });
+
+        if (newMessages.length > 0) {
+          setMessages((currentMessages) => {
+            const existingIds = new Set(currentMessages.map(m => m.id));
+
+            const existingContentKeys = new Set(
+              currentMessages.map(m => `${m.type}:${m.content}`)
+            );
+
+            const trulyNewMessages = newMessages.filter((msg: Message) => {
+              if (existingIds.has(msg.id)) return false;
+
+              const contentKey = `${msg.type}:${msg.content}`;
+              if (existingContentKeys.has(contentKey)) {
+                console.log(`Skipping duplicate message with different ID: ${msg.content.substring(0, 50)}`);
+                return false;
+              }
+
+              if (msg.type === 'user' && msg.reply_order) {
+                const msgOrderId = msg.reply_order.order_id;
+                const isDuplicateOrder = currentMessages.some((existing: Message) =>
+                  existing.type === 'user' &&
+                  existing.reply_order &&
+                  existing.reply_order.order_id === msgOrderId
+                );
+                if (isDuplicateOrder) {
+                  console.log(`Skipping duplicate order selection for order ${msgOrderId}`);
+                  return false;
+                }
+              }
+
+              if (msg.type === 'user' && msg.reply_product) {
+                const msgProductId = msg.reply_product.id;
+                const isDuplicateProduct = currentMessages.some((existing: Message) =>
+                  existing.type === 'user' &&
+                  existing.reply_product &&
+                  existing.reply_product.id === msgProductId &&
+                  Math.abs(new Date(existing.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 5000
+                );
+                if (isDuplicateProduct) {
+                  console.log(`Skipping duplicate product selection for product ${msgProductId}`);
+                  return false;
+                }
+              }
+
+              return true;
+            });
+
+            if (trulyNewMessages.length > 0) {
+              console.log(`Fetched ${trulyNewMessages.length} undelivered messages`);
+
+              return [...currentMessages, ...trulyNewMessages];
+            }
+
+            return currentMessages;
+          });
+        } else {
+          console.log('No new messages to fetch');
+        }
+
+        if (typeof data.is_typing === 'boolean') {
+          console.log(`Backend typing state: ${data.is_typing}`);
+          setIsTyping(data.is_typing);
+        }
+
+        if (data.pending_action) {
+          console.log("Restored pending action from history:", data.pending_action);
+          const action = data.pending_action as PendingAction;
+          pendingActionsRef.current[sessionStateKey] = action;
+          setPendingAction(action);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch undelivered messages:", error);
+    }
+  }, [sessionId, setMessages, setIsTyping, sessionStateKey]);
+
+  const lastSessionRef = useRef<string>('');
+  const lastStoreRef = useRef<string>('');
+
+  useEffect(() => {
+    if (!isAssistantOpen || !sessionId) return;
+
+    const sessionChanged = lastSessionRef.current !== '' && lastSessionRef.current !== sessionId;
+    const storeChanged = lastStoreRef.current !== '' && lastStoreRef.current !== selectedStore;
+
+    lastSessionRef.current = sessionId;
+    lastStoreRef.current = selectedStore;
+
+    if (sessionChanged || storeChanged) {
+      console.log('Session or store changed, skipping initial fetch (ChatContext will handle)');
+      return;
+    }
+
+    console.log('Sidebar opened, fetching undelivered messages');
+    fetchUndeliveredMessages();
+  }, [isAssistantOpen, sessionId, selectedStore, fetchUndeliveredMessages]);
+
+  useEffect(() => {
+    if (!isAssistantOpen || !sessionId) return;
+
+    const sessionJustChanged = lastSessionRef.current !== sessionId;
+    const storeJustChanged = lastStoreRef.current !== selectedStore;
+
+    if (sessionJustChanged || storeJustChanged) {
+      console.log('Session/store just changed, skipping polling to avoid cross-contamination');
+      return;
+    }
+
+    const earlyPollInterval = setInterval(() => {
+      console.log('Early polling for undelivered messages...');
+      fetchUndeliveredMessages();
+    }, 1000);
+
+    const earlyPollTimeout = setTimeout(() => {
+      clearInterval(earlyPollInterval);
+      console.log('Early polling complete');
+    }, 10000);
+
+    let typingPollInterval: NodeJS.Timeout | null = null;
+    if (isTyping) {
+      console.log('Starting typing poll for undelivered messages');
+      typingPollInterval = setInterval(() => {
+        console.log('Typing poll for undelivered messages...');
+        fetchUndeliveredMessages();
+      }, 1500);
+    }
+
+    return () => {
+      clearInterval(earlyPollInterval);
+      clearTimeout(earlyPollTimeout);
+      if (typingPollInterval) {
+        console.log('Stopping typing poll');
+        clearInterval(typingPollInterval);
+      }
+    };
+  }, [isAssistantOpen, sessionId, selectedStore, isTyping, fetchUndeliveredMessages]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -297,7 +464,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             );
           }
           const assistantMessage = {
-            id: uuidv4(),
+            id: data.id || uuidv4(),  
             type: "assistant" as const,
             content:
               data.content || "I'm sorry, I didn't receive a proper response.",
@@ -305,6 +472,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             products: data.products || [],
             orders: data.orders || [],
             tracking_data: data.tracking_data || null,
+            reply_order: data.reply_order || null,
             suggestions: data.suggestions || [],
             warning_message: data.warning_message,
             requires_human: data.requires_human,
@@ -363,9 +531,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   ]);
 
   useEffect(() => {
-    if (!isAssistantOpen) return;
-
-    console.log("Store changed, reconnecting WebSocket for new session...");
+    console.log("Store/session changed, reconnecting WebSocket for new session...");
 
     if (wsRef.current) {
       wsRef.current.close();
@@ -383,15 +549,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStore, sessionId, isAssistantOpen]);
-
-  useEffect(() => {
-    if (isAssistantOpen && !ws && !wsRef.current) {
-      console.log("Sidebar opened, establishing WebSocket connection...");
-      connectWebSocket();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAssistantOpen, ws]);
+  }, [selectedStore, sessionId]);
 
   useEffect(() => {
     if (!isAssistantOpen || !ws || ws.readyState !== WebSocket.OPEN || hasSentInitialMessage.current) return;
@@ -538,11 +696,23 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     ]);
   };
 
+  const lastSuggestionClickRef = useRef<{text: string, time: number} | null>(null);
+
   const handleSuggestionClick = (
     suggestion: string,
     messageProducts?: Product[]
   ) => {
     if (isTyping) return;
+
+    const now = Date.now();
+    if (lastSuggestionClickRef.current &&
+        lastSuggestionClickRef.current.text === suggestion &&
+        now - lastSuggestionClickRef.current.time < 500) {
+      console.log("Ignoring duplicate suggestion click");
+      return;
+    }
+    lastSuggestionClickRef.current = { text: suggestion, time: now };
+
     const productToReference = messageProducts && messageProducts.length > 0
       ? messageProducts[0]
       : selectedProduct;
@@ -583,14 +753,13 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     setSelectedOrderId(null);
   };
 
-  const handleConfirmAction = () => {
+  const handleConfirmAction = async () => {
     if (!pendingAction) return;
 
-    // Get order details for the confirmation card
     const orderPreview = pendingOrderPreview || selectedOrder;
 
     const confirmationMessage = {
-      id: Date.now().toString(),
+      id: `${sessionId}:${Date.now()}`,
       type: "user" as const,
       content: "Confirmed",
       timestamp: new Date(),
@@ -607,20 +776,30 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     setMessages((prev) => [...prev, confirmationMessage]);
     setIsTyping(true);
 
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      await fetch(`${apiUrl}/events/chat/message/${sessionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(confirmationMessage),
+      });
+    } catch (error) {
+      console.error("Failed to save confirmation message:", error);
+    }
+
     sendWebSocketMessage("User confirmed the action", pendingAction.action_id);
 
     setPendingAction(null);
     pendingActionsRef.current[sessionStateKey] = null;
   };
 
-  const handleCancelAction = () => {
+  const handleCancelAction = async () => {
     if (!pendingAction) return;
 
-    // Get order details for the decline card
     const orderPreview = pendingOrderPreview || selectedOrder;
 
     const declineMessage = {
-      id: Date.now().toString(),
+      id: `${sessionId}:${Date.now()}`,
       type: "user" as const,
       content: "Declined",
       timestamp: new Date(),
@@ -637,7 +816,17 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     setMessages((prev) => [...prev, declineMessage]);
     setIsTyping(true);
 
-    // Send cancellation with action_id to backend
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      await fetch(`${apiUrl}/events/chat/message/${sessionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(declineMessage),
+      });
+    } catch (error) {
+      console.error("Failed to save decline message:", error);
+    }
+
     sendWebSocketMessage("User declined the action", pendingAction.action_id);
 
     setPendingAction(null);
@@ -1001,7 +1190,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                         </Card>
                       </div>
                     </div>
-                  ) : (
+                  ) : !message.hide_content ? (
                     <div
                       className={`flex ${
                         message.type === "user" ? "justify-end" : "justify-start"
@@ -1021,7 +1210,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                         </div>
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
                   {message.warning_message && (
                     <div className="ml-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
@@ -1538,9 +1727,10 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                         <Button
                           size="sm"
                           onClick={handleConfirmAction}
-                          className="flex-1 bg-primary hover:bg-primary/90 dark:bg-primary dark:hover:bg-primary/90 
+                          disabled={isTyping}
+                          className="flex-1 bg-primary hover:bg-primary/90 dark:bg-primary dark:hover:bg-primary/90
                                   text-primary-foreground dark:text-primary-foreground font-medium shadow-sm
-                                  transition-all duration-200 hover:shadow-md"
+                                  transition-all duration-200 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <CheckCircle2 className="w-4 h-4 mr-1.5" />
                           Confirm
@@ -1549,8 +1739,9 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                           size="sm"
                           variant="outline"
                           onClick={handleCancelAction}
+                          disabled={isTyping}
                           className="flex-1 border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary/50 font-medium
-                                  transition-all duration-200"
+                                  transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <X className="w-4 h-4 mr-1.5" />
                           Cancel

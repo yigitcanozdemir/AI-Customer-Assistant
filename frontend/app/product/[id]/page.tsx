@@ -82,6 +82,7 @@ export default function ProductPage() {
     setIsAssistantOpen,
     setSelectedProduct,
     isAssistantOpen,
+    isTyping,
   } = useChat();
 
   const getImagesForColor = useCallback(
@@ -243,6 +244,11 @@ export default function ProductPage() {
   const handleAskQuestion = () => {
     if (!product) return;
 
+    if (isTyping) {
+      console.log('Cannot add product while agent is responding');
+      return;
+    }
+
     setSelectedProduct(product);
 
     const productMessage = {
@@ -256,6 +262,7 @@ export default function ProductPage() {
         "How does this dress fit?",
         "Show similar products",
       ],
+      is_user_added: true,
     };
 
     setMessages((prev) => {
@@ -274,9 +281,12 @@ export default function ProductPage() {
 
       const lastMessage = normalizedMessages[normalizedMessages.length - 1];
       const shouldReplaceLastProduct =
-        lastMessage?.type === "assistant" && lastMessage.products?.length;
+        lastMessage?.type === "assistant" &&
+        lastMessage.products?.length &&
+        lastMessage.is_user_added === true;
 
       if (shouldReplaceLastProduct) {
+        console.log('Replacing previous product with new selection');
         return [...normalizedMessages.slice(0, -1), productMessage];
       }
 
@@ -578,7 +588,9 @@ export default function ProductPage() {
                       variant="outline"
                       size="sm"
                       onClick={handleAskQuestion}
-                      className="border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
+                      disabled={isTyping}
+                      className="border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={isTyping ? "Please wait for agent response" : "Ask Question About This Product"}
                     >
                       <MessageCircle className="w-4 h-4 mr-2" />
                       Ask Question About This Product

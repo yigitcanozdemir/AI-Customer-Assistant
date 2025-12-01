@@ -89,6 +89,7 @@ export default function Store() {
     setIsAssistantOpen,
     setMessages,
     setSelectedProduct,
+    isTyping,
   } = useChat();
   const storePopoverRef = useRef<HTMLDivElement>(null);
 
@@ -98,6 +99,10 @@ export default function Store() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    latestProductIdRef.current = null;
+  }, [selectedStore]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -167,7 +172,11 @@ export default function Store() {
       dress.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const latestProductIdRef = useRef<string | null>(null);
+
   const fetchProductById = async (id: string) => {
+    latestProductIdRef.current = id;
+
     try {
       const res = await fetch(`${apiUrl}/events/products/${id}`, {
         headers: {
@@ -176,17 +185,24 @@ export default function Store() {
       });
       if (!res.ok) throw new Error("Failed to fetch product details");
       const data: Product = await res.json();
-      setSelectedProduct(data);
+
+      if (latestProductIdRef.current === id) {
+        setSelectedProduct(data);
+      } else {
+        console.log(`Ignoring stale product fetch for ${id}, current is ${latestProductIdRef.current}`);
+      }
     } catch (err) {
       console.error("Error fetching product details", err);
       const localProduct = products?.find((p) => p.id === id);
-      if (localProduct) {
+
+      if (localProduct && latestProductIdRef.current === id) {
         setSelectedProduct(localProduct);
       }
     }
   };
 
   const openGeneralChat = () => {
+    latestProductIdRef.current = null;
     setSelectedProduct(null);
 
     if (messages.length === 0) {
@@ -208,6 +224,11 @@ export default function Store() {
   };
 
   const openProductChat = (product: Product) => {
+    if (isTyping) {
+      console.log('Cannot add product while agent is responding');
+      return;
+    }
+
     setSelectedProduct(product);
     fetchProductById(product.id);
 
@@ -247,6 +268,7 @@ export default function Store() {
         lastMessage.is_user_added === true;
 
       if (shouldReplaceLastProduct) {
+        console.log('Replacing previous product with new selection');
         return [...normalizedMessages.slice(0, -1), productMessage];
       }
 
@@ -607,8 +629,10 @@ export default function Store() {
                               }}
                               variant="outline"
                               size="sm"
-                              className="h-8 w-8 p-0 flex-shrink-0 border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
+                              disabled={isTyping}
+                              className="h-8 w-8 p-0 flex-shrink-0 border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               aria-label="Chat about product"
+                              title={isTyping ? "Please wait for response" : "Chat about product"}
                             >
                               <MessageCircle className="w-3 h-3" />
                             </Button>

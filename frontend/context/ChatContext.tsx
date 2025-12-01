@@ -36,6 +36,7 @@ export interface Message {
     product: OrderProduct;
   };
   confirmation_action?: string;
+  hide_content?: boolean;
 }
 
 interface TrackingData {
@@ -160,6 +161,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
     selectedProduct: Product | null;
     isSessionLocked: boolean;
     sessionLockReason: string | null;
+    isTyping: boolean;
   };
 
   const [storeSessionMap, setStoreSessionMap] = useState<
@@ -213,6 +215,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
           selectedProduct: null,
           isSessionLocked: false,
           sessionLockReason: null,
+          isTyping: false,
         },
       }));
     }
@@ -233,11 +236,27 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
         storeState.isAssistantOpen
       );
       setSessionId(storeState.sessionId);
-      setMessages(storeState.messages);
+
+      const messagesWithDates = storeState.messages.map((msg: Message) => ({
+        ...msg,
+        timestamp: typeof msg.timestamp === 'string' ? new Date(msg.timestamp) : msg.timestamp,
+      }));
+      setMessages(messagesWithDates);
+
       setIsAssistantOpen(storeState.isAssistantOpen);
       setSelectedProduct(storeState.selectedProduct);
       setIsSessionLocked(storeState.isSessionLocked ?? false);
       setSessionLockReason(storeState.sessionLockReason ?? null);
+      const restoredTyping = storeState.isTyping ?? false;
+      const lastMessage = messagesWithDates[messagesWithDates.length - 1];
+      const shouldShowTyping = restoredTyping && lastMessage && lastMessage.type === 'user';
+
+      setIsTyping(shouldShowTyping);
+      if (shouldShowTyping) {
+        console.log('Restored typing indicator - agent is still processing (last message is from user)');
+      } else if (restoredTyping && !shouldShowTyping) {
+        console.log('Not restoring typing indicator - response already received (last message is from assistant)');
+      }
 
       if (storeState.messages.length > 0) {
         console.log("Setting connection to connected - has messages");
@@ -273,6 +292,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
           selectedProduct: null,
           isSessionLocked: false,
           sessionLockReason: null,
+          isTyping: false,
         },
       }));
     }
@@ -292,6 +312,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
             selectedProduct,
             isSessionLocked,
             sessionLockReason,
+            isTyping,
           },
         }));
       }, 300);
@@ -307,6 +328,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
     selectedProduct,
     isSessionLocked,
     sessionLockReason,
+    isTyping,
     isMounted,
   ]);
 

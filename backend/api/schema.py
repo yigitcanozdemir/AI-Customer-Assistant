@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import List, Optional, Any, Union
+from typing import List, Optional, Any, Union, Dict
 from datetime import datetime, date
 import uuid
 
@@ -133,8 +133,6 @@ class Product(BaseModel):
 
 
 class ResponseAssessment(BaseModel):
-    """LLM's self-assessment of its response quality and context"""
-
     confidence_score: float = Field(
         ...,
         ge=0.0,
@@ -179,7 +177,7 @@ class MessageResponse(BaseModel):
     session_locked: bool = False
     lock_reason: Optional[str] = None
     tools_used: Optional[List[str]] = None
-    flagging_reason: Optional[str] = None  # Type of flag: none, potential_error, unclear_request, policy_violation, abusive_language, prompt_injection
+    flagging_reason: Optional[str] = None
 
 
 class Message(BaseModel):
@@ -188,9 +186,19 @@ class Message(BaseModel):
     content: str
     timestamp: datetime
     products: Optional[List[Union[Product, ProductContext, OrderProduct]]] = None
+    orders: Optional[List[OrderStatus]] = None
+    tracking_data: Optional[OrderLocation] = None
+    reply_order: Optional[OrderStatus] = None
     suggestions: Optional[List[str]] = None
     requires_human: Optional[bool] = False
     confidence_score: Optional[float] = None
+    warning_message: Optional[str] = None
+    flagging_reason: Optional[str] = None
+    confirmation_state: Optional[str] = None
+    confirmation_message: Optional[str] = None
+    confirmation_order: Optional[Dict[str, Any]] = None
+    confirmation_action: Optional[str] = None
+    hide_content: Optional[bool] = False
 
 
 class ChatEventData(BaseModel):
@@ -205,6 +213,12 @@ class ChatEventData(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+
+class SessionState(BaseModel):
+    session_id: str
+    is_typing: bool = False
+    last_updated: datetime = Field(default_factory=lambda: datetime.now())
 
 
 class EventSchema(BaseModel):

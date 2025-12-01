@@ -9,8 +9,10 @@ logger = logging.getLogger(__name__)
 
 SESSION_HISTORY_PREFIX = "session_history:"
 SESSION_LOCK_PREFIX = "session_lock:"
-SESSION_HISTORY_TTL = 3600 * 24  # 24 hours
-SESSION_LOCK_TTL = 3600 * 24  # 24 hours
+SESSION_STATE_PREFIX = "session_state:"
+SESSION_HISTORY_TTL = 3600 * 24
+SESSION_LOCK_TTL = 3600 * 24
+SESSION_STATE_TTL = 300
 
 
 def _history_key(session_id: str) -> str:
@@ -19,6 +21,10 @@ def _history_key(session_id: str) -> str:
 
 def _lock_key(session_id: str) -> str:
     return f"{SESSION_LOCK_PREFIX}{session_id}"
+
+
+def _state_key(session_id: str) -> str:
+    return f"{SESSION_STATE_PREFIX}{session_id}"
 
 
 async def get_message_history(session_id: str) -> List[Message]:
@@ -118,4 +124,40 @@ async def is_session_locked(session_id: str) -> bool:
         return lock_value is not None
     except Exception as exc:
         logger.error("Failed to check lock for %s: %s", session_id, exc)
+        return False
+
+
+async def set_typing_state(session_id: str, is_typing: bool) -> bool:
+    """
+    Set the typing indicator state for a session.
+    """
+    try:
+        state = {
+            "is_typing": is_typing,
+            "last_updated": datetime.now().isoformat()
+        }
+        await cache_manager.set(
+            _state_key(session_id),
+            json.dumps(state),
+            ttl=SESSION_STATE_TTL,
+        )
+        return True
+    except Exception as exc:
+        logger.error("Failed to set typing state for %s: %s", session_id, exc)
+        return False
+
+
+async def get_typing_state(session_id: str) -> bool:
+    """
+    Get the typing indicator state for a session.
+    """
+    try:
+        state_data = await cache_manager.get(_state_key(session_id))
+        if not state_data:
+            return False
+
+        state = json.loads(state_data)
+        return state.get("is_typing", False)
+    except Exception as exc:
+        logger.error("Failed to get typing state for %s: %s", session_id, exc)
         return False

@@ -10,6 +10,8 @@ from backend.services.session_manager import (
     add_message,
     is_session_locked,
     lock_session,
+    set_typing_state,
+    get_typing_state,
 )
 from fastapi import (
     APIRouter,
@@ -80,7 +82,6 @@ websocket_disconnects_total = Counter(
     "Total number of WebSocket disconnections",
 )
 
-# Removed hardcoded profanity check - LLM handles all threat/abuse detection in Pass 1
 
 
 def log_chat_interaction(
@@ -274,30 +275,17 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     await add_message(
                         session_id,
                         Message(
-                            id=str(next_message_id),
+                            id=f"{session_id}:{next_message_id}",
                             type="user",
                             content=f"User selected order: {order_context.order_id}",
                             timestamp=datetime.utcnow(),
-                            products=(
-                                [order_context.product]
-                                if order_context.product
-                                else None
-                            ),
+                            reply_order=order_context,
+                            hide_content=True,  
                         ),
                     )
                     next_message_id += 1
                 if product_context:
-                    await add_message(
-                        session_id,
-                        Message(
-                            id=str(next_message_id),
-                            type="user",
-                            content=f"User selected product: {product_context.name}",
-                            timestamp=datetime.utcnow(),
-                            products=[product_context],
-                        ),
-                    )
-                    next_message_id += 1
+                    logger.info(f"Product {product_context.id} ({product_context.name}) in message context, updating context manager")
 
                     from backend.services.context_manager import context_manager
                     await context_manager.update_context(
@@ -305,16 +293,19 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         products=[product_context.model_dump() if hasattr(product_context, 'model_dump') else product_context],
                     )
 
-                user_message = Message(
-                    id=str(next_message_id),
-                    type="user",
-                    content=question,
-                    timestamp=datetime.utcnow(),
-                )
-                await add_message(session_id, user_message)
+                if not confirm_action_id:
+                    user_message = Message(
+                        id=f"{session_id}:{next_message_id}",
+                        type="user",
+                        content=question,
+                        timestamp=datetime.utcnow(),
+                    )
+                    await add_message(session_id, user_message)
+
+                await set_typing_state(session_id, True)
+
                 message_history = await get_message_history(session_id)
 
-                # All threat/abuse detection now handled by LLM in Pass 1 assessment
                 response: MessageResponse
 
                 use_two_pass = getattr(settings, 'use_two_pass_agent', True)
@@ -385,14 +376,18 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 )
 
                 assistant_message = Message(
-                    id=str(len(message_history) + 2),
+                    id=f"{session_id}:{next_message_id + 1}",
                     type="assistant",
                     content=response.content,
                     timestamp=datetime.utcnow(),
                     products=response.products,
+                    orders=response.orders,
+                    tracking_data=response.tracking_data,
                     suggestions=getattr(response, "suggestions", []),
                     requires_human=response.requires_human,
                     confidence_score=response.confidence_score,
+                    warning_message=response.warning_message,
+                    flagging_reason=response.flagging_reason,
                 )
                 await add_message(session_id, assistant_message)
                 message_history.append(assistant_message)
@@ -400,7 +395,6 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 if response.requires_human:
                     flagging_reason = getattr(response, "flagging_reason", "unclear_request")
 
-                    # Categorize flag types
                     is_policy_violation = flagging_reason in ["policy_violation", "abusive_language", "prompt_injection"]
                     is_technical_issue = flagging_reason in ["potential_error", "unclear_request"]
 
@@ -438,11 +432,9 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                         ],
                     )
 
-                    # Handle policy violations and technical issues differently
                     if stored_flag:
                         flag_count = await get_flag_count_for_session(session_id)
 
-                        # POLICY VIOLATIONS: Lock after 2 occurrences
                         if is_policy_violation and flag_count >= 2:
                             await lock_session(session_id)
                             response.session_locked = True
@@ -466,10 +458,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
 
                             response.warning_message = f"Session locked after repeated {flagging_reason}"
 
-                        # TECHNICAL ISSUES: Just flag for team review after 3 occurrences (no lock)
-                        # This gives users more chances when it's a technical issue, not a policy violation
                         elif is_technical_issue and flag_count >= 3:
-                            # Don't lock - just ensure it's flagged for team attention
                             logger.info(
                                 f"Technical issue flagged for team review after {flag_count} occurrences",
                                 extra={
@@ -479,7 +468,15 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                                 }
                             )
 
-                await websocket.send_json(jsonable_encoder(response))
+                ws_response = assistant_message.model_dump(mode='json')
+                ws_response['session_locked'] = response.session_locked
+                ws_response['lock_reason'] = response.lock_reason
+                if response.pending_action:
+                    ws_response['pending_action'] = response.pending_action
+
+                await set_typing_state(session_id, False)
+
+                await websocket.send_json(jsonable_encoder(ws_response))
                 websocket_messages_total.labels(direction="outbound").inc()
                 duration = time.perf_counter() - msg_start
                 span_ctx = trace.get_current_span().get_span_context()
@@ -494,6 +491,8 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 ).inc()
 
             except Exception as e:
+                await set_typing_state(session_id, False)
+
                 EXCEPTIONS.labels(
                     method=method,
                     path=path,
@@ -752,3 +751,84 @@ async def review_flagged_session(
             extra={"flagged_id": flagged_id, "error": str(e)},
         )
         raise HTTPException(status_code=500, detail="Unable to review session")
+
+
+@router.get("/chat/history/{session_id}")
+async def get_chat_history(session_id: str, after: Optional[str] = None):
+    try:
+        from backend.services.context_manager import context_manager
+
+        all_messages = await get_message_history(session_id)
+
+        messages_to_return = all_messages
+        if after:
+            after_index = -1
+            for i, msg in enumerate(all_messages):
+                if msg.id == after:
+                    after_index = i
+                    break
+
+            if after_index >= 0:
+                messages_to_return = all_messages[after_index + 1:]
+            else:
+                pass
+
+        message_dicts = []
+        for msg in messages_to_return:
+            msg_dict = msg.model_dump(mode='json')
+            if isinstance(msg_dict.get('timestamp'), datetime):
+                msg_dict['timestamp'] = msg_dict['timestamp'].isoformat()
+            message_dicts.append(msg_dict)
+
+        context = await context_manager.get_context(session_id)
+        pending_action = None
+        if context and context.pending_confirmation:
+            has_confirmation_card = any(
+                msg.confirmation_state in ['accepted', 'declined']
+                for msg in all_messages
+            )
+            if not has_confirmation_card:
+                pending_action = context.pending_confirmation
+
+        is_typing = await get_typing_state(session_id)
+
+        return {
+            "messages": message_dicts,
+            "session_id": session_id,
+            "pending_action": pending_action,
+            "is_typing": is_typing
+        }
+
+    except Exception as e:
+        logger.error(
+            f"Failed to fetch chat history for session {session_id}",
+            extra={"session_id": session_id, "error": str(e)},
+        )
+        raise HTTPException(status_code=500, detail="Unable to fetch chat history")
+
+
+@router.get("/chat/typing/{session_id}")
+async def get_typing_status(session_id: str):
+    try:
+        is_typing = await get_typing_state(session_id)
+        return {"is_typing": is_typing, "session_id": session_id}
+    except Exception as e:
+        logger.error(
+            f"Failed to get typing status for session {session_id}",
+            extra={"session_id": session_id, "error": str(e)},
+        )
+        raise HTTPException(status_code=500, detail="Unable to get typing status")
+
+
+@router.post("/chat/message/{session_id}")
+async def save_chat_message(session_id: str, message: Message):
+    try:
+        await add_message(session_id, message)
+        return {"status": "saved", "message_id": message.id}
+
+    except Exception as e:
+        logger.error(
+            f"Failed to save message for session {session_id}",
+            extra={"session_id": session_id, "error": str(e)},
+        )
+        raise HTTPException(status_code=500, detail="Unable to save message")
