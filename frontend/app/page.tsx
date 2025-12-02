@@ -1,4 +1,3 @@
-// File: frontend/app/page.tsx
 "use client";
 
 import Image from "next/image";
@@ -109,12 +108,10 @@ export default function Store() {
     latestProductIdRef.current = null;
   }, [selectedStore]);
 
-  // Show onboarding modal on first visit after user modal closes
   useEffect(() => {
     if (isUserSet) {
       const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
       if (!hasSeenOnboarding) {
-        // Small delay to let user modal close animation finish
         setTimeout(() => {
           setIsOnboardingOpen(true);
           localStorage.setItem('hasSeenOnboarding', 'true');

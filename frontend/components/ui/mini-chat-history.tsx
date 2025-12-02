@@ -99,7 +99,6 @@ export const MiniChatHistory = memo(({ messageHistory }: MiniChatHistoryProps) =
     );
   }
 
-  // Show all messages, not just last 10
   const recentMessages = messageHistory;
 
   return (
