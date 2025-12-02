@@ -15,6 +15,7 @@ import {
   ChevronRight,
   MessageCircle,
   Store as StoreIcon,
+  BookOpen,
 } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { useCart } from "@/context/CartContext";
@@ -23,6 +24,8 @@ import { ChatSidebar } from "@/components/ui/chat-sidebar";
 import { useChat } from "@/context/ChatContext";
 import { ThemeSelector } from "@/components/ui/theme-selector";
 import { FlaggedSessionsButton } from "@/components/ui/flagged-sessions";
+import { OnboardingModal } from "@/components/ui/onboarding-modal";
+import { useUser } from "@/context/UserContext";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -81,6 +84,7 @@ export default function Store() {
   const [isLoading, setIsLoading] = useState(true);
   const [storePopoverOpen, setStorePopoverOpen] = useState(false);
   const [hasProcessedUrlStore, setHasProcessedUrlStore] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const { addItem, openCart, toggleCart, state } = useCart();
 
   const {
@@ -91,6 +95,7 @@ export default function Store() {
     setSelectedProduct,
     isTyping,
   } = useChat();
+  const { isUserSet } = useUser();
   const storePopoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -103,6 +108,20 @@ export default function Store() {
   useEffect(() => {
     latestProductIdRef.current = null;
   }, [selectedStore]);
+
+  // Show onboarding modal on first visit after user modal closes
+  useEffect(() => {
+    if (isUserSet) {
+      const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
+      if (!hasSeenOnboarding) {
+        // Small delay to let user modal close animation finish
+        setTimeout(() => {
+          setIsOnboardingOpen(true);
+          localStorage.setItem('hasSeenOnboarding', 'true');
+        }, 500);
+      }
+    }
+  }, [isUserSet]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -145,12 +164,7 @@ export default function Store() {
       try {
         setIsLoading(true);
         const res = await fetch(
-          `${apiUrl}/events/products?store=${selectedStore}`,
-          {
-            headers: {
-              Authorization: "Bearer your-secret-token",
-            },
-          }
+          `${apiUrl}/events/products?store=${selectedStore}`
         );
 
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -178,18 +192,13 @@ export default function Store() {
     latestProductIdRef.current = id;
 
     try {
-      const res = await fetch(`${apiUrl}/events/products/${id}`, {
-        headers: {
-          Authorization: "Bearer your-secret-token",
-        },
-      });
+      const res = await fetch(`${apiUrl}/events/products/${id}`);
       if (!res.ok) throw new Error("Failed to fetch product details");
       const data: Product = await res.json();
 
       if (latestProductIdRef.current === id) {
         setSelectedProduct(data);
       } else {
-        console.log(`Ignoring stale product fetch for ${id}, current is ${latestProductIdRef.current}`);
       }
     } catch (err) {
       console.error("Error fetching product details", err);
@@ -225,7 +234,6 @@ export default function Store() {
 
   const openProductChat = (product: Product) => {
     if (isTyping) {
-      console.log('Cannot add product while agent is responding');
       return;
     }
 
@@ -268,7 +276,6 @@ export default function Store() {
         lastMessage.is_user_added === true;
 
       if (shouldReplaceLastProduct) {
-        console.log('Replacing previous product with new selection');
         return [...normalizedMessages.slice(0, -1), productMessage];
       }
 
@@ -475,6 +482,16 @@ export default function Store() {
                       </Badge>
                     )}
                   </Button>
+
+                  <Button
+                    onClick={() => setIsOnboardingOpen(true)}
+                    variant="ghost"
+                    size="sm"
+                    className="h-10 w-10 p-0 text-foreground hover:text-primary bg-transparent hover:bg-transparent transition-colors"
+                    title="How to Use"
+                  >
+                    <BookOpen className="w-6 h-6" />
+                  </Button>
                 </div>
               </div>
 
@@ -664,6 +681,10 @@ export default function Store() {
       )}
       <ShoppingCart right={cartRight} sideWidth={sideWidth} />
       <ChatSidebar right={sidebarRight} sideWidth={sideWidth} />
+      <OnboardingModal
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
+      />
     </div>
   );
 }

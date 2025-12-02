@@ -120,6 +120,12 @@ export function UserEntryModal() {
     setIsSubmitting(false);
   };
 
+  const handleGuestSignIn = () => {
+    setIsSubmitting(true);
+    setUser("Guest", "User");
+    setIsSubmitting(false);
+  };
+
   return (
     <div
       className="fixed inset-0 z-[100] flex w-full items-stretch justify-center bg-black/60 backdrop-blur-sm"
@@ -218,6 +224,25 @@ export function UserEntryModal() {
               {isSubmitting ? "Setting up..." : "Continue"}
             </Button>
           </form>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">Or</span>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleGuestSignIn}
+            disabled={isSubmitting}
+            className="w-full h-11 text-sm font-medium border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
+          >
+            {isSubmitting ? "Setting up..." : "Continue as Guest"}
+          </Button>
 
           {showCompactNotices ? (
             <>

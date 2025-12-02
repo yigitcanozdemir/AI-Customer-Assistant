@@ -13,6 +13,11 @@ export function distanceKm(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * c;
 }
 
+const isDev = process.env.NODE_ENV !== "production";
+const logDebug = (...args: unknown[]) => {
+  if (isDev) console.log(...args);
+};
+
 export const AIRPORTS = [
   // North America - USA East
   { code: "JFK", name: "New York JFK", lat: 40.6413, lng: -73.7781, country: "USA", region: "NA_EAST", isHub: true },
@@ -164,12 +169,12 @@ function areSameRegionalGroup(region1: string, region2: string): boolean {
  * 3. If no hubs, use nearest airport in region
  */
 function findBestDepartureAirport(lat: number, lng: number, region: string): Airport {
-  console.log(`   🔍 Finding departure airport for region: ${region}`);
+  logDebug(`   🔍 Finding departure airport for region: ${region}`);
   
   // Get all hub airports in this region
   const regionalHubs = AIRPORTS.filter(a => a.region === region && a.isHub === true);
   
-  console.log(`   Found ${regionalHubs.length} hubs in ${region}: ${regionalHubs.map(h => h.code).join(', ')}`);
+  logDebug(`   Found ${regionalHubs.length} hubs in ${region}: ${regionalHubs.map(h => h.code).join(', ')}`);
   
   if (regionalHubs.length > 0) {
     // Pick the nearest hub
@@ -184,16 +189,16 @@ function findBestDepartureAirport(lat: number, lng: number, region: string): Air
       }
     }
     
-    console.log(`   ✅ Selected hub: ${bestHub.code} (${bestHub.name}) - ${minDist.toFixed(0)}km away`);
+    logDebug(`   ✅ Selected hub: ${bestHub.code} (${bestHub.name}) - ${minDist.toFixed(0)}km away`);
     return bestHub;
   }
   
   // No hub in region, find nearest airport
-  console.log(`   ⚠️ No hub found in ${region}, using nearest airport`);
+  logDebug(`   ⚠️ No hub found in ${region}, using nearest airport`);
   const regionalAirports = AIRPORTS.filter(a => a.region === region);
   
   if (regionalAirports.length === 0) {
-    console.log(`   ❌ No airports in region ${region}, using global nearest`);
+    logDebug(`   ❌ No airports in region ${region}, using global nearest`);
     let nearest = AIRPORTS[0];
     let minDist = Infinity;
     
@@ -218,16 +223,16 @@ function findBestDepartureAirport(lat: number, lng: number, region: string): Air
     }
   }
   
-  console.log(`   ✅ Selected: ${nearest.code} (${nearest.name})`);
+  logDebug(`   ✅ Selected: ${nearest.code} (${nearest.name})`);
   return nearest;
 }
 
 function findBestArrivalAirport(lat: number, lng: number, region: string): Airport {
-  console.log(`   🔍 Finding arrival airport for region: ${region}`);
+  logDebug(`   🔍 Finding arrival airport for region: ${region}`);
   
   const regionalHubs = AIRPORTS.filter(a => a.region === region && a.isHub === true);
   
-  console.log(`   Found ${regionalHubs.length} hubs in ${region}: ${regionalHubs.map(h => h.code).join(', ')}`);
+  logDebug(`   Found ${regionalHubs.length} hubs in ${region}: ${regionalHubs.map(h => h.code).join(', ')}`);
   
   if (regionalHubs.length > 0) {
     let bestHub = regionalHubs[0];
@@ -241,15 +246,15 @@ function findBestArrivalAirport(lat: number, lng: number, region: string): Airpo
       }
     }
     
-    console.log(`   ✅ Selected hub: ${bestHub.code} (${bestHub.name}) - ${minDist.toFixed(0)}km away`);
+    logDebug(`   ✅ Selected hub: ${bestHub.code} (${bestHub.name}) - ${minDist.toFixed(0)}km away`);
     return bestHub;
   }
   
-  console.log(`   ⚠️ No hub found in ${region}, using nearest airport`);
+  logDebug(`   ⚠️ No hub found in ${region}, using nearest airport`);
   const regionalAirports = AIRPORTS.filter(a => a.region === region);
   
   if (regionalAirports.length === 0) {
-    console.log(`   ❌ No airports in region ${region}, using global nearest`);
+    logDebug(`   ❌ No airports in region ${region}, using global nearest`);
     let nearest = AIRPORTS[0];
     let minDist = Infinity;
     
@@ -274,7 +279,7 @@ function findBestArrivalAirport(lat: number, lng: number, region: string): Airpo
     }
   }
   
-  console.log(`   ✅ Selected: ${nearest.code} (${nearest.name})`);
+  logDebug(`   ✅ Selected: ${nearest.code} (${nearest.name})`);
   return nearest;
 }
 
@@ -296,7 +301,7 @@ function getIntermediateHubs(
     return intermediateHubs;
   }
   
-  console.log(`   ⛽ Extremely long flight (${distance.toFixed(0)}km) - adding refueling stop`);
+  logDebug(`   ⛽ Extremely long flight (${distance.toFixed(0)}km) - adding refueling stop`);
   
   // Define major intercontinental hub airports for refueling
   const globalHubs: { [key: string]: Airport } = {};
@@ -310,14 +315,14 @@ function getIntermediateHubs(
   // South America ↔ Asia (extremely long, needs 1-2 stops)
   if ((originRegion === "SOUTH_AMERICA" && destRegion.includes("ASIA")) ||
       (originRegion.includes("ASIA") && destRegion === "SOUTH_AMERICA")) {
-    console.log(`   🌎 South America-Asia: ${originAirport.code} → DXB → ${destAirport.code}`);
+    logDebug(`   🌎 South America-Asia: ${originAirport.code} → DXB → ${destAirport.code}`);
     if (globalHubs["DXB"]) intermediateHubs.push(globalHubs["DXB"]);
   }
   
   // South America ↔ Oceania
   else if ((originRegion === "SOUTH_AMERICA" && destRegion === "OCEANIA") ||
            (originRegion === "OCEANIA" && destRegion === "SOUTH_AMERICA")) {
-    console.log(`   🌎 South America-Oceania: ${originAirport.code} → SYD/LAX → ${destAirport.code}`);
+    logDebug(`   🌎 South America-Oceania: ${originAirport.code} → SYD/LAX → ${destAirport.code}`);
     if (originRegion === "SOUTH_AMERICA") {
       if (globalHubs["LAX"]) intermediateHubs.push(globalHubs["LAX"]);
     }
@@ -326,21 +331,21 @@ function getIntermediateHubs(
   // Oceania ↔ Europe (extremely long)
   else if ((originRegion === "OCEANIA" && (destRegion.includes("EUROPE") || destRegion === "TURKEY")) ||
            ((originRegion.includes("EUROPE") || originRegion === "TURKEY") && destRegion === "OCEANIA")) {
-    console.log(`   🌏 Oceania-Europe: ${originAirport.code} → SIN → ${destAirport.code}`);
+    logDebug(`   🌏 Oceania-Europe: ${originAirport.code} → SIN → ${destAirport.code}`);
     if (globalHubs["SIN"]) intermediateHubs.push(globalHubs["SIN"]);
   }
   
   // Africa ↔ Oceania
   else if ((originRegion === "AFRICA" && destRegion === "OCEANIA") ||
            (originRegion === "OCEANIA" && destRegion === "AFRICA")) {
-    console.log(`   🌏 Oceania-Africa: ${originAirport.code} → SIN → ${destAirport.code}`);
+    logDebug(`   🌏 Oceania-Africa: ${originAirport.code} → SIN → ${destAirport.code}`);
     if (globalHubs["SIN"]) intermediateHubs.push(globalHubs["SIN"]);
   }
   
   // Oceania ↔ North America (if East Coast)
   else if ((originRegion === "OCEANIA" && destRegion === "NA_EAST") ||
            (originRegion === "NA_EAST" && destRegion === "OCEANIA")) {
-    console.log(`   🌏 Oceania-USA East: ${originAirport.code} → LAX → ${destAirport.code}`);
+    logDebug(`   🌏 Oceania-USA East: ${originAirport.code} → LAX → ${destAirport.code}`);
     if (globalHubs["LAX"]) intermediateHubs.push(globalHubs["LAX"]);
   }
   
@@ -359,42 +364,42 @@ export function getFlightRoute(
   const startRegion = getRegionFromCoords(startLat, startLng);
   const endRegion = getRegionFromCoords(endLat, endLng);
   
-  console.log(`\n🚚 ═══════════════════════════════════════════`);
-  console.log(`📦 ROUTING: ${tripDistance.toFixed(0)}km`);
-  console.log(`   Start: ${startRegion} (${startLat.toFixed(2)}, ${startLng.toFixed(2)})`);
-  console.log(`   End: ${endRegion} (${endLat.toFixed(2)}, ${endLng.toFixed(2)})`);
-  console.log(`🚚 ═══════════════════════════════════════════`);
+  logDebug(`\n🚚 ═══════════════════════════════════════════`);
+  logDebug(`📦 ROUTING: ${tripDistance.toFixed(0)}km`);
+  logDebug(`   Start: ${startRegion} (${startLat.toFixed(2)}, ${startLng.toFixed(2)})`);
+  logDebug(`   End: ${endRegion} (${endLat.toFixed(2)}, ${endLng.toFixed(2)})`);
+  logDebug(`🚚 ═══════════════════════════════════════════`);
   
   // RULE 1: Very short distances (< 300km)
   if (tripDistance < 300) {
-    console.log("✅ DECISION: SHORT DISTANCE → Land transport only");
-    console.log(`🚚 ═══════════════════════════════════════════\n`);
+    logDebug("✅ DECISION: SHORT DISTANCE → Land transport only");
+    logDebug(`🚚 ═══════════════════════════════════════════\n`);
     return [];
   }
   
   // RULE 2: Same region → ALWAYS land
   if (startRegion === endRegion) {
-    console.log(`✅ DECISION: SAME REGION (${startRegion}) → Land transport only`);
-    console.log(`🚚 ═══════════════════════════════════════════\n`);
+    logDebug(`✅ DECISION: SAME REGION (${startRegion}) → Land transport only`);
+    logDebug(`🚚 ═══════════════════════════════════════════\n`);
     return [];
   }
   
   // RULE 3: Within EUROPE group and < 1500km → Land
   if (areSameRegionalGroup(startRegion, endRegion)) {
     if (REGIONAL_GROUPS.EUROPE.includes(startRegion) && tripDistance < 1500) {
-      console.log(`✅ DECISION: WITHIN EUROPE (<1500km) → Land transport only`);
-      console.log(`🚚 ═══════════════════════════════════════════\n`);
+      logDebug(`✅ DECISION: WITHIN EUROPE (<1500km) → Land transport only`);
+      logDebug(`🚚 ═══════════════════════════════════════════\n`);
       return [];
     }
     if (tripDistance < 1500) {
-      console.log(`✅ DECISION: REGIONAL (<1500km) → Land transport only`);
-      console.log(`🚚 ═══════════════════════════════════════════\n`);
+      logDebug(`✅ DECISION: REGIONAL (<1500km) → Land transport only`);
+      logDebug(`🚚 ═══════════════════════════════════════════\n`);
       return [];
     }
   }
   
   // RULE 4: Need air freight - use HUB airports
-  console.log("✈️  DECISION: AIR FREIGHT REQUIRED");
+  logDebug("✈️  DECISION: AIR FREIGHT REQUIRED");
   
   const departureAirport = findBestDepartureAirport(startLat, startLng, startRegion);
   const arrivalAirport = findBestArrivalAirport(endLat, endLng, endRegion);
@@ -424,10 +429,10 @@ export function getFlightRoute(
     route.push(arrivalAirport);
   }
   
-  console.log(`\n   🛫 Flight Distance: ${flightDistance.toFixed(0)}km`);
-  console.log(`   🛫 Route: ${route.map(a => a.code).join(" → ")}`);
-  console.log(`   📍 Airports: ${route.map(a => a.name).join(" → ")}`);
-  console.log(`🚚 ═══════════════════════════════════════════\n`);
+  logDebug(`\n   🛫 Flight Distance: ${flightDistance.toFixed(0)}km`);
+  logDebug(`   🛫 Route: ${route.map(a => a.code).join(" → ")}`);
+  logDebug(`   📍 Airports: ${route.map(a => a.name).join(" → ")}`);
+  logDebug(`🚚 ═══════════════════════════════════════════\n`);
   
   return route;
 }

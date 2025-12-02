@@ -192,14 +192,11 @@ export function ShoppingCart({ right, sideWidth }: ShoppingCartProps) {
         })),
       };
 
-      console.log("Payload:", JSON.stringify(payload, null, 2));
       const res = await fetch(`${apiUrl}/events/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
-      console.log("Response status:", res.status);
 
       if (!res.ok) {
         const errorText = await res.text();
@@ -208,7 +205,6 @@ export function ShoppingCart({ right, sideWidth }: ShoppingCartProps) {
       }
 
       const data: CreateOrderResponse = await res.json();
-      console.log("Order created:", data);
 
       setOrderData(data);
       clearCart();

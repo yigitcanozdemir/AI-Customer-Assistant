@@ -374,13 +374,7 @@ export default function TrackingMapClient({
       const allRoutePoints: [number, number][] = [start, end];
 
       if (usesAir) {
-        console.log("✈️ Using air freight routing");
-
         const flightRoute = getFlightRoute(start[0], start[1], end[0], end[1]);
-
-        console.log(
-          `✈️ Flight route: ${flightRoute.map((a) => a.code).join(" → ")}`
-        );
 
         const originAirport = flightRoute[0];
         const destAirport = flightRoute[flightRoute.length - 1];
@@ -412,8 +406,6 @@ export default function TrackingMapClient({
               lineCap: "round",
               lineJoin: "round",
             });
-
-            console.log(`🚗 Ground to ${originAirport.code}`);
           }
         });
 
@@ -467,8 +459,6 @@ export default function TrackingMapClient({
             lineCap: "round",
             lineJoin: "round",
           });
-
-          console.log(`✈️ Flight: ${airportA.code} → ${airportB.code}`);
         }
 
         const lastAirport = flightRoute[flightRoute.length - 1];
@@ -528,13 +518,9 @@ export default function TrackingMapClient({
               lineCap: "round",
               lineJoin: "round",
             });
-
-            console.log(`🚗 Ground from ${destAirport.code}`);
           }
         });
       } else {
-        console.log("🚗 Using ground transport only");
-
         fetchRoadRoute(start, end).then((road) => {
           if (!isMounted || !mapInstanceRef.current) return;
           if (road) {

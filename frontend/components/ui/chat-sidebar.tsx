@@ -41,6 +41,10 @@ const TrackingMap = dynamic<TrackingMapProps>(
 );
 
 const wsBase = process.env.NEXT_PUBLIC_WS_URL;
+const isDev = process.env.NODE_ENV !== "production";
+const logDebug = (...args: unknown[]) => {
+  if (isDev) console.log(...args);
+};
 
 interface Order {
   order_id: string;
@@ -185,7 +189,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
         ? `${apiUrl}/events/chat/history/${sessionId}?after=${encodeURIComponent(lastMessageId)}`
         : `${apiUrl}/events/chat/history/${sessionId}`;
 
-      console.log(`Fetching undelivered messages${lastMessageId ? ` after ${lastMessageId}` : ' (all messages)'}`);
+      logDebug(`Fetching undelivered messages${lastMessageId ? ` after ${lastMessageId}` : ' (all messages)'}`);
       const response = await fetch(url);
 
       if (response.ok) {
@@ -212,7 +216,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
               const contentKey = `${msg.type}:${msg.content}`;
               if (existingContentKeys.has(contentKey)) {
-                console.log(`Skipping duplicate message with different ID: ${msg.content.substring(0, 50)}`);
+                logDebug("Skipping duplicate message with different ID");
                 return false;
               }
 
@@ -224,7 +228,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                   existing.reply_order.order_id === msgOrderId
                 );
                 if (isDuplicateOrder) {
-                  console.log(`Skipping duplicate order selection for order ${msgOrderId}`);
+                  logDebug("Skipping duplicate order selection");
                   return false;
                 }
               }
@@ -238,7 +242,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                   Math.abs(new Date(existing.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 5000
                 );
                 if (isDuplicateProduct) {
-                  console.log(`Skipping duplicate product selection for product ${msgProductId}`);
+                  logDebug("Skipping duplicate product selection");
                   return false;
                 }
               }
@@ -247,7 +251,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             });
 
             if (trulyNewMessages.length > 0) {
-              console.log(`Fetched ${trulyNewMessages.length} undelivered messages`);
+              logDebug(`Fetched ${trulyNewMessages.length} undelivered messages`);
 
               return [...currentMessages, ...trulyNewMessages];
             }
@@ -255,16 +259,16 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             return currentMessages;
           });
         } else {
-          console.log('No new messages to fetch');
+          logDebug('No new messages to fetch');
         }
 
         if (typeof data.is_typing === 'boolean') {
-          console.log(`Backend typing state: ${data.is_typing}`);
+          logDebug(`Backend typing state: ${data.is_typing}`);
           setIsTyping(data.is_typing);
         }
 
         if (data.pending_action) {
-          console.log("Restored pending action from history:", data.pending_action);
+          logDebug("Restored pending action from history");
           const action = data.pending_action as PendingAction;
           pendingActionsRef.current[sessionStateKey] = action;
           setPendingAction(action);
@@ -288,11 +292,11 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     lastStoreRef.current = selectedStore;
 
     if (sessionChanged || storeChanged) {
-      console.log('Session or store changed, skipping initial fetch (ChatContext will handle)');
+      logDebug('Session or store changed, skipping initial fetch (ChatContext will handle)');
       return;
     }
 
-    console.log('Sidebar opened, fetching undelivered messages');
+    logDebug('Sidebar opened, fetching undelivered messages');
     fetchUndeliveredMessages();
   }, [isAssistantOpen, sessionId, selectedStore, fetchUndeliveredMessages]);
 
@@ -303,25 +307,25 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     const storeJustChanged = lastStoreRef.current !== selectedStore;
 
     if (sessionJustChanged || storeJustChanged) {
-      console.log('Session/store just changed, skipping polling to avoid cross-contamination');
+      logDebug('Session/store just changed, skipping polling to avoid cross-contamination');
       return;
     }
 
     const earlyPollInterval = setInterval(() => {
-      console.log('Early polling for undelivered messages...');
+      logDebug('Early polling for undelivered messages...');
       fetchUndeliveredMessages();
     }, 1000);
 
     const earlyPollTimeout = setTimeout(() => {
       clearInterval(earlyPollInterval);
-      console.log('Early polling complete');
+      logDebug('Early polling complete');
     }, 10000);
 
     let typingPollInterval: NodeJS.Timeout | null = null;
     if (isTyping) {
-      console.log('Starting typing poll for undelivered messages');
+      logDebug('Starting typing poll for undelivered messages');
       typingPollInterval = setInterval(() => {
-        console.log('Typing poll for undelivered messages...');
+        logDebug('Typing poll for undelivered messages...');
         fetchUndeliveredMessages();
       }, 1500);
     }
@@ -330,7 +334,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       clearInterval(earlyPollInterval);
       clearTimeout(earlyPollTimeout);
       if (typingPollInterval) {
-        console.log('Stopping typing poll');
+        logDebug('Stopping typing poll');
         clearInterval(typingPollInterval);
       }
     };
@@ -415,7 +419,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
         if (websocket.readyState === WebSocket.OPEN) {
           websocket.send(JSON.stringify(initialPayload));
-          console.log("Sent initial message to backend:", initialPayload);
+          logDebug("Sent initial message to backend");
         }
       } catch (error) {
         console.error("Error sending initial message to backend:", error);
@@ -436,11 +440,11 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       const connectingTimer = setTimeout(() => {
         setConnectionStatus("connecting");
       }, 200);
-      console.log("Attempting WebSocket connection...");
+      logDebug("Attempting WebSocket connection...");
       const websocket = new WebSocket(`${wsBase}/events/ws/chat/${sessionId}`);
       websocket.onopen = () => {
         clearTimeout(connectingTimer);
-        console.log("WebSocket connected successfully");
+        logDebug("WebSocket connected successfully");
         setConnectionStatus("connected");
         setWs(websocket);
         wsRef.current = websocket;
@@ -448,13 +452,13 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log("WebSocket message received:", data);
+          logDebug("WebSocket message received");
           if ("pending_action" in data) {
             const action = data.pending_action ?? null;
             pendingActionsRef.current[sessionStateKey] = action;
             setPendingAction(action);
             if (action) {
-              console.log("Pending action received:", action);
+              logDebug("Pending action received");
             }
           }
           if (typeof data.session_locked === "boolean") {
@@ -488,7 +492,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       };
       websocket.onclose = (event) => {
         clearTimeout(connectingTimer);
-        console.log("WebSocket disconnected:", event.code, event.reason);
+        logDebug("WebSocket disconnected", event.code, event.reason);
         setTimeout(() => {
           if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
             setConnectionStatus("disconnected");
@@ -531,7 +535,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   ]);
 
   useEffect(() => {
-    console.log("Store/session changed, reconnecting WebSocket for new session...");
+    logDebug("Store/session changed, reconnecting WebSocket for new session...");
 
     if (wsRef.current) {
       wsRef.current.close();
@@ -555,7 +559,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     if (!isAssistantOpen || !ws || ws.readyState !== WebSocket.OPEN || hasSentInitialMessage.current) return;
     const assistantMessages = messages.filter((msg) => msg.type === "assistant");
     if (assistantMessages.length > 0) {
-      console.log("Sending initial assistant messages to backend:", assistantMessages.length);
+      logDebug("Sending initial assistant messages to backend", assistantMessages.length);
       assistantMessages.forEach((message) => {
         sendInitialMessageToBackend(message, ws);
       });
@@ -664,7 +668,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(eventPayload));
-        console.log("Message sent via WebSocket:", eventPayload);
+        logDebug("Message sent via WebSocket");
 
         if (selectedOrder) {
           setSelectedOrder(null);
@@ -708,7 +712,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     if (lastSuggestionClickRef.current &&
         lastSuggestionClickRef.current.text === suggestion &&
         now - lastSuggestionClickRef.current.time < 500) {
-      console.log("Ignoring duplicate suggestion click");
+      logDebug("Ignoring duplicate suggestion click");
       return;
     }
     lastSuggestionClickRef.current = { text: suggestion, time: now };
@@ -719,10 +723,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
     if (productToReference) {
       setSelectedProduct(productToReference);
-      console.log(
-        "Updated selected product from suggestion:",
-        productToReference.name
-      );
+      logDebug("Updated selected product from suggestion");
     }
 
     sendMessage(suggestion, productToReference);
@@ -741,7 +742,6 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     } else {
       setSelectedOrderId(order.order_id);
       setSelectedOrder(order);
-      console.log("Order selected:", order.order_id);
     }
   };
 

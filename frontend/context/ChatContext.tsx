@@ -12,6 +12,11 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { useStore } from "@/context/StoreContext";
 
+const isDev = process.env.NODE_ENV !== "production";
+const logDebug = (...args: unknown[]) => {
+  if (isDev) console.log(...args);
+};
+
 export interface Message {
   id: string;
   type: "user" | "assistant";
@@ -224,12 +229,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     if (!currentStore || !isMounted) return;
 
-    console.log("Store changed to:", currentStore);
+    logDebug("Store changed to:", currentStore);
     const storeState = storeSessionMap[currentStore];
-    console.log("Store state found:", storeState);
+    logDebug("Store state found:", storeState);
 
     if (storeState) {
-      console.log(
+      logDebug(
         "Restoring store state - messages:",
         storeState.messages.length,
         "isAssistantOpen:",
@@ -253,27 +258,27 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
 
       setIsTyping(shouldShowTyping);
       if (shouldShowTyping) {
-        console.log('Restored typing indicator - agent is still processing (last message is from user)');
+        logDebug('Restored typing indicator - agent is still processing (last message is from user)');
       } else if (restoredTyping && !shouldShowTyping) {
-        console.log('Not restoring typing indicator - response already received (last message is from assistant)');
+        logDebug('Not restoring typing indicator - response already received (last message is from assistant)');
       }
 
       if (storeState.messages.length > 0) {
-        console.log("Setting connection to connected - has messages");
+        logDebug("Setting connection to connected - has messages");
         setConnectionStatus("connected");
       } else if (storeState.isAssistantOpen) {
-        console.log(
+        logDebug(
           "Setting connection to connecting - chat open but no messages"
         );
         setConnectionStatus("connecting");
       } else {
-        console.log(
+        logDebug(
           "Setting connection to disconnected - no messages and chat closed"
         );
         setConnectionStatus("disconnected");
       }
     } else {
-      console.log("Creating new store state");
+      logDebug("Creating new store state");
       const newSessionId = uuidv4();
       setSessionId(newSessionId);
       setMessages([]);

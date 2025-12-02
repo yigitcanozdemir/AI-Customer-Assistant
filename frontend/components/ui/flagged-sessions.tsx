@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { MiniChatHistory } from "@/components/ui/mini-chat-history";
 import {
   Sheet,
   SheetContent,
@@ -384,39 +385,12 @@ export function FlaggedSessionsButton() {
 
           {Array.isArray(session.message_history) &&
             session.message_history.length > 0 && (
-            <details className="rounded-md border border-border/50 bg-muted/20 p-3">
-              <summary className="cursor-pointer text-sm font-medium text-foreground">
+            <div className="mt-3">
+              <div className="text-sm font-medium text-foreground mb-2">
                 Conversation History
-              </summary>
-              <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                {(session.message_history as Array<Record<string, unknown>>).map(
-                  (entry, index) => {
-                    const typeValue = entry["type"];
-                    const roleValue = entry["role"];
-                    const contentValue = entry["content"];
-                    const textValue = entry["text"];
-
-                    const role =
-                      (typeof typeValue === "string" && typeValue) ||
-                      (typeof roleValue === "string" && roleValue) ||
-                      "message";
-                    const content =
-                      (typeof contentValue === "string" && contentValue) ||
-                      (typeof textValue === "string" && textValue) ||
-                      "";
-
-                    return (
-                      <div key={`${session.id}-history-${index}`}>
-                        <span className="font-semibold capitalize">
-                          {role.replace("_", " ")}:
-                        </span>{" "}
-                        <span>{content}</span>
-                      </div>
-                    );
-                  }
-                )}
               </div>
-            </details>
+              <MiniChatHistory messageHistory={session.message_history as Array<Record<string, unknown>>} />
+            </div>
           )}
 
           <Separator />

@@ -130,11 +130,7 @@ export default function ProductPage() {
     const fetchProduct = async () => {
       try {
         setIsLoading(true);
-        const res = await fetch(`${apiUrl}/events/products/${params.id}`, {
-          headers: {
-            Authorization: "Bearer your-secret-token",
-          },
-        });
+        const res = await fetch(`${apiUrl}/events/products/${params.id}`);
         if (!res.ok) throw new Error("Failed to fetch product");
         const data: Product = await res.json();
         setProduct(data);
@@ -245,7 +241,6 @@ export default function ProductPage() {
     if (!product) return;
 
     if (isTyping) {
-      console.log('Cannot add product while agent is responding');
       return;
     }
 
@@ -286,7 +281,6 @@ export default function ProductPage() {
         lastMessage.is_user_added === true;
 
       if (shouldReplaceLastProduct) {
-        console.log('Replacing previous product with new selection');
         return [...normalizedMessages.slice(0, -1), productMessage];
       }
 

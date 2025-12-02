@@ -70,8 +70,6 @@ export function TrackingMap({
               .filter(Boolean)
               .join(", ");
 
-            console.log("🔍 Trying Photon API:", photonQuery);
-
             const photonResponse = await fetch(
               `https://photon.komoot.io/api/?q=${encodeURIComponent(
                 photonQuery
@@ -82,17 +80,11 @@ export function TrackingMap({
             if (photonData.features && photonData.features[0]) {
               const coords = photonData.features[0].geometry.coordinates;
               bestResult = { lat: coords[1], lng: coords[0] };
-              console.log(
-                "✅ Photon API success:",
-                bestResult,
-                photonData.features[0].properties.name
-              );
               setDeliveryCoords(bestResult);
               setIsGeocoding(false);
               return;
             }
           } catch {
-            console.log("⚠️ Photon API failed, trying Nominatim");
           }
         }
 
@@ -118,8 +110,6 @@ export function TrackingMap({
           params.append("limit", "1");
           params.append("addressdetails", "1");
 
-          console.log("🔍 Trying Nominatim structured query");
-
           const structuredResponse = await fetch(
             `https://nominatim.openstreetmap.org/search?${params.toString()}`
           );
@@ -130,11 +120,6 @@ export function TrackingMap({
               lat: Number.parseFloat(structuredData[0].lat),
               lng: Number.parseFloat(structuredData[0].lon),
             };
-            console.log(
-              "✅ Nominatim structured success:",
-              bestResult,
-              structuredData[0].display_name
-            );
             setDeliveryCoords(bestResult);
             setIsGeocoding(false);
             return;
@@ -143,7 +128,6 @@ export function TrackingMap({
 
         if (deliveryAddress.postal_code) {
           const postalQuery = `${deliveryAddress.postal_code}, ${deliveryAddress.country}`;
-          console.log("🔍 Trying postal code only:", postalQuery);
 
           const postalResponse = await fetch(
             `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
@@ -157,11 +141,6 @@ export function TrackingMap({
               lat: Number.parseFloat(postalData[0].lat),
               lng: Number.parseFloat(postalData[0].lon),
             };
-            console.log(
-              "✅ Postal code success:",
-              bestResult,
-              postalData[0].display_name
-            );
             setDeliveryCoords(bestResult);
             setIsGeocoding(false);
             return;
@@ -179,8 +158,6 @@ export function TrackingMap({
           .filter(Boolean)
           .join(", ");
 
-        console.log("🔍 Trying full address free-form:", fullAddress);
-
         const freeFormResponse = await fetch(
           `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
             fullAddress
@@ -193,19 +170,12 @@ export function TrackingMap({
             lat: Number.parseFloat(freeFormData[0].lat),
             lng: Number.parseFloat(freeFormData[0].lon),
           };
-          console.log(
-            "✅ Free-form success:",
-            bestResult,
-            freeFormData[0].display_name
-          );
           setDeliveryCoords(bestResult);
           setIsGeocoding(false);
           return;
         }
 
         const cityQuery = `${deliveryAddress.city}, ${deliveryAddress.state}, ${deliveryAddress.country}`;
-        console.log("🔍 Fallback to city:", cityQuery);
-
         const cityResponse = await fetch(
           `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
             cityQuery
@@ -218,7 +188,6 @@ export function TrackingMap({
             lat: Number.parseFloat(cityData[0].lat),
             lng: Number.parseFloat(cityData[0].lon),
           };
-          console.log("⚠️ Using city fallback:", bestResult);
           setDeliveryCoords(bestResult);
         }
       } catch (error) {

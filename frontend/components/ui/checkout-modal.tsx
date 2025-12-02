@@ -280,7 +280,7 @@ export function CheckoutModal({
             variant="ghost"
             size="sm"
             onClick={onClose}
-            className="w-8 h-8 p-0"
+            className="w-8 h-8 p-0 text-foreground hover:text-primary bg-transparent hover:bg-transparent transition-colors"
           >
             <X className="w-4 h-4" />
           </Button>
