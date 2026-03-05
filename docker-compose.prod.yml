@@ -49,6 +49,8 @@ services:
       dockerfile: ./backend/Dockerfile.prod
     container_name: fastapi
     init: true
+    ports:
+      - "8000:8000"
     expose:
       - "8000"
     env_file:
