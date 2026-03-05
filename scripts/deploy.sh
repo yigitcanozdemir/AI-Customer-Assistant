@@ -30,13 +30,14 @@ echo "▶️  Starting services..."
 docker compose -f docker-compose.prod.yml up -d
 
 echo "⏳ Waiting for services..."
-sleep 30 
+sleep 15 
 
-MAX_RETRIES=5
+MAX_RETRIES=10
 RETRY_COUNT=0
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if docker exec fastapi curl -f http://localhost:8000/health > /dev/null 2>&1; then
+    # Try reaching the container via its name or localhost
+    if docker exec fastapi curl -s -f http://127.0.0.1:8000/health > /dev/null 2>&1; then
         echo -e "${GREEN}✅ Deployment successful!${NC}"
         echo ""
         echo "📊 Service Status:"
