@@ -1,4 +1,13 @@
 #!/bin/bash
+set -a # automatically export all variables
+if [ -f .env.production ]; then
+    source .env.production
+else
+    echo "❌ .env.production not found!"
+    exit 1
+fi
+set +a
+
 set -e
 
 echo "🚀 Deploying application..."
@@ -7,14 +16,9 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-if [ ! -f .env.production ]; then
-    echo -e "${RED}❌ .env.production not found!${NC}"
-    exit 1
-fi
-
 echo "⏹️  Stopping containers..."
-docker stop fastapi nginx certbot 2>/dev/null || true
-docker rm fastapi nginx certbot 2>/dev/null || true
+docker stop fastapi 2>/dev/null || true
+docker rm fastapi 2>/dev/null || true
 
 echo "🧹 Cleaning up..."
 docker system prune -f

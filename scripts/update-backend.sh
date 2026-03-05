@@ -1,6 +1,14 @@
 #!/bin/bash
-set -e
+set -a # automatically export all variables
+if [ -f .env.production ]; then
+    source .env.production
+else
+    echo "❌ .env.production not found!"
+    exit 1
+fi
+set +a
 
+set -e
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -14,7 +22,7 @@ echo "Mode: $MODE"
 echo ""
 
 echo "💾 Creating backup..."
-docker-compose -f docker-compose.prod.yml logs fastapi > "backup-$(date +%Y%m%d-%H%M%S).log"
+docker compose -f docker-compose.prod.yml logs fastapi > "backup-$(date +%Y%m%d-%H%M%S).log"
 
 echo "📥 Pulling latest code from Git..."
 git fetch origin
@@ -33,7 +41,7 @@ fi
 
 if [ "$MODE" = "--quick" ] && [ "$REBUILD_NEEDED" = false ]; then
     echo "⚡ Quick restart (no rebuild)..."
-    docker-compose -f docker-compose.prod.yml restart fastapi
+    docker compose -f docker-compose.prod.yml restart fastapi
     
 elif [ "$MODE" = "--full" ] || [ "$REBUILD_NEEDED" = true ]; then
     echo "🔨 Full rebuild and deploy..."
@@ -52,7 +60,7 @@ sleep 30
 if docker exec fastapi curl -f http://localhost:8000/health > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Backend updated successfully!${NC}"
     echo "🌐 API: https://api.yigitcanozdemir.com"
-    docker-compose -f docker-compose.prod.yml ps
+    docker compose -f docker-compose.prod.yml ps
 else
     echo -e "${RED}❌ Health check failed!${NC}"
     echo "Rolling back..."
