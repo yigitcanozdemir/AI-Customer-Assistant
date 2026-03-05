@@ -22,13 +22,13 @@ else
     export NGINX_CONF=./nginx/nginx.http.conf
 fi
 
-NGINX_CONF=./nginx/nginx.http.conf docker-compose -f docker-compose.prod.yml up -d nginx
+NGINX_CONF=./nginx/nginx.http.conf docker compose -f docker-compose.prod.yml up -d nginx
 sleep 3
 
 if [ ! -f "certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
     echo "📝 Requesting certificate from Let's Encrypt..."
     
-    docker-compose -f docker-compose.prod.yml run --rm certbot certonly \
+    docker compose -f docker-compose.prod.yml run --rm certbot certonly \
         --webroot \
         --webroot-path=/var/www/certbot \
         --email $EMAIL \
@@ -45,7 +45,7 @@ if [ ! -f "certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
     echo "🔄 Switching to production config with HTTPS..."
     
     export NGINX_CONF=./nginx/nginx.conf
-    docker-compose -f docker-compose.prod.yml up -d nginx
+    docker compose -f docker-compose.prod.yml up -d nginx
 fi
 
 echo ""

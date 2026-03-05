@@ -20,10 +20,10 @@ echo "🧹 Cleaning up..."
 docker system prune -f
 
 echo "🔨 Building new image..."
-docker-compose -f docker-compose.prod.yml build --no-cache fastapi
+docker compose -f docker-compose.prod.yml build --no-cache fastapi
 
 echo "▶️  Starting services..."
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 
 echo "⏳ Waiting for services..."
 sleep 30 
@@ -36,7 +36,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         echo -e "${GREEN}✅ Deployment successful!${NC}"
         echo ""
         echo "📊 Service Status:"
-        docker-compose -f docker-compose.prod.yml ps
+        docker compose -f docker-compose.prod.yml ps
         echo ""
         echo "🌐 API: https://api.yigitcanozdemir.com"
         exit 0
@@ -49,5 +49,5 @@ done
 
 echo -e "${RED}❌ Deployment failed!${NC}"
 echo "📋 Error logs:"
-docker-compose -f docker-compose.prod.yml logs --tail=50 fastapi
+docker compose -f docker-compose.prod.yml logs --tail=50 fastapi
 exit 1

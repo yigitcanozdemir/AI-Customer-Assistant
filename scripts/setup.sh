@@ -10,19 +10,19 @@ if [ ! -f .env.production ]; then
 fi
 
 echo "🔨 Building Docker containers..."
-docker-compose -f docker-compose.prod.yml build --no-cache
+docker compose -f docker-compose.prod.yml build --no-cache
 
 echo "▶️  Starting services..."
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 
 echo "⏳ Waiting for services to be ready..."
 sleep 10
 
 echo "🗄️  Running database migrations..."
-docker-compose -f docker-compose.prod.yml exec -T fastapi alembic upgrade head
+docker compose -f docker-compose.prod.yml exec -T fastapi alembic upgrade head
 
 echo "📊 Loading initial data..."
-docker-compose -f docker-compose.prod.yml exec -T fastapi python backend/db/data_loader.py
+docker compose -f docker-compose.prod.yml exec -T fastapi python backend/db/data_loader.py
 
 echo "✅ Setup complete!"
 echo ""
