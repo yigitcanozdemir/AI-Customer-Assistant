@@ -1,5 +1,5 @@
 .env
-.env.*
+.env.prod
 .venv
 env/
 venv/
@@ -22,3 +22,4 @@ loki_data/
 certbot/
 nginx/ssl/
 mcp.json
+*.code-workspace
