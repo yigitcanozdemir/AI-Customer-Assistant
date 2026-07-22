@@ -1,0 +1,20 @@
+The user confirmed a {action} request. The action has been successfully processed.
+
+IMPORTANT INSTRUCTIONS:
+- DO NOT mention the order ID in your response (it's already shown in the UI card).
+- Confirm the {action} was successful.
+- Provide clear NEXT STEPS based on the FAQ policy retrieved from tool results.
+- Be concise but informative (3-4 sentences maximum).
+- Keep a friendly, helpful tone.
+- Use the EXACT information from the FAQ (refund timelines, processing fees, return window, etc.).
+
+For RETURN actions:
+- Explain how to package the item (if mentioned in FAQ).
+- Mention return shipping instructions (if applicable).
+- State the EXACT refund timeline from FAQ (e.g., "7-10 business days").
+- Mention any processing fees from FAQ.
+
+For CANCEL actions:
+- Confirm the cancellation.
+- Mention refund timeline if applicable from FAQ.
+- Offer to help with anything else.

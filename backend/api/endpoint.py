@@ -20,10 +20,11 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
     Query,
+    Header,
 )
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from backend.api.chat import handle_chat_event
+from pydantic import BaseModel
 from backend.api.agent import two_pass_agent
+from backend.services.auth import issue_token, verify_token, AuthError, SessionClaims
 from backend.api.schema import (
     MessageResponse,
     ProductContext,
@@ -38,7 +39,6 @@ from backend.api.schema import (
     ReviewFlaggedSessionRequest,
     FlaggedSessionReview,
 )
-from backend.api.convert import convert_messages
 from datetime import datetime
 import time
 from backend.db.session import get_session
@@ -81,6 +81,87 @@ websocket_disconnects_total = Counter(
     "websocket_disconnects_total",
     "Total number of WebSocket disconnections",
 )
+
+
+# ── Auth ────────────────────────────────────────────────────────────────────
+
+
+def _auth_required() -> bool:
+    """Whether a valid session token is required to proceed.
+
+    Enforced when explicitly enabled, or always in production when an
+    AUTH_SECRET is configured. Off by default in dev so the backend can be
+    deployed ahead of the token-sending frontend without breaking the demo.
+    """
+    if settings.auth_secret and settings.environment == "production":
+        return True
+    return settings.auth_enforced and bool(settings.auth_secret)
+
+
+def _verify_or_none(token: Optional[str]) -> Optional[SessionClaims]:
+    if not token:
+        return None
+    try:
+        return verify_token(token)
+    except AuthError as exc:
+        logger.warning("Token verification failed: %s", exc)
+        return None
+
+
+class SessionInitRequest(BaseModel):
+    user_id: str
+    session_id: str
+    user_name: Optional[str] = None
+
+
+class SessionInitResponse(BaseModel):
+    token: str
+    user_id: str
+    session_id: str
+    expires_in: int
+
+
+@router.post("/session/init", response_model=SessionInitResponse)
+async def session_init(payload: SessionInitRequest):
+    """Issue a signed session token bound to the given user_id + session_id.
+
+    The frontend calls this once when a visitor starts a session (after the
+    name-entry step) and then sends the returned token on the WebSocket
+    connection and on user-scoped REST calls.
+    """
+    if not settings.auth_secret:
+        # No secret configured: tokens can't be signed. Surface clearly rather
+        # than issuing an unsigned/dev token.
+        raise HTTPException(
+            status_code=503,
+            detail="Auth is not configured on this server (AUTH_SECRET unset).",
+        )
+    token = issue_token(payload.user_id, payload.session_id)
+    return SessionInitResponse(
+        token=token,
+        user_id=payload.user_id,
+        session_id=payload.session_id,
+        expires_in=settings.session_token_ttl,
+    )
+
+
+def require_user(
+    authorization: Optional[str] = Header(default=None),
+) -> Optional[SessionClaims]:
+    """FastAPI dependency: verify the Bearer token and return its claims.
+
+    Returns claims when a valid token is present. If enforcement is on and the
+    token is missing/invalid, raises 401. When enforcement is off (dev), a
+    missing token yields None and the caller falls back to its prior behavior.
+    """
+    token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+
+    claims = _verify_or_none(token)
+    if claims is None and _auth_required():
+        raise HTTPException(status_code=401, detail="Valid session token required")
+    return claims
 
 
 
@@ -156,7 +237,39 @@ def serialize_flagged_session(session) -> FlaggedSessionReview:
 
 
 @router.websocket("/ws/chat/{session_id}")
-async def websocket_chat(websocket: WebSocket, session_id: str):
+async def websocket_chat(
+    websocket: WebSocket,
+    session_id: str,
+    token: Optional[str] = Query(default=None),
+):
+    # Origin check: reject cross-site WebSocket handshakes (CORS does not apply
+    # to WebSockets). Allow same-origin/unknown-origin (native clients) through.
+    origin = websocket.headers.get("origin")
+    if origin and origin.rstrip("/") != settings.frontend_url.rstrip("/"):
+        logger.warning("Rejecting WS handshake from origin=%s", origin)
+        await websocket.close(code=4403)
+        return
+
+    # Token check: when auth is enforced, require a valid token whose session_id
+    # matches this connection. `ws_user_id`, when set, overrides any
+    # client-supplied user_id so a client cannot act as another user.
+    claims = _verify_or_none(token)
+    ws_user_id: Optional[str] = None
+    if claims is not None:
+        if claims.session_id != session_id:
+            logger.warning(
+                "WS token session mismatch: token=%s path=%s",
+                claims.session_id,
+                session_id,
+            )
+            await websocket.close(code=4401)
+            return
+        ws_user_id = claims.user_id
+    elif _auth_required():
+        logger.warning("Rejecting WS: missing/invalid token for %s", session_id)
+        await websocket.close(code=4401)
+        return
+
     await websocket.accept()
 
     path = "/ws/chat"
@@ -190,13 +303,17 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 question = event.event_data.question
                 store = event.event_data.store
                 product_data = event.event_data.product
-                user_id = event.event_data.user_id
+                # A verified token's user_id is authoritative — it overrides
+                # whatever the client put in the event payload, so a client
+                # cannot act on another user's behalf.
+                user_id = ws_user_id or event.event_data.user_id
                 user_name = event.event_data.user_name
                 order_data = event.event_data.order
                 is_initial_message = getattr(
                     event.event_data, "is_initial_message", False
                 )
                 confirm_action_id = getattr(event.event_data, "confirm_action_id", None)
+                image = getattr(event.event_data, "image", None)
 
                 product_context = product_data
                 order_context = order_data if order_data else None
@@ -306,38 +423,16 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
 
                 message_history = await get_message_history(session_id)
 
-                response: MessageResponse
-
-                use_two_pass = getattr(settings, 'use_two_pass_agent', True)
-
-                if use_two_pass:
-                    logger.info(
-                        "[Two-Pass] Using new two-pass agent architecture",
-                        extra={"session_id": session_id}
-                    )
-                    response = await two_pass_agent.execute(
-                        user_input=question,
-                        session_id=session_id,
-                        store=store,
-                        user_id=str(user_id),
-                        user_name=user_name,
-                        selected_order=order_data,
-                        confirm_action_id=confirm_action_id,
-                    )
-                else:
-                    logger.info(
-                        "[Legacy] Using legacy chat handler",
-                        extra={"session_id": session_id}
-                    )
-                    response = await handle_chat_event(
-                        user_input=question,
-                        store=store,
-                        message_history=message_history,
-                        user_id=str(user_id),
-                        user_name=user_name,
-                        confirm_action_id=confirm_action_id,
-                        selected_order=order_data,
-                    )
+                response: MessageResponse = await two_pass_agent.execute(
+                    user_input=question,
+                    session_id=session_id,
+                    store=store,
+                    user_id=str(user_id),
+                    user_name=user_name,
+                    selected_order=order_data,
+                    confirm_action_id=confirm_action_id,
+                    image=image,
+                )
 
                 span_context = trace.get_current_span().get_span_context()
                 trace_id_str = (
@@ -692,12 +787,17 @@ async def list_flagged_sessions(
     store: Optional[str] = Query(default=None),
     user_name: Optional[str] = None,
     limit: int = 25,
+    claims: Optional[SessionClaims] = Depends(require_user),
 ):
     try:
         try:
             uuid.UUID(user_id)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid user_id")
+
+        # A verified token may only read its own user's flagged sessions.
+        if claims is not None and claims.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
 
         safe_limit = max(1, min(limit, 100))
         store_filter = None

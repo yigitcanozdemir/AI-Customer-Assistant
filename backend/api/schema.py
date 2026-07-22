@@ -210,6 +210,10 @@ class ChatEventData(BaseModel):
     order: Optional[OrderStatus] = None
     is_initial_message: Optional[bool] = False
     confirm_action_id: Optional[str] = None
+    # Optional user-uploaded image (data: URL or http(s) URL) for the
+    # "find similar outfits from this picture" flow. Described to text and used
+    # as the product-search query — see TwoPassAgent.execute / describe_image.
+    image: Optional[str] = None
 
     class Config:
         arbitrary_types_allowed = True

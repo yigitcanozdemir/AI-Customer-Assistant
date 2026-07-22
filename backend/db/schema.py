@@ -35,6 +35,7 @@ class Product(Base):
     )
     store = Column(String(100), nullable=False)
     name = Column(Text, nullable=False)
+    category = Column(String(100), nullable=True)
     price = Column(Numeric(10, 2), nullable=False)
     currency = Column(String(10), nullable=False)
     description = Column(Text, nullable=False)

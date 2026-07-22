@@ -13,15 +13,41 @@ from .db_operations import (
 logger = logging.getLogger(__name__)
 
 
+def build_embedding_text(product_data: dict) -> str:
+    """Compose the text embedded for retrieval from a product's key fields.
+
+    Combines name, category, tags, and description so semantic search matches on
+    the product's identity — not just its (often sparse) description. Kept as a
+    standalone helper so the ingestion path and any re-embed script produce
+    byte-identical embedding documents.
+    """
+    name = (product_data.get("name") or "").strip()
+    category = (product_data.get("category") or "").strip()
+    tags = product_data.get("tags") or []
+    description = (product_data.get("description") or "").strip()
+
+    parts = []
+    if name:
+        parts.append(name)
+    if category:
+        parts.append(f"Category: {category}")
+    if tags:
+        parts.append(f"Tags: {', '.join(str(t) for t in tags)}")
+    if description:
+        parts.append(description)
+    return ". ".join(parts)
+
+
 async def process_product_embeddings(session, product_data, store):
 
     product = await create_product(
         session,
         store=store,
         name=product_data["name"],
+        category=product_data.get("category"),
         price=product_data.get("price"),
         currency=product_data.get("currency"),
-        description=product_data.get("description") or None,
+        description=product_data.get("description") or "",
         tags=product_data.get("tags", []) or None,
     )
 
@@ -54,13 +80,19 @@ async def process_product_embeddings(session, product_data, store):
     if images_data:
         await create_images(session, images_data)
 
-    if product.description and product.description.strip():
+    # Embed a COMPOSITE document (name + category + tags + description) rather
+    # than description alone. Searching only the description made short- or
+    # empty-description products effectively invisible and dropped the strong
+    # signal in the product name/category/tags. The composite text is embedded
+    # even when the description is empty, so every product is retrievable.
+    embedding_text = build_embedding_text(product_data)
+    if embedding_text.strip():
         try:
-            embedding_vector = await create_embedding(product.description)
+            embedding_vector = await create_embedding(embedding_text)
             await create_product_embedding(
                 session,
                 product_id=product.id,
-                description=product.description,
+                description=embedding_text,
                 embedding=embedding_vector,
             )
         except Exception as e:

@@ -15,10 +15,8 @@ Features:
 import json
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime
 from backend.services.cache import cache_manager
-from backend.api.agent_schema import ConversationContext, IntentType, Pass1Output
-from backend.api.schema import Message
+from backend.api.agent_schema import ConversationContext, Pass1Output
 
 logger = logging.getLogger(__name__)
 
@@ -36,15 +34,12 @@ class ContextManager:
 
     # Redis key prefixes
     CONTEXT_KEY_PREFIX = "context:"
-    HISTORY_KEY_PREFIX = "history:"
     TURN_KEY_PREFIX = "turn:"
 
     # TTL settings (in seconds)
     CONTEXT_TTL = 3600 * 24  # 24 hours
-    HISTORY_TTL = 3600 * 24  # 24 hours
 
     # Context limits
-    MAX_HISTORY_MESSAGES = 50  # Maximum messages to keep
     MAX_RECENT_PRODUCTS = 10  # Maximum recent products to track
     MAX_TOOL_HISTORY = 5  # Maximum recent tool calls to remember
 
@@ -187,93 +182,13 @@ class ContextManager:
             self.logger.error(f"Error updating context for session {session_id}: {e}")
             raise
 
-    async def add_message(self, session_id: str, message: Message) -> bool:
-        """
-        Add a message to conversation history.
-
-        Args:
-            session_id: Session identifier
-            message: Message to add
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            history_key = f"{self.HISTORY_KEY_PREFIX}{session_id}"
-
-            # Get existing history
-            history_data = await cache_manager.get(history_key)
-
-            if history_data:
-                history = json.loads(history_data)
-            else:
-                history = []
-
-            # Add new message
-            message_dict = message.model_dump(mode='json')
-            # Convert datetime to ISO format
-            if isinstance(message_dict.get('timestamp'), datetime):
-                message_dict['timestamp'] = message_dict['timestamp'].isoformat()
-
-            history.append(message_dict)
-
-            # Prune old messages if needed
-            if len(history) > self.MAX_HISTORY_MESSAGES:
-                # Keep system messages and recent messages
-                system_messages = [m for m in history if m.get('type') == 'system']
-                other_messages = [m for m in history if m.get('type') != 'system']
-                history = system_messages + other_messages[-self.MAX_HISTORY_MESSAGES:]
-
-            # Save back to Redis
-            await cache_manager.set(
-                history_key,
-                json.dumps(history),
-                ttl=self.HISTORY_TTL
-            )
-
-            return True
-
-        except Exception as e:
-            self.logger.error(f"Error adding message to session {session_id}: {e}")
-            return False
-
-    async def get_message_history(self, session_id: str) -> List[Message]:
-        """
-        Retrieve message history for a session.
-
-        Args:
-            session_id: Session identifier
-
-        Returns:
-            List of Message objects
-        """
-        try:
-            history_key = f"{self.HISTORY_KEY_PREFIX}{session_id}"
-            history_data = await cache_manager.get(history_key)
-
-            if not history_data:
-                return []
-
-            history = json.loads(history_data)
-
-            # Convert back to Message objects
-            messages = []
-            for msg_dict in history:
-                # Convert timestamp string back to datetime
-                if 'timestamp' in msg_dict and isinstance(msg_dict['timestamp'], str):
-                    msg_dict['timestamp'] = datetime.fromisoformat(msg_dict['timestamp'])
-
-                messages.append(Message(**msg_dict))
-
-            return messages
-
-        except Exception as e:
-            self.logger.error(f"Error retrieving history for session {session_id}: {e}")
-            return []
-
     async def clear_session(self, session_id: str) -> bool:
         """
-        Clear all context and history for a session.
+        Clear structured context and turn counter for a session.
+
+        Note: the user-facing message log lives in `session_manager`
+        (`session_history:` keys), not here — this only clears the
+        structured `ConversationContext` and turn counter.
 
         Args:
             session_id: Session identifier
@@ -283,10 +198,10 @@ class ContextManager:
         """
         try:
             context_key = f"{self.CONTEXT_KEY_PREFIX}{session_id}"
-            history_key = f"{self.HISTORY_KEY_PREFIX}{session_id}"
+            turn_key = f"{self.TURN_KEY_PREFIX}{session_id}"
 
             await cache_manager.delete(context_key)
-            await cache_manager.delete(history_key)
+            await cache_manager.delete(turn_key)
 
             return True
 

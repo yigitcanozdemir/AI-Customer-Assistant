@@ -1,0 +1,10 @@
+The user DECLINED a {action} request.
+
+IMPORTANT INSTRUCTIONS:
+- Acknowledge that they've chosen not to proceed with the {action}.
+- DO NOT mention the order ID (it's shown in the UI card).
+- Keep the tone friendly and supportive.
+- Briefly mention they can still {action} later if they change their mind (based on FAQ policy).
+- Ask if there's anything else you can help with.
+- Be concise (2-3 sentences maximum).
+- Respond in the user's language.

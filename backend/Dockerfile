@@ -14,7 +14,8 @@ COPY ./pyproject.toml ./uv.lock ./
 # Install dependencies - this layer is cached unless pyproject.toml or uv.lock changes
 RUN uv sync --no-dev --frozen
 
-# Copy backend source code LAST (this changes most often)
+# Copy backend source code + alembic config LAST (these change most often)
+COPY ./alembic.ini /app/alembic.ini
 COPY ./backend /app/backend
 
 # Set env vars
@@ -23,5 +24,6 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 EXPOSE 8000
 
-# Run FastAPI
-CMD ["sh", "-c", "uv run uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --no-access-log --log-level warning"]
+# Apply DB migrations, then start FastAPI. Running migrations on boot means a
+# fresh `docker compose up` produces a ready-to-use schema with no extra step.
+CMD ["sh", "-c", "uv run alembic upgrade head && uv run uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --no-access-log --log-level warning"]

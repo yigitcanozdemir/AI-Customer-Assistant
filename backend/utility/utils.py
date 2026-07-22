@@ -1,9 +1,9 @@
 # backend/telemetry.py
 
 from typing import Tuple
+import logging
 import time
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.sdk.resources import Resource
@@ -123,23 +123,71 @@ def metrics(_: Request) -> Response:
 def setup_otlp(
     app: ASGIApp,
     app_name: str,
-    endpoint: str = settings.tempo_endpoint,
+    endpoint: str | None = None,
     environment: str = settings.environment,
 ) -> None:
+    """Wire OpenTelemetry tracing to the configured OTLP backend (OpenObserve).
+
+    The endpoint comes from OTEL_EXPORTER_OTLP_ENDPOINT (falling back to the
+    legacy TEMPO_ENDPOINT). Traces cover FastAPI requests plus asyncpg and
+    redis calls so a single trace spans the whole request → DB/cache path.
+    Enabled in all environments (including production) whenever an endpoint is
+    configured; falls back to console spans only in non-production when no
+    endpoint is set.
+    """
+    logger = logging.getLogger(__name__)
+    endpoint = endpoint or settings.otel_exporter_otlp_endpoint or settings.tempo_endpoint
+
     resource = Resource.create(attributes={"service.name": app_name})
     tracer_provider = TracerProvider(resource=resource)
 
     if endpoint:
-        tracer_provider.add_span_processor(
-            BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True))
-        )
-    else:
-        if environment != "production":
-            tracer_provider.add_span_processor(
-                BatchSpanProcessor(ConsoleSpanExporter())
+        # Pick the exporter transport from OTEL_EXPORTER_OTLP_PROTOCOL:
+        #   "http"/"http/protobuf" → OpenObserve, Tempo HTTP, etc. (port 5080/4318)
+        #   "grpc" (default)       → gRPC collectors (port 4317)
+        protocol = (settings.otel_exporter_otlp_protocol or "grpc").lower()
+        if protocol.startswith("http"):
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                OTLPSpanExporter as HTTPSpanExporter,
             )
+
+            # The HTTP exporter uses the endpoint verbatim when set explicitly
+            # (it does NOT append the OTLP path). Backends like OpenObserve
+            # expect the signal path, so ensure the traces path is present.
+            http_endpoint = endpoint
+            if not http_endpoint.rstrip("/").endswith("/v1/traces"):
+                http_endpoint = http_endpoint.rstrip("/") + "/v1/traces"
+            exporter = HTTPSpanExporter(endpoint=http_endpoint)
+        else:
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+                OTLPSpanExporter as GRPCSpanExporter,
+            )
+
+            exporter = GRPCSpanExporter(endpoint=endpoint, insecure=True)
+
+        tracer_provider.add_span_processor(BatchSpanProcessor(exporter))
+        logger.info("OTLP tracing enabled → %s (%s)", endpoint, protocol)
+    elif environment != "production":
+        tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+        logger.info("OTLP endpoint unset; using console span exporter (dev)")
 
     trace.set_tracer_provider(tracer_provider)
 
     LoggingInstrumentor().instrument(set_logging_format=True)
     FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer_provider)
+
+    # Database and cache spans — nest under the request span so a trace shows
+    # the full request → query / redis path in OpenObserve.
+    try:
+        from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
+
+        AsyncPGInstrumentor().instrument(tracer_provider=tracer_provider)
+    except Exception as exc:  # pragma: no cover - instrumentation is best-effort
+        logger.warning("asyncpg instrumentation skipped: %s", exc)
+
+    try:
+        from opentelemetry.instrumentation.redis import RedisInstrumentor
+
+        RedisInstrumentor().instrument(tracer_provider=tracer_provider)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("redis instrumentation skipped: %s", exc)
