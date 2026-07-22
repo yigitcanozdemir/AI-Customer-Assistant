@@ -53,7 +53,7 @@ export function UserEntryModal() {
       document.body.style.overflow = "hidden";
       document.body.style.position = "fixed";
       document.body.style.width = "100%";
-      document.body.style.height = "100vh";
+      document.body.style.height = "100dvh";
     };
 
     const unlockBody = () => {
@@ -104,7 +104,7 @@ export function UserEntryModal() {
   const isKeyboardOpen = keyboardInset > 0;
   const shouldForceFullScreen =
     isMobileViewport || (isKeyboardOpen && viewportWidth < TABLET_BREAKPOINT);
-  const containerHeight = viewportHeight ? `${viewportHeight}px` : "100vh";
+  const containerHeight = viewportHeight ? `${viewportHeight}px` : "100dvh";
   const defaultCardMaxHeight = viewportHeight
     ? `min(90vh, ${viewportHeight - 32}px)`
     : "90vh";

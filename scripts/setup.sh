@@ -1,9 +1,9 @@
 #!/bin/bash
 set -a # automatically export all variables
-if [ -f .env.production ]; then
-    source .env.production
+if [ -f .env.prod ]; then
+    source .env.prod
 else
-    echo "❌ .env.production not found!"
+    echo "❌ .env.prod not found!"
     exit 1
 fi
 set +a
@@ -23,7 +23,12 @@ echo "🗄️  Running database migrations..."
 docker compose -f docker-compose.prod.yml exec -T fastapi alembic upgrade head
 
 echo "📊 Loading initial data..."
-docker compose -f docker-compose.prod.yml exec -T fastapi python backend/db/data_loader.py
+if [ -n "${DATA_DIR:-}" ]; then
+    echo "   Using custom catalog directory: ${DATA_DIR}"
+    docker compose -f docker-compose.prod.yml exec -T fastapi python backend/db/data_loader.py --data-dir "$DATA_DIR"
+else
+    docker compose -f docker-compose.prod.yml exec -T fastapi python backend/db/data_loader.py
+fi
 
 echo "✅ Setup complete!"
 echo ""

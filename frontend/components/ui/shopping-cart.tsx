@@ -235,8 +235,8 @@ export function ShoppingCart({ right, sideWidth }: ShoppingCartProps) {
         style={{
           right: isMounted ? right : -450,
           width: isMounted ? sideWidth : 450,
-          height: viewportHeight ? `${viewportHeight}px` : "100vh",
-          minHeight: viewportHeight ? `${viewportHeight}px` : "100vh",
+          height: viewportHeight ? `${viewportHeight}px` : "100dvh",
+          minHeight: viewportHeight ? `${viewportHeight}px` : "100dvh",
         }}
         onClick={(e) => e.stopPropagation()}
       >

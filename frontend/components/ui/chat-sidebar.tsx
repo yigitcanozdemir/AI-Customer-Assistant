@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   MapPin,
   Truck,
+  ImagePlus,
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { useStore } from "@/context/StoreContext";
@@ -125,6 +126,10 @@ interface ChatSidebarProps {
 
 export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState("");
+  // Optional garment image the user attaches to search "similar outfits".
+  // Stored as a data: URL and sent alongside the question.
+  const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
   const { store: selectedStore } = useStore();
@@ -602,8 +607,31 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     };
   }, [isAssistantOpen]);
 
+  const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset the input so selecting the same file again re-fires onChange.
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return;
+    if (file.size > MAX_IMAGE_BYTES) {
+      console.warn("Attached image exceeds size limit");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setAttachedImage(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
   const sendMessage = async (content: string, explicitProduct?: Product | null) => {
-    if (!content.trim() || isSessionLocked || isTyping) return;
+    const trimmed = content.trim();
+    // Allow sending with an image and no text (defaults to "find similar").
+    if ((!trimmed && !attachedImage) || isSessionLocked || isTyping) return;
+
+    const imageToSend = attachedImage;
+    const effectiveContent =
+      trimmed || (imageToSend ? "Find outfits similar to this image" : "");
 
     const productToUse = explicitProduct !== undefined ? explicitProduct : selectedProduct;
     const replyProductSnapshot = productToUse
@@ -614,23 +642,26 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     const userMessage = {
       id: Date.now().toString(),
       type: "user" as const,
-      content,
+      content: effectiveContent,
       timestamp: new Date(),
       reply_product: replyProductSnapshot,
       reply_order: replyOrderSnapshot,
+      image: imageToSend ?? undefined,
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
+    setAttachedImage(null);
     setIsTyping(true);
 
-    sendWebSocketMessage(content, undefined, productToUse);
+    sendWebSocketMessage(effectiveContent, undefined, productToUse, imageToSend);
   };
 
   const sendWebSocketMessage = (
     content: string,
     confirmActionId?: string,
-    explicitProduct?: Product | null
+    explicitProduct?: Product | null,
+    image?: string | null
   ) => {
     if (isSessionLocked) {
       setIsTyping(false);
@@ -663,6 +694,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
               }
             : undefined,
           confirm_action_id: confirmActionId,
+          image: image ?? undefined,
         },
       };
 
@@ -923,8 +955,8 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       style={{
         right: isMounted ? right : -450,
         width: isMounted ? sideWidth : 450,
-        height: viewportHeight ? `${viewportHeight}px` : "100vh",
-        minHeight: viewportHeight ? `${viewportHeight}px` : "100vh",
+        height: viewportHeight ? `${viewportHeight}px` : "100dvh",
+        minHeight: viewportHeight ? `${viewportHeight}px` : "100dvh",
         transition:
           "right 300ms ease-in-out, width 300ms ease-in-out, transform 300ms ease-in-out",
       }}
@@ -1118,6 +1150,24 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                         </div>
                       </div>
                     )}
+                    {message.image && (
+                      <div
+                        className={`flex ${
+                          message.type === "user"
+                            ? "justify-end"
+                            : "justify-start"
+                        }`}
+                      >
+                        <div className="max-w-[60%] mb-1">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={message.image}
+                            alt="Attached item"
+                            className="rounded-2xl border border-border/60 object-cover shadow-sm"
+                          />
+                        </div>
+                      </div>
+                    )}
                   {message.confirmation_state ? (
                     <div className="flex justify-start w-full">
                       <div className="relative w-full">
@@ -1245,16 +1295,16 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                       {message.products.map((product) => (
                         <Card
                           key={product.id}
-                          className="border-0 shadow-sm bg-card"
+                          className="rounded-2xl border border-border/50 bg-card/95 p-1 shadow-[0_16px_36px_-30px_rgb(15_23_42_/_0.9)] transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]"
                         >
-                          <CardContent className="px-3 py-1.5">
+                          <CardContent className="rounded-[0.9rem] px-3 py-2.5">
                             <div className="flex items-center space-x-3">
                               <Image
                                 src={product.image || "/placeholder.svg"}
                                 alt={product.name}
                                 width={400}
                                 height={800}
-                                className="w-12 h-16 object-cover rounded"
+                                className="w-12 h-16 object-cover rounded-xl"
                                 unoptimized={false}
                               />
                               <div className="flex-1 min-w-0 space-y-0.5">
@@ -1270,7 +1320,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                   </span>
                                   <Button
                                     size="sm"
-                                    className="h-6 px-2 text-xs"
+                                    className="h-7 rounded-full px-3 text-xs"
                                     onClick={() => handleViewProduct(product.id)}
                                   >
                                     View
@@ -1304,14 +1354,14 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                       {message.orders.map((order) => (
                         <Card
                           key={order.order_id}
-                          className={`border shadow-sm bg-card cursor-pointer hover:bg-muted/50 transition-all ${
+                          className={`rounded-2xl border bg-card/95 p-1 shadow-[0_16px_36px_-30px_rgb(15_23_42_/_0.9)] cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:bg-muted/50 ${
                             selectedOrderId === order.order_id
                               ? "border-primary bg-primary/5 ring-2 ring-primary/20"
                               : "border-border/50"
                           }`}
                           onClick={() => handleOrderSelect(order)}
                         >
-                          <CardContent className="p-3">
+                          <CardContent className="rounded-[0.9rem] p-3">
                             <div className="flex space-x-3">
                               {selectedOrderId === order.order_id && (
                                 <div className="flex items-center justify-center">
@@ -1323,7 +1373,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                 alt={order.product.name}
                                 width={400}
                                 height={800}
-                                className="w-12 h-16 object-cover rounded"
+                                className="w-12 h-16 object-cover rounded-xl"
                                 unoptimized={false}
                               />
                               <div className="flex-1 min-w-0">
@@ -1813,7 +1863,48 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             </div>
           )}
 
+          {attachedImage && (
+            <div className="mb-2 flex items-center gap-2 rounded-lg border border-border/50 bg-background p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={attachedImage}
+                alt="Attached item"
+                className="h-12 w-12 rounded-md object-cover"
+              />
+              <span className="flex-1 text-xs text-muted-foreground">
+                Searching by this image
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAttachedImage(null)}
+                className="h-6 w-6 p-0"
+                aria-label="Remove attached image"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+
           <div className="flex space-x-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isSessionLocked || isTyping}
+              className="h-10 w-10 shrink-0 p-0"
+              aria-label="Attach an image to find similar items"
+              title="Attach an image to find similar items"
+            >
+              <ImagePlus className="h-4 w-4" />
+            </Button>
             <Input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
@@ -1824,6 +1915,8 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                   ? "Hold tight, I'm replying..."
                   : selectedOrderId
                   ? "What would you like to do with this order?"
+                  : attachedImage
+                  ? "Add a note, or send to find similar..."
                   : "Ask about products, sizing, or styling..."
               }
               onKeyPress={(e) => {
@@ -1835,7 +1928,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                   }
                 }
               }}
-              className="flex-1 h-9 text-sm bg-background border-border/50"
+              className="flex-1 h-10 text-base md:text-sm bg-background border-border/50"
               disabled={isSessionLocked || isTyping}
             />
             <Button
@@ -1846,7 +1939,11 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                   sendMessage(inputValue);
                 }
               }}
-              disabled={!inputValue.trim() || isSessionLocked || isTyping}
+              disabled={
+                (!inputValue.trim() && !attachedImage) ||
+                isSessionLocked ||
+                isTyping
+              }
               size="sm"
               className="h-9 px-3"
             >

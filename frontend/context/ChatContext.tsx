@@ -11,6 +11,9 @@ import {
 } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { useStore } from "@/context/StoreContext";
+import type { Product } from "@/types/product";
+
+export type { Product } from "@/types/product";
 
 const isDev = process.env.NODE_ENV !== "production";
 const logDebug = (...args: unknown[]) => {
@@ -27,6 +30,7 @@ export interface Message {
   tracking_data?: TrackingData;
   reply_product?: Product | null;
   reply_order?: OrderStatus | null;
+  image?: string;
   suggestions?: string[];
   warning_message?: string;
   requires_human?: boolean;
@@ -81,28 +85,6 @@ interface OrderStatus {
   created_at: Date;
   product: OrderProduct;
 }
-interface ProductVariant {
-  color?: string;
-  size?: string;
-  stock: number;
-  available: boolean;
-}
-
-export interface Product {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  originalPrice?: number;
-  currency: string;
-  inStock: boolean;
-  image: string;
-  images: string[];
-  variants: ProductVariant[];
-  sizes: string[];
-  colors: string[];
-}
-
 interface ChatContextType {
   messages: Message[];
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;

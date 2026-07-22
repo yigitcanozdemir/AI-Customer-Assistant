@@ -21,31 +21,9 @@ import { useChat } from "@/context/ChatContext";
 import { useCallback } from "react";
 import { ThemeSelector } from "@/components/ui/theme-selector";
 import { FlaggedSessionsButton } from "@/components/ui/flagged-sessions";
+import type { Product } from "@/types/product";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-
-interface ProductVariant {
-  id: string;
-  color?: string;
-  size?: string;
-  stock: number;
-  available: boolean;
-}
-
-interface Product {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  originalPrice?: number;
-  currency: string;
-  inStock: boolean;
-  image: string;
-  images: string[];
-  variants: ProductVariant[];
-  sizes: string[];
-  colors: string[];
-}
 
 const formatCurrency = (price: number, currency: string): string => {
   switch (currency) {
@@ -394,7 +372,7 @@ export default function ProductPage() {
   const currentVariant = getCurrentVariant();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[100dvh] bg-background">
       {shouldShowContent && (
         <>
           <header
@@ -469,16 +447,16 @@ export default function ProductPage() {
           </header>
 
           <main
-            className="py-8 transition-all duration-300 ease-in-out"
+            className="py-10 sm:py-14 transition-all duration-300 ease-in-out"
             style={{
               paddingLeft: "1.5rem",
               paddingRight: `calc(${totalOffset}px + 1.5rem)`,
             }}
           >
-            <div className="max-w-[2000px] mx-auto">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                <div className="space-y-4 max-w-[800px]">
-                  <div className="aspect-[3/4] overflow-hidden rounded-lg bg-muted/20 relative group">
+            <div className="max-w-[1520px] mx-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,.85fr)] gap-8 xl:gap-16">
+                <div className="space-y-4 max-w-[800px] rounded-[2rem] bg-muted/30 p-1.5 ring-1 ring-border/50 shadow-[0_24px_70px_-45px_rgb(15_23_42_/_0.7)]">
+                  <div className="aspect-[3/4] overflow-hidden rounded-[1.6rem] bg-muted/20 relative group">
                     <Image
                       src={
                         currentImages[selectedImage] ||
@@ -538,9 +516,10 @@ export default function ProductPage() {
                   </div>
                 </div>
 
-                <div className="space-y-6">
+                <div className="space-y-7 lg:pt-6">
                   <div>
-                    <h1 className="text-3xl font-bold text-foreground mb-2 font-modern-heading">
+                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary">Curated edit</p>
+                    <h1 className="text-4xl font-semibold tracking-[-0.035em] text-foreground mb-3 font-modern-heading sm:text-5xl">
                       {product.name}
                     </h1>
 
@@ -571,7 +550,7 @@ export default function ProductPage() {
                       )}
                     </div>
 
-                    <p className="text-muted-foreground leading-relaxed font-modern-body">
+                    <p className="max-w-xl text-muted-foreground leading-7 font-modern-body">
                       {product.description}
                     </p>
                   </div>
@@ -582,7 +561,7 @@ export default function ProductPage() {
                       size="sm"
                       onClick={handleAskQuestion}
                       disabled={isTyping}
-                      className="border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="h-11 rounded-full border-primary/30 px-5 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] disabled:opacity-50 disabled:cursor-not-allowed"
                       title={isTyping ? "Please wait for agent response" : "Ask Question About This Product"}
                     >
                       <MessageCircle className="w-4 h-4 mr-2" />

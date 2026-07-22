@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
+import type { Product } from "@/types/product";
 
 interface OrderProduct {
   id: string;
@@ -14,16 +15,6 @@ interface Order {
   status: string;
   created_at: Date;
   product: OrderProduct;
-}
-
-interface Product {
-  id: string;
-  name: string;
-  description?: string;
-  price: number;
-  currency: string;
-  image?: string;
-  images?: string[];
 }
 
 export interface Message {

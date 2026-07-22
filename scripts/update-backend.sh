@@ -1,9 +1,9 @@
 #!/bin/bash
 set -a # automatically export all variables
-if [ -f .env.production ]; then
-    source .env.production
+if [ -f .env.prod ]; then
+    source .env.prod
 else
-    echo "❌ .env.production not found!"
+    echo "❌ .env.prod not found!"
     exit 1
 fi
 set +a

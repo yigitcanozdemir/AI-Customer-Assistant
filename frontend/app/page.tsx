@@ -25,31 +25,10 @@ import { ThemeSelector } from "@/components/ui/theme-selector";
 import { FlaggedSessionsButton } from "@/components/ui/flagged-sessions";
 import { OnboardingModal } from "@/components/ui/onboarding-modal";
 import { useUser } from "@/context/UserContext";
+import type { Product } from "@/types/product";
+import { useVisualViewport } from "@/hooks/use-visual-viewport";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-
-interface ProductVariant {
-  id: string;
-  color?: string;
-  size?: string;
-  stock: number;
-  available: boolean;
-}
-
-interface Product {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  originalPrice?: number;
-  currency: string;
-  inStock: boolean;
-  image: string;
-  images: string[];
-  variants: ProductVariant[];
-  sizes: string[];
-  colors: string[];
-}
 
 const stores = [
   "Aurora Style",
@@ -95,6 +74,7 @@ export default function Store() {
     isTyping,
   } = useChat();
   const { isUserSet } = useUser();
+  const { keyboardInset } = useVisualViewport();
   const storePopoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -389,7 +369,7 @@ export default function Store() {
     !(bothPanelsOpen && windowWidth >= 1024 && windowWidth < 1200);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[100dvh] bg-background">
       {shouldShowGrid && (
         <>
           <header
@@ -499,7 +479,7 @@ export default function Store() {
                   opacity: isSearchOpen ? 1 : 0,
                 }}
               >
-                <div className="pb-3 pt-1">
+                <div className="pb-3 pt-1" style={{ paddingBottom: `${Math.max(keyboardInset, 12)}px` }}>
                   <div className="relative w-full">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                     <Input
@@ -507,7 +487,7 @@ export default function Store() {
                       placeholder="Search products..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10 h-9 text-sm bg-muted/30 border-0 focus-visible:ring-1"
+                      className="pl-10 h-11 text-base md:text-sm bg-muted/30 border-0 focus-visible:ring-1 rounded-xl"
                       autoFocus={isSearchOpen}
                     />
                   </div>
@@ -517,13 +497,13 @@ export default function Store() {
           </header>
 
           <main
-            className="py-8 transition-all duration-300"
+            className="py-10 sm:py-14 transition-all duration-300"
             style={{
               paddingLeft: "1.5rem",
               paddingRight: `calc(${totalOffset}px + 1.5rem)`,
             }}
           >
-            <div className="max-w-full px-4 sm:px-6 md:px-8 mx-auto">
+            <div className="max-w-[1800px] px-1 sm:px-4 md:px-6 mx-auto">
               {isLoading ? (
                 <div className="min-h-screen flex items-center justify-center">
                   <div className="text-center">
@@ -533,7 +513,7 @@ export default function Store() {
                 </div>
               ) : (
                 <div
-                  className="grid gap-6"
+                  className="grid gap-4 sm:gap-6 lg:gap-8"
                   style={{
                     gridTemplateColumns: gridTemplate,
                     transition: "grid-template-columns 250ms ease",
@@ -542,10 +522,10 @@ export default function Store() {
                   {filteredDresses.map((dress) => (
                     <Card
                       key={dress.id}
-                      className="group overflow-hidden border-0 shadow-sm hover:shadow-lg transition-all duration-300 bg-card cursor-pointer"
+                      className="group overflow-hidden rounded-[1.75rem] border border-border/50 bg-card/90 p-1.5 shadow-[0_18px_55px_-38px_rgb(15_23_42_/_0.6)] transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-1 hover:shadow-[0_28px_65px_-36px_rgb(15_23_42_/_0.75)] cursor-pointer"
                       onClick={() => openProductPage(dress.id)}
                     >
-                      <div className="aspect-[3/4] overflow-hidden bg-muted/20 relative">
+                      <div className="aspect-[3/4] overflow-hidden rounded-[1.35rem] bg-muted/30 relative">
                         <Image
                           src={
                             dress.images && dress.images.length > 0
@@ -556,7 +536,7 @@ export default function Store() {
                           width={600}
                           height={1200}
                           loading="lazy"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          className="w-full h-full object-cover transition-transform duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:scale-[1.035]"
                           unoptimized={false}
                         />
 
@@ -602,15 +582,15 @@ export default function Store() {
                         )}
                       </div>
 
-                      <CardContent className="p-4">
-                        <div className="space-y-2">
-                          <h3 className="font-medium text-sm text-card-foreground line-clamp-2 leading-snug sm:h-auto h-[2.5rem]">
+                      <CardContent className="p-4 pb-3 sm:p-5 sm:pb-4">
+                        <div className="space-y-3">
+                          <h3 className="font-semibold text-base text-card-foreground line-clamp-2 leading-snug sm:h-auto sm:text-lg">
                             {dress.name}
                           </h3>
 
                           <div className="flex items-center justify-between min-h-[1.5rem]">
                             <div className="space-x-2">
-                              <span className="font-semibold text-card-foreground">
+                              <span className="font-semibold tracking-tight text-card-foreground text-lg">
                                 {formatCurrency(dress.price, dress.currency)}
                               </span>
                               {dress.originalPrice && (
@@ -624,10 +604,10 @@ export default function Store() {
                             </div>
                           </div>
 
-                          <div className="flex space-x-2 pt-2">
+                          <div className="flex space-x-2 pt-1">
                             <Button
                               size="sm"
-                              className="flex-1 h-8 text-xs min-w-0 sm:min-w-[100px] bg-primary hover:bg-primary/90 transition-colors"
+                              className="flex-1 h-10 rounded-full text-xs min-w-0 sm:min-w-[100px] bg-primary transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-primary/90 active:scale-[0.98]"
                               onClick={(e) => handleAddToCart(dress, e)}
                             >
                               <ShoppingBag className="w-3 h-3 flex-shrink-0" />
@@ -644,7 +624,7 @@ export default function Store() {
                               variant="outline"
                               size="sm"
                               disabled={isTyping}
-                              className="h-8 w-8 p-0 flex-shrink-0 border-primary/30 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="h-10 w-10 rounded-full p-0 flex-shrink-0 border-primary/25 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] disabled:opacity-50 disabled:cursor-not-allowed"
                               aria-label="Chat about product"
                               title={isTyping ? "Please wait for response" : "Chat about product"}
                             >

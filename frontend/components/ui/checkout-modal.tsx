@@ -103,7 +103,7 @@ export function CheckoutModal({
       document.body.style.overflow = "hidden";
       document.body.style.position = "fixed";
       document.body.style.width = "100%";
-      document.body.style.height = "100vh";
+      document.body.style.height = "100dvh";
     };
 
     const unlockBody = () => {
@@ -224,7 +224,7 @@ export function CheckoutModal({
   const useMobileLayout = windowWidth < 1024 || availableWidth < 700;
   const isMobileViewport = windowWidth < 1024;
   const isKeyboardOpen = keyboardInset > 0;
-  const overlayHeight = viewportHeight ? `${viewportHeight}px` : "100vh";
+  const overlayHeight = viewportHeight ? `${viewportHeight}px` : "100dvh";
   const shouldForceFullScreen = isMobileViewport || shouldShowFullScreen;
   const alignToTop = shouldForceFullScreen || isKeyboardOpen;
   const cardMaxHeight = alignToTop
@@ -335,14 +335,14 @@ export function CheckoutModal({
                         }
                         placeholder="John Doe"
                         required
-                        className="text-sm"
+                        className="text-base md:text-sm"
                       />
                     </div>
                     <div>
                       <Label
                         htmlFor="address_line1"
                         className={cn(
-                          "text-sm",
+                          "text-base md:text-sm",
                           fieldErrors.address_line1 && "text-destructive"
                         )}
                       >
@@ -378,7 +378,7 @@ export function CheckoutModal({
                           handleInputChange("address_line2", e.target.value)
                         }
                         placeholder="Apt 4B"
-                        className="text-sm"
+                        className="text-base md:text-sm"
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -386,7 +386,7 @@ export function CheckoutModal({
                         <Label
                           htmlFor="city"
                           className={cn(
-                            "text-sm",
+                            "text-base md:text-sm",
                             fieldErrors.city && "text-destructive"
                           )}
                         >
@@ -401,7 +401,7 @@ export function CheckoutModal({
                           placeholder="New York"
                           required
                           className={cn(
-                            "text-sm",
+                            "text-base md:text-sm",
                             fieldErrors.city &&
                               "border-destructive focus-visible:ring-destructive/60"
                           )}
@@ -456,14 +456,14 @@ export function CheckoutModal({
                           }
                           placeholder="10001"
                           required
-                          className="text-sm"
+                          className="text-base md:text-sm"
                         />
                       </div>
                       <div>
                         <Label
                           htmlFor="country"
                           className={cn(
-                            "text-sm",
+                            "text-base md:text-sm",
                             fieldErrors.country && "text-destructive"
                           )}
                         >

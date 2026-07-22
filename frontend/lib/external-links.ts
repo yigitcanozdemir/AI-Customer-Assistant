@@ -8,7 +8,7 @@ export const EXTERNAL_LINKS = {
 
 export const TECH_STACK = {
   frontend: ["Next.js", "TypeScript", "Tailwind CSS", "React","Shadcn/UI" ,"Leaflet", "OpenStreetMap", "Photon"],
-  backend: ["FastAPI", "Python", "PostgreSQL", "Redis", "WebSockets", "SQLAlchemy", "Alembic","Asyncio", "Grafana", "Prometheus", "Loki"],
-  ai: ["OpenAI Response API", "Pydantic", "RAG", "PgVector" ,"Prompt Engineering", "Context Engineering"],
-  deployment: ["Docker", "Vercel", "AWS"],
+  backend: ["FastAPI", "Python", "PostgreSQL", "Redis", "WebSockets", "SQLAlchemy", "Alembic", "Asyncio", "OpenTelemetry", "OpenObserve", "Langfuse"],
+  ai: ["OpenAI", "Claude", "Gemini", "Pydantic", "RAG", "PgVector", "Prompt Engineering", "Context Engineering"],
+  deployment: ["Docker", "Docker Compose", "Vercel", "Hetzner", "Nginx"],
 } as const;
