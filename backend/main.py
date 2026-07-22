@@ -14,7 +14,7 @@ import logging
 from sqlalchemy import text
 from backend.api.middleware import catch_exceptions_middleware
 from backend.utility.utils import PrometheusMiddleware, metrics, setup_otlp
-from backend.api.healt import router as health_router
+from backend.api.health import router as health_router
 
 logger = logging.getLogger(__name__)
 
@@ -22,19 +22,26 @@ APP_NAME = settings.app_name
 
 
 async def clear_expired_orders():
+    """Demo housekeeping: periodically purge orders older than the configured
+    TTL so the sample data stays tidy. Interval and TTL are configurable; set
+    DEMO_ORDER_TTL_MINUTES<=0 to disable entirely."""
+    ttl_minutes = settings.demo_order_ttl_minutes
+    interval = settings.demo_order_cleanup_interval_seconds
     while True:
         async with get_session() as session:
             result = await session.execute(
                 text(
-                    "DELETE FROM orders WHERE created_at < NOW() - INTERVAL '10 minutes'"
-                )
+                    "DELETE FROM orders "
+                    "WHERE created_at < NOW() - make_interval(mins => :ttl)"
+                ),
+                {"ttl": ttl_minutes},
             )
             await session.commit()
             logger.info(
                 "Old orders cleared",
                 extra={"deleted_rows": result.rowcount, "job": "clear_expired_orders"},
             )
-        await asyncio.sleep(600)
+        await asyncio.sleep(interval)
 
 
 @asynccontextmanager
@@ -45,24 +52,33 @@ async def lifespan(app: FastAPI):
     await cache_manager.connect()
     logger.info("Redis connected", extra={"service": "redis"})
 
-    task = asyncio.create_task(clear_expired_orders())
-    logger.info("Background task started", extra={"task": "clear_expired_orders"})
+    task = None
+    if settings.demo_order_ttl_minutes > 0:
+        task = asyncio.create_task(clear_expired_orders())
+        logger.info("Background task started", extra={"task": "clear_expired_orders"})
 
     yield
 
-    task.cancel()
-    logger.info("Background task stopped", extra={"task": "clear_expired_orders"})
+    if task is not None:
+        task.cancel()
+        logger.info("Background task stopped", extra={"task": "clear_expired_orders"})
 
     await cache_manager.close()
     logger.info("Redis connection closed", extra={"service": "redis"})
 
 
-app = FastAPI(debug=settings.debug, lifespan=lifespan)
+# Never run FastAPI in debug mode in production, even if DEBUG is left true in
+# the environment — debug mode leaks tracebacks to clients.
+_debug = settings.debug and settings.environment != "production"
+app = FastAPI(debug=_debug, lifespan=lifespan)
 app.add_middleware(PrometheusMiddleware, app_name=APP_NAME)
 app.add_route("/metrics", metrics)
 
-if settings.environment != "production":
-    setup_otlp(app, APP_NAME, endpoint="tempo:4317")
+# Tracing is enabled in every environment (including production) whenever an
+# OTLP endpoint is configured. setup_otlp resolves the endpoint from
+# OTEL_EXPORTER_OTLP_ENDPOINT (OpenObserve) with a legacy TEMPO_ENDPOINT
+# fallback, and no-ops gracefully if neither is set.
+setup_otlp(app, APP_NAME)
 
 app.middleware("http")(catch_exceptions_middleware)
 

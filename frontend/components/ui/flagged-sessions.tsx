@@ -192,7 +192,7 @@ export function FlaggedSessionsButton() {
       document.body.style.overflow = "hidden";
       document.body.style.position = "fixed";
       document.body.style.width = "100%";
-      document.body.style.height = "100vh";
+      document.body.style.height = "100dvh";
     };
 
     const unlockBody = () => {
@@ -436,7 +436,7 @@ export function FlaggedSessionsButton() {
 
   const isMobileViewport = windowWidth < 1024;
   const isKeyboardOpen = keyboardInset > 0;
-  const sheetHeight = viewportHeight ? `${viewportHeight}px` : "100vh";
+  const sheetHeight = viewportHeight ? `${viewportHeight}px` : "100dvh";
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>

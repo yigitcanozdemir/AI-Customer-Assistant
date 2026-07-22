@@ -1,0 +1,42 @@
+You are validating an order action against store policy. Return a structured
+decision — do NOT write free-form prose outside the requested fields.
+
+**DATE INFORMATION**:
+Current date: {current_date}
+Order created at: {order_created_at}
+Days elapsed since order creation: {days_elapsed}
+
+**ORDER DETAILS**:
+User wants to: {action} order {order_id}
+Order current status: {order_status}
+
+**ORDER STATUS DEFINITIONS** (CRITICAL — DO NOT INVENT YOUR OWN INTERPRETATION):
+- "created"   = Payment CONFIRMED, order placed in system. This is AFTER checkout/payment.
+- "shipped"   = Order dispatched, in transit.
+- "delivered" = Order arrived at customer.
+- "cancelled" = Order was cancelled.
+- "returned"  = Order was returned.
+
+**STORE FAQ POLICY**:
+{policy_context}
+
+Decide whether this {action} is ALLOWED or DENIED, based strictly on:
+- Order status (use the definitions above)
+- Days elapsed since order creation (use the number provided above — do NOT do your own date math)
+- The specific rules in the FAQ policy
+
+Rules:
+- For CANCELLATIONS: if the FAQ says orders cannot be cancelled after payment/checkout,
+  DENY for status "created" (payment IS confirmed at "created").
+- For RETURNS: allow only if BOTH (1) status is "delivered" AND (2) days elapsed is within
+  the policy window. DENY if the order is not yet delivered, or the window has passed.
+- Extract ONLY the specific rule that applies. Do not restate the whole FAQ.
+
+Set the fields:
+- `allowed`: true if permitted, false otherwise.
+- `message`: the customer-facing text.
+    - If allowed: confirm you have the {action} ready and ask them to select Confirm or Cancel.
+    - If denied: politely explain the specific policy rule and offer an alternative if one exists.
+    - Respond in the customer's language.
+    - Do NOT include the order ID (it is already shown in the UI card).
+- `reason`: a short internal note naming the policy rule (only when denied; otherwise null).

@@ -1,12 +1,29 @@
 import redis.asyncio as redis
-import pickle
 import json
 from typing import Optional, List, Any
 import hashlib
+from fastapi.encoders import jsonable_encoder
 from backend.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _dumps(value: Any) -> bytes:
+    """Serialize a cache value to JSON bytes.
+
+    Replaces pickle (an RCE vector when reading from a shared/compromised
+    Redis). `jsonable_encoder` handles UUIDs, datetimes, and Pydantic models
+    that appear in search results and pending actions.
+    """
+    return json.dumps(jsonable_encoder(value)).encode("utf-8")
+
+
+def _loads(raw: Any) -> Any:
+    """Deserialize JSON bytes/str from Redis back into Python objects."""
+    if isinstance(raw, (bytes, bytearray)):
+        raw = raw.decode("utf-8")
+    return json.loads(raw)
 
 
 class CacheManager:
@@ -50,7 +67,7 @@ class CacheManager:
             key = f"emb:{self._hash_key(text)}"
             cached = await self.redis.get(key)
             if cached:
-                return pickle.loads(cached)
+                return _loads(cached)
         except Exception as e:
             logger.error(f"Cache get embedding error: {e}")
         return None
@@ -59,7 +76,7 @@ class CacheManager:
         try:
             key = f"emb:{self._hash_key(text)}"
             await self.redis.setex(
-                key, settings.redis_ttl_embedding, pickle.dumps(vector)
+                key, settings.redis_ttl_embedding, _dumps(vector)
             )
         except Exception as e:
             logger.error(f"Cache set embedding error: {e}")
@@ -71,7 +88,7 @@ class CacheManager:
             key = f"search:{store}:{top_k}:{self._hash_key(query)}"
             cached = await self.redis.get(key)
             if cached:
-                return pickle.loads(cached)
+                return _loads(cached)
         except Exception as e:
             logger.error(f"Cache get search error: {e}")
         return None
@@ -82,7 +99,7 @@ class CacheManager:
         try:
             key = f"search:{store}:{top_k}:{self._hash_key(query)}"
             await self.redis.setex(
-                key, settings.redis_ttl_search, pickle.dumps(results)
+                key, settings.redis_ttl_search, _dumps(results)
             )
         except Exception as e:
             logger.error(f"Cache set search error: {e}")
@@ -102,7 +119,7 @@ class CacheManager:
             key = f"faq:{store}:{top_k}:{self._hash_key(query)}"
             cached = await self.redis.get(key)
             if cached:
-                return pickle.loads(cached)
+                return _loads(cached)
         except Exception as e:
             logger.error(f"Cache get FAQ search error: {e}")
         return None
@@ -113,7 +130,7 @@ class CacheManager:
         try:
             key = f"faq:{store}:{top_k}:{self._hash_key(query)}"
             await self.redis.setex(
-                key, settings.redis_ttl_search, pickle.dumps(results)
+                key, settings.redis_ttl_search, _dumps(results)
             )
         except Exception as e:
             logger.error(f"Cache set FAQ search error: {e}")
@@ -138,7 +155,7 @@ class CacheManager:
             key = f"products:{store}:{limit}"
             cached = await self.redis.get(key)
             if cached:
-                return pickle.loads(cached)
+                return _loads(cached)
         except Exception as e:
             logger.error(f"Cache get product list error: {e}")
         return None
@@ -146,7 +163,7 @@ class CacheManager:
     async def set_product_list(self, store: str, limit: int, products: List):
         try:
             key = f"products:{store}:{limit}"
-            await self.redis.setex(key, 1200, pickle.dumps(products))
+            await self.redis.setex(key, 1200, _dumps(products))
         except Exception as e:
             logger.error(f"Cache set product list error: {e}")
 
@@ -163,7 +180,7 @@ class CacheManager:
     ) -> bool:
         try:
             key = f"pending_action:{action_id}"
-            await self.redis.setex(key, ttl, pickle.dumps(action_data))
+            await self.redis.setex(key, ttl, _dumps(action_data))
             logger.info(f"Stored pending action: {action_id}")
             return True
         except Exception as e:
@@ -175,7 +192,7 @@ class CacheManager:
             key = f"pending_action:{action_id}"
             cached = await self.redis.get(key)
             if cached:
-                return pickle.loads(cached)
+                return _loads(cached)
         except Exception as e:
             logger.error(f"Error getting pending action: {e}")
         return None

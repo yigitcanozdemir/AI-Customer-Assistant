@@ -24,7 +24,6 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 
-from openai import AsyncOpenAI
 from backend.config import settings
 from backend.api.agent_schema import (
     Pass1Output,
@@ -36,20 +35,27 @@ from backend.api.agent_schema import (
     ConversationContext,
     AgentState,
     TwoPassExecutionTrace,
+    PolicyValidationResult,
+    filter_tool_params,
 )
 from backend.api.schema import (
     MessageResponse,
     Message,
     PendingAction,
 )
+from backend.api.context_policy import (
+    apply_intent_transitions,
+    is_modification_flow,
+    should_update_current_order_from_tracking,
+)
 from backend.services.tool import call_tool as execute_tool
 from backend.services.context_manager import context_manager
+from backend.services.llm import get_provider, LLMMessage
+from backend.services.llm.tracing import turn_trace
 from backend.prompts.loader import load_prompt
 from fastapi.encoders import jsonable_encoder
 
 logger = logging.getLogger(__name__)
-
-client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 
 class TwoPassAgent:
@@ -74,9 +80,16 @@ class TwoPassAgent:
         user_name: str,
         selected_order: Any = None,
         confirm_action_id: Optional[str] = None,
+        image: Optional[str] = None,
     ) -> MessageResponse:
         """
         Execute the complete two-pass flow.
+
+        Wraps the turn in one named Langfuse root trace (`chat_turn`, tagged with
+        session_id/user_id) so Pass 1 / Pass 2 / policy / embedding generations
+        nest under a single named, session-filterable trace instead of scattering
+        as separate unnamed single-call traces. `turn_trace` is a no-op when
+        Langfuse is unconfigured.
 
         Args:
             user_input: User's message
@@ -86,11 +99,47 @@ class TwoPassAgent:
             user_name: User's display name
             selected_order: Currently selected order (if any)
             confirm_action_id: ID of action to confirm (if any)
+            image: Optional user-uploaded image (data:/http URL) — described to
+                text and folded into the query for "find similar outfits".
 
         Returns:
             MessageResponse with final response and metadata
         """
+        with turn_trace(
+            session_id=session_id,
+            user_id=user_id,
+            user_input=user_input,
+        ):
+            return await self._execute_turn(
+                user_input=user_input,
+                session_id=session_id,
+                store=store,
+                user_id=user_id,
+                user_name=user_name,
+                selected_order=selected_order,
+                confirm_action_id=confirm_action_id,
+                image=image,
+            )
+
+    async def _execute_turn(
+        self,
+        user_input: str,
+        session_id: str,
+        store: str,
+        user_id: str,
+        user_name: str,
+        selected_order: Any = None,
+        confirm_action_id: Optional[str] = None,
+        image: Optional[str] = None,
+    ) -> MessageResponse:
+        """Run the two-pass flow. Called within the `turn_trace` root span."""
         start_time = time.perf_counter()
+
+        # Vision → text: if the user attached an image, describe the garment and
+        # fold that description into the query so Pass 1 produces a product_search
+        # with a rich, attribute-laden query against the existing pgvector index.
+        if image and not confirm_action_id:
+            user_input = await self._describe_image_into_query(image, user_input)
 
         # Initialize execution trace
         trace = TwoPassExecutionTrace(
@@ -140,62 +189,15 @@ class TwoPassAgent:
                 language=detected_language,
             )
 
-            # CRITICAL: Clear product context when switching to order-related intents
-            # This happens when user was discussing products but now asks about orders
-            if (
-                pass1_output.intent
-                in [IntentType.ORDER_TRACKING, IntentType.ORDER_MODIFICATION]
-                and context.recent_products
-                and context.last_intent
-                not in [IntentType.ORDER_TRACKING, IntentType.ORDER_MODIFICATION]
-            ):
-
-                self.logger.info(
-                    f"[Context] Clearing product context - intent switched from {context.last_intent} to {pass1_output.intent}"
-                )
-                await context_manager.clear_product_context(
-                    session_id=session_id,
-                    reason=f"Intent switched to {pass1_output.intent}",
-                )
-                # Re-fetch context so Pass 2 uses the cleared context
-                context = await context_manager.get_context(session_id)
-                self.logger.info(
-                    f"[Context] Context refreshed after clearing product context"
-                )
-
-            # CRITICAL: If Pass 1 explicitly set referenced_order to null, clear current_order
-            # This happens when user says "my orders", "another order", etc.
-            # BUT: Don't clear if user is selecting an order for modification (return/cancel)
-            if pass1_output.context_understanding.referenced_order is None and any(
-                tc.tool_name == ToolName.LIST_ORDERS for tc in pass1_output.tool_calls
-            ):
-
-                # Check if this is part of an order modification flow
-                # Don't clear context if user is selecting an order to return/cancel
-                is_modification_flow = (
-                    pass1_output.intent == IntentType.ORDER_MODIFICATION
-                    or context.last_intent == IntentType.ORDER_MODIFICATION
-                )
-
-                if not is_modification_flow:
-                    # User is browsing orders (not selecting for modification)
-                    self.logger.info(
-                        f"[Context] Clearing current_order - user requested to see all orders"
-                    )
-                    await context_manager.clear_order_context(
-                        session_id=session_id, reason="User requested to see all orders"
-                    )
-                    # CRITICAL: Re-fetch context so Pass 2 uses the cleared context
-                    context = await context_manager.get_context(session_id)
-                    self.logger.info(
-                        f"[Context] Context refreshed after clearing order"
-                    )
-                else:
-                    # User is selecting an order for modification - preserve intent context
-                    self.logger.info(
-                        f"[Context] NOT clearing current_order - user is selecting order for modification "
-                        f"(current_intent={pass1_output.intent}, last_intent={context.last_intent})"
-                    )
+            # Apply all intent-driven context clears in one place. This replaces
+            # the previous four near-duplicate "clear -> re-fetch" branches and
+            # is the fix for the context-carryover bug (stale product/order
+            # context leaking into a new question). See api/context_policy.py.
+            context = await apply_intent_transitions(
+                session_id=session_id,
+                pass1=pass1_output,
+                context=context,
+            )
 
             # TOOL EXECUTION LAYER
             # Filter out process_order if confirmation is required
@@ -219,6 +221,8 @@ class TwoPassAgent:
                 tool_calls=tools_to_execute,
                 context=context,
                 user_id=user_id,
+                store=store,
+                pass1_output=pass1_output,
                 trace=trace,
             )
 
@@ -236,72 +240,27 @@ class TwoPassAgent:
                     products=products,
                 )
 
-            # Update current_order when tracking is fetched
-            # BUT: Don't overwrite if user is in modification flow (selecting order to return/cancel)
-            if tracking_data:
-                # Only update current_order if intent is ORDER_TRACKING
-                # This prevents tracking data from overwriting a modification target
-                should_update_current_order = (
-                    pass1_output.intent == IntentType.ORDER_TRACKING
-                    or context.current_order is None
-                )
-
-                if should_update_current_order:
-                    # Convert tracking_data to dict for context storage
-                    order_dict = {
-                        "order_id": str(tracking_data.order_id),
-                        "status": tracking_data.status,
-                        "created_at": str(tracking_data.created_at),
-                    }
-                    await context_manager.update_context(
-                        session_id=session_id,
-                        selected_order=order_dict,
-                    )
-                    self.logger.info(
-                        f"[Context] Updated current_order from tracking data "
-                        f"(order_id={tracking_data.order_id}, intent={pass1_output.intent})"
-                    )
-                else:
-                    self.logger.info(
-                        f"[Context] Skipping current_order update from tracking_data - "
-                        f"user in non-tracking flow (intent={pass1_output.intent}, current_order exists)"
-                    )
-
-            # Update context with Pass 1 understanding
-            tool_names = [tc.tool_name.value for tc in pass1_output.tool_calls]
-
-            # CRITICAL: If Pass 1 set referenced_order to null (intent switch), clear current_order from context
-            # BUT: Don't clear if user is in modification flow (they're selecting an order to modify)
-            if (
-                pass1_output.context_understanding.referenced_order is None
-                and context.current_order is not None
+            # Adopt tracking data as current_order only on a genuine tracking
+            # intent — never overwrite a modification target (see context_policy).
+            if tracking_data and should_update_current_order_from_tracking(
+                pass1_output, context
             ):
-                # Check if this is part of an order modification flow (same check as above)
-                is_modification_flow = (
-                    pass1_output.intent == IntentType.ORDER_MODIFICATION
-                    or context.last_intent == IntentType.ORDER_MODIFICATION
+                order_dict = {
+                    "order_id": str(tracking_data.order_id),
+                    "status": tracking_data.status,
+                    "created_at": str(tracking_data.created_at),
+                }
+                await context_manager.update_context(
+                    session_id=session_id,
+                    selected_order=order_dict,
+                )
+                self.logger.info(
+                    "[Context] Updated current_order from tracking data "
+                    f"(order_id={tracking_data.order_id}, intent={pass1_output.intent})"
                 )
 
-                if not is_modification_flow:
-                    # True intent switch - clear stale order context
-                    self.logger.info(
-                        f"[Context] Pass 1 cleared order reference (intent switch detected). "
-                        f"Clearing current_order from context. Conversation flow: {pass1_output.context_understanding.conversation_flow}"
-                    )
-                    await context_manager.clear_order_context(
-                        session_id=session_id,
-                        reason=f"Intent switch detected: {pass1_output.context_understanding.conversation_flow}",
-                    )
-                    # Refresh context after clearing
-                    context = await context_manager.get_context(session_id)
-                else:
-                    # User is in modification flow - preserve context for order selection
-                    self.logger.info(
-                        f"[Context] NOT clearing current_order despite referenced_order=None - "
-                        f"user in modification flow (current_intent={pass1_output.intent}, last_intent={context.last_intent})"
-                    )
-
-            # Update context with Pass 1 output (includes intent) and tool calls
+            # Record this turn's intent and tool calls in context.
+            tool_names = [tc.tool_name.value for tc in pass1_output.tool_calls]
             await context_manager.update_context(
                 session_id=session_id,
                 pass1_output=pass1_output,
@@ -310,6 +269,7 @@ class TwoPassAgent:
 
             # Check if confirmation is needed
             pending_action = None
+            policy_denied = False
             if pass1_output.requires_confirmation and any(
                 tc.tool_name == ToolName.PROCESS_ORDER for tc in pass1_output.tool_calls
             ):
@@ -338,10 +298,11 @@ class TwoPassAgent:
                     trace.current_state = AgentState.CONFIRMATION_WAITING
                     trace.pass2_output = validation_result["message"]
                 else:
-                    # Action is DENIED - Pass 2 already generated denial message
+                    # Action is DENIED - the validator produced the denial message.
                     self.logger.info(
                         f"[Policy Validation] Action DENIED by policy: {validation_result['reason']}"
                     )
+                    policy_denied = True
                     trace.current_state = AgentState.PASS_2_RESPONSE_GENERATION
                     trace.pass2_output = validation_result["message"]
                     trace.pass2_completed_at = time.perf_counter()
@@ -366,18 +327,9 @@ class TwoPassAgent:
             # Use assessment from Pass 1 (no separate LLM call needed)
             pass1_assessment = pass1_output.assessment
 
-            # Determine if human intervention is needed based on Pass 1 assessment
-            # CRITICAL: Don't flag if policy successfully denied an action - that's working as intended
-            policy_denial = (
-                pass1_output.requires_confirmation
-                and any(
-                    tc.tool_name == ToolName.PROCESS_ORDER
-                    for tc in pass1_output.tool_calls
-                )
-                and trace.pass2_output
-                and "VALIDATION:DENIED" in trace.pass2_output
-            )
-
+            # Determine if human intervention is needed based on Pass 1 assessment.
+            # A successful policy denial is the system working as intended, so it
+            # must not be flagged for human review.
             requires_human = (
                 pass1_assessment.confidence < 0.5
                 or pass1_assessment.flagging_reason
@@ -389,7 +341,7 @@ class TwoPassAgent:
                     "prompt_injection",
                     "potential_error",
                 ]
-            ) and not policy_denial  # Don't flag successful policy denials
+            ) and not policy_denied
 
             # Use suggested fallback if provided and confidence is low
             response_content = trace.pass2_output or "Please confirm the action above."
@@ -549,6 +501,102 @@ class TwoPassAgent:
 
         return context
 
+    _IMAGE_DESCRIBE_INSTRUCTION = (
+        "You are helping a fashion shopper search a catalog by image. Describe "
+        "ONLY the main clothing item/outfit in this picture as a concise search "
+        "phrase: garment type, colour(s), pattern, material, style, and occasion. "
+        "Do not mention the person, background, or pose. Output the phrase only."
+    )
+
+    async def _describe_image_into_query(self, image: str, user_input: str) -> str:
+        """Describe an uploaded garment image and fold it into the search query.
+
+        Returns an augmented `user_input`. On any failure (provider without
+        vision, API error), falls back to the original text so the turn still
+        proceeds as a normal text search.
+        """
+        provider = get_provider()
+        if not getattr(provider, "supports_vision", False):
+            self.logger.warning(
+                "[Vision] Image provided but active provider lacks vision support"
+            )
+            return user_input
+        try:
+            description = await provider.describe_image(
+                image, self._IMAGE_DESCRIBE_INSTRUCTION
+            )
+            description = (description or "").strip()
+            if not description:
+                return user_input
+
+            self.logger.info(f"[Vision] Image described as: {description}")
+            base = (user_input or "").strip()
+            # Keep any typed text (e.g. "cheaper than this") as intent, and add
+            # the visual description as the concrete thing to search for.
+            if base:
+                return f"{base}\n\n[Attached image shows: {description}]"
+            return f"Find outfits similar to this: {description}"
+        except Exception as e:
+            self.logger.error(f"[Vision] describe_image failed: {e}", exc_info=True)
+            return user_input
+
+    async def _enrich_similar_product_search(
+        self,
+        tool_call: ToolCall,
+        context: ConversationContext,
+        pass1_output: Pass1Output,
+        store: str,
+    ) -> None:
+        """Make "find similar to THIS shop item" visual, and exclude the source.
+
+        When Pass 1 resolved a `referenced_product` (user said "similar",
+        "like this", "this product") and a product is selected in context, we:
+          1. exclude that product's id from results (so "similar" never returns
+             the same item), and
+          2. replace the name-based query with a VISUAL description of the item's
+             own catalog image (true visual similarity), reusing the same
+             vision→text path as user-uploaded images.
+
+        Everything is best-effort: if there's no selected product, no image, or
+        the provider lacks vision, we leave the LLM's name-based query intact
+        (still applying the exclusion when we know the id).
+        """
+        referenced = pass1_output.context_understanding.referenced_product
+        if not referenced or not context.recent_products:
+            return
+
+        source = context.recent_products[-1]
+        source_id = source.get("id")
+        if not source_id:
+            return
+
+        # 1) Always exclude the source item from its own "similar" results.
+        tool_call.parameters.exclude_product_id = str(source_id)
+
+        # 2) Upgrade to visual similarity using the item's own image.
+        provider = get_provider()
+        if not getattr(provider, "supports_vision", False):
+            return
+        try:
+            from backend.services.tool import get_product_primary_image
+
+            image_url = await get_product_primary_image(str(source_id), store)
+            if not image_url:
+                return  # keep the name-based query
+            description = await provider.describe_image(
+                image_url, self._IMAGE_DESCRIBE_INSTRUCTION
+            )
+            description = (description or "").strip()
+            if description:
+                tool_call.parameters.query = description
+                self.logger.info(
+                    f"[Vision] Similar-item search using visual query: {description}"
+                )
+        except Exception as e:
+            self.logger.error(
+                f"[Vision] similar-item enrichment failed: {e}", exc_info=True
+            )
+
     async def _execute_pass1(
         self,
         user_input: str,
@@ -655,18 +703,14 @@ The user is referring to this order when they say "this order", "it", "that one"
                 order_context_info=order_context_info,
             )
 
-            # Call LLM with structured output
-            response = await client.responses.parse(
-                model=settings.openai_model,
-                input=[
-                    {"role": "system", "content": pass1_prompt},
-                    {"role": "user", "content": user_input},
+            # Call the active provider with structured output.
+            pass1_output = await get_provider().parse(
+                [
+                    LLMMessage("system", pass1_prompt),
+                    LLMMessage("user", user_input),
                 ],
-                text_format=Pass1Output,
+                Pass1Output,
             )
-
-            # Extract parsed output
-            pass1_output = response.output_parsed
 
             # Store raw output for debugging
             trace.pass1_raw_output = json.dumps(pass1_output.model_dump(), indent=2)
@@ -704,6 +748,8 @@ The user is referring to this order when they say "this order", "it", "that one"
         tool_calls: List[ToolCall],
         context: ConversationContext,
         user_id: str,
+        store: str,
+        pass1_output: Pass1Output,
         trace: TwoPassExecutionTrace,
     ) -> List[ToolResult]:
         """
@@ -718,11 +764,25 @@ The user is referring to this order when they say "this order", "it", "that one"
         tool_tasks = []
 
         for tool_call in tool_calls:
-            # Add user_id to list_orders if not present
+            # Back-fill server-owned parameters the LLM must not be trusted to
+            # supply. `store` comes from the authenticated WS payload and is
+            # authoritative, so we always set it (this is what prevents the
+            # `Missing required parameters ... ['store']` crash — the validator
+            # no longer requires it). `user_id` scopes user-specific tools.
+            if not tool_call.parameters.store:
+                tool_call.parameters.store = store
+
             if tool_call.tool_name == ToolName.LIST_ORDERS:
                 # Only add user_id if not already present
                 if not tool_call.parameters.user_id:
                     tool_call.parameters.user_id = user_id
+
+            # "Find similar to THIS shop item": enrich the search with the source
+            # product's own image (visual similarity) and exclude it from results.
+            if tool_call.tool_name == ToolName.PRODUCT_SEARCH:
+                await self._enrich_similar_product_search(
+                    tool_call, context, pass1_output, store
+                )
 
             # Execute tool
             tool_tasks.append(self._execute_single_tool(tool_call, trace))
@@ -750,24 +810,10 @@ The user is referring to this order when they say "this order", "it", "that one"
         start = time.perf_counter()
 
         try:
-            # Convert ToolParameters to dict, excluding None values
+            # Convert ToolParameters to dict, excluding None values, then keep
+            # only the parameters this tool accepts (strips hallucinated args).
             params_dict = tool_call.parameters.model_dump(exclude_none=True)
-
-            # Filter parameters to only include what each tool accepts
-            # This prevents Pass 1 from accidentally including wrong parameters
-            valid_params = {
-                ToolName.PRODUCT_SEARCH: ["query", "store"],
-                ToolName.FAQ_SEARCH: ["query", "store"],
-                ToolName.VARIANT_CHECK: ["product_id", "size", "color"],
-                ToolName.PROCESS_ORDER: ["order_id", "action", "store"],
-                ToolName.LIST_ORDERS: ["store", "user_id"],
-                ToolName.FETCH_ORDER_LOCATION: ["order_id", "store"],
-            }
-
-            # Keep only valid parameters for this tool
-            if tool_call.tool_name in valid_params:
-                allowed = valid_params[tool_call.tool_name]
-                params_dict = {k: v for k, v in params_dict.items() if k in allowed}
+            params_dict = filter_tool_params(tool_call.tool_name, params_dict)
 
             result = await execute_tool(
                 tool_name=tool_call.tool_name.value,
@@ -830,31 +876,27 @@ The user is referring to this order when they say "this order", "it", "that one"
         detected_language: str,
         tracking_data: Any,
         trace: TwoPassExecutionTrace,
-        validation_context: str = "",
         confirmation_context: str = "",
     ) -> str:
         """
-        Execute Pass 2: Natural Language Response Generation
+        Execute Pass 2: Natural Language Response Generation.
 
         Args:
-            validation_context: Optional context for policy validation mode
-            confirmation_context: Optional context for confirmation/declination responses
+            confirmation_context: Optional context for confirmation/declination
+                responses (success/decline messages after a pending action).
 
-        Returns natural language response string.
+        Returns the natural language response string. Policy validation is a
+        separate structured call (see `_validate_action_against_policy`).
         """
         try:
-            # Build tool results summary
             tool_results_summary = self._build_tool_results_summary(tool_results)
 
-            # Build tracking guidance
             tracking_guidance = ""
             if tracking_data:
                 tracking_guidance = self._build_tracking_guidance(tracking_data)
 
-            # Build policy context (from FAQ results)
             policy_context = self._extract_policy_context(tool_results)
 
-            # Language mapping
             language_names = {
                 "en": "English",
                 "es": "Spanish",
@@ -870,57 +912,33 @@ The user is referring to this order when they say "this order", "it", "that one"
             }
             detected_language_name = language_names.get(detected_language, "English")
 
-            # Build conversation context summary
             conversation_context_summary = context_manager.build_context_summary(
                 context
             )
 
-            # If validation_context is provided, use it instead of normal prompt
-            if validation_context:
-                # Policy validation mode - use simplified prompt
-                validation_prompt = f"""You are validating an order action against store policies.
-
-{validation_context}
-
-**FAQ POLICY:**
-{policy_context}
-
-Generate your validation response now (must start with VALIDATION:ALLOWED or VALIDATION:DENIED).
-"""
-                pass2_prompt = validation_prompt
-            else:
-                # Normal response generation mode
-                # Load Pass 2 prompt
-                pass2_prompt = load_prompt("pass2_response_prompt.txt").format(
-                    store=context.store,
-                    user_name=context.user_name,
-                    detected_language=detected_language,
-                    detected_language_name=detected_language_name,
-                    user_message=user_input,
-                    intent=pass1_output.intent.value,
-                    flagging_reason=pass1_output.assessment.flagging_reason,
-                    tool_results_summary=tool_results_summary,
-                    tracking_guidance=tracking_guidance,
-                    policy_context=policy_context,
-                    conversation_context_summary=conversation_context_summary,
-                    confirmation_context=confirmation_context,
-                )
-
-            # Call LLM for natural language response
-            response = await client.responses.create(
-                model=settings.openai_model,
-                input=[
-                    {"role": "system", "content": pass2_prompt},
-                    {"role": "user", "content": "Generate your response now."},
-                ],
+            pass2_prompt = load_prompt("pass2_response_prompt.txt").format(
+                store=context.store,
+                user_name=context.user_name,
+                detected_language=detected_language,
+                detected_language_name=detected_language_name,
+                user_message=user_input,
+                intent=pass1_output.intent.value,
+                flagging_reason=pass1_output.assessment.flagging_reason,
+                tool_results_summary=tool_results_summary,
+                tracking_guidance=tracking_guidance,
+                policy_context=policy_context,
+                conversation_context_summary=conversation_context_summary,
+                confirmation_context=confirmation_context,
             )
 
-            # Extract response text
-            if hasattr(response, "output_text"):
-                content = response.output_text
-            elif hasattr(response, "output") and response.output:
-                content = "".join([getattr(o, "text", "") for o in response.output])
-            else:
+            content = await get_provider().generate(
+                [
+                    LLMMessage("system", pass2_prompt),
+                    LLMMessage("user", "Generate your response now."),
+                ]
+            )
+
+            if not content:
                 content = "I'm here to help you!"
 
             self.logger.info(f"[Pass 2] Response generated ({len(content)} chars)")
@@ -1101,107 +1119,59 @@ Generate your validation response now (must start with VALIDATION:ALLOWED or VAL
                     f"[Policy Validation] Could not parse order_created_at: {e}"
                 )
 
-        # Build validation context for Pass 2
-        validation_context = f"""
-**POLICY VALIDATION MODE ACTIVE**
+        policy_context = self._extract_policy_context(tool_results)
 
-**DATE INFORMATION**:
-Current date: {current_date}
-Order created at: {order_created_at}
-Days elapsed since order creation: {days_elapsed if days_elapsed is not None else 'Unable to calculate'}
+        validation_prompt = load_prompt("policy_validation_prompt.txt").format(
+            current_date=current_date,
+            order_created_at=order_created_at,
+            days_elapsed=(
+                days_elapsed if days_elapsed is not None else "Unable to calculate"
+            ),
+            action=action,
+            order_id=order_id,
+            order_status=order_status,
+            policy_context=policy_context,
+        )
 
-**ORDER DETAILS**:
-User wants to: {action} order {order_id}
-Order current status: {order_status}
-
-**ORDER STATUS DEFINITIONS** (CRITICAL - DO NOT MAKE UP YOUR OWN INTERPRETATION):
-- "created" = Payment CONFIRMED, order placed in system. This is AFTER checkout/payment.
-- "shipped" = Order dispatched, in transit.
-- "delivered" = Order arrived at customer.
-- "cancelled" = Order was cancelled.
-- "returned" = Order was returned.
-
-Your task:
-1. Check the FAQ policy below
-2. Determine if this {action} is ALLOWED or DENIED based on:
-   - Order status (use definitions above)
-   - Time elapsed since order creation (calculated above)
-   - Specific policy rules from FAQ
-
-3. Respond with ONE of these formats:
-
-IF ALLOWED:
-"VALIDATION:ALLOWED
-I have the {action} request for order {order_id} ready. [Explain why it's allowed based on policy, e.g., 'Our policy allows returns within 30 days and it has been X days since your order']. Please select Confirm to proceed or Cancel to keep your order as-is."
-
-IF DENIED:
-"VALIDATION:DENIED
-I understand you want to {action} this order. However, [explain specific policy rule that prevents it, e.g., 'our policy states orders cannot be canceled once payment is confirmed' OR 'returns are only accepted for delivered orders within X days']. [Offer alternative if available, e.g., 'You can return it after delivery within 30 days']."
-
-CRITICAL RULES FOR VALIDATION:
-- Start response with "VALIDATION:ALLOWED" or "VALIDATION:DENIED"
-- Extract ONLY the specific rule that applies (NO shipping costs, NO full FAQ copy)
-- Use the Days elapsed calculation provided above - DO NOT make up your own date math
-- For CANCELLATIONS:
-  * If FAQ says "cannot cancel after payment/checkout", DENY for status "created" (payment IS confirmed)
-  * "created" status means payment completed - use this for evaluation
-- For RETURNS:
-  * MUST check TWO conditions:
-    1. Status MUST be "delivered" (DENY if "created", "shipped", etc. - order not received yet)
-    2. Days elapsed MUST be within policy window (e.g., within 30 days for Aurora Style, within 14 days for Dayifuse Fashion)
-  * If status is NOT "delivered", explain: "Returns are only accepted after you receive your order"
-  * If days elapsed exceeds window, explain: "Returns are accepted within X days, and it has been Y days since your order"
-- Use the status definitions above - DO NOT interpret "created" as "not confirmed"
-- Be precise and helpful
-"""
-
-        # Use Pass 2 with validation context
+        # Structured, fail-closed policy decision. The model returns a
+        # PolicyValidationResult (allowed/message/reason) rather than a
+        # free-form string, so there is no brittle prefix to parse and a
+        # malformed or errored response denies the action instead of allowing it.
         try:
-            response = await self._execute_pass2(
-                user_input=user_input,
-                pass1_output=pass1_output,
-                tool_results=tool_results,
-                context=context,
-                detected_language=detected_language,
-                tracking_data=tracking_data,
-                trace=trace,
-                validation_context=validation_context,
+            result: PolicyValidationResult = await get_provider().parse(
+                [
+                    LLMMessage("system", validation_prompt),
+                    LLMMessage(
+                        "user",
+                        f"Validate the {action} request for order {order_id}.",
+                    ),
+                ],
+                PolicyValidationResult,
             )
-
-            # Parse validation result
-            if response.startswith("VALIDATION:ALLOWED"):
-                message = response.replace("VALIDATION:ALLOWED", "").strip()
-                return {
-                    "allowed": True,
-                    "message": message,
-                    "reason": None,
-                }
-            elif response.startswith("VALIDATION:DENIED"):
-                message = response.replace("VALIDATION:DENIED", "").strip()
-                return {
-                    "allowed": False,
-                    "message": message,
-                    "reason": "Policy violation",
-                }
-            else:
-                # Fallback: If response doesn't start with VALIDATION, assume allowed
-                self.logger.warning(
-                    f"[Policy Validation] Response doesn't start with VALIDATION marker, assuming ALLOWED"
-                )
-                return {
-                    "allowed": True,
-                    "message": response,
-                    "reason": None,
-                }
+            trace.pass2_output = result.message
+            self.logger.info(
+                "[Policy Validation] allowed=%s reason=%s",
+                result.allowed,
+                result.reason,
+            )
+            return {
+                "allowed": result.allowed,
+                "message": result.message,
+                "reason": result.reason if not result.allowed else None,
+            }
 
         except Exception as e:
+            # Fail CLOSED: any error validating an order-modifying action denies it.
             self.logger.error(
                 f"[Policy Validation] Error during validation: {e}", exc_info=True
             )
-            # On error, DENY for safety
             return {
                 "allowed": False,
-                "message": "I'm having trouble validating this request against our policies. Please contact customer support for assistance.",
+                "message": (
+                    "I'm having trouble validating this request against our "
+                    "policies right now. Please contact customer support for "
+                    "assistance."
+                ),
                 "reason": f"Validation error: {str(e)}",
             }
 
@@ -1269,11 +1239,14 @@ CRITICAL RULES FOR VALIDATION:
         action_type = process_order_params.get("action", "process")
 
         # CRITICAL: Only include valid parameters for process_order
-        # Filter out user_id and other invalid parameters to prevent execution errors
+        # Filter out user_id and other invalid parameters to prevent execution errors.
+        # `store` is server-owned: fall back to the authoritative context store
+        # when the LLM omitted it, so the deferred confirmation execution never
+        # runs without a store.
         pending_parameters = {
             "order_id": order_id,
             "action": action_type,
-            "store": process_order_params.get("store"),
+            "store": process_order_params.get("store") or context.store,
         }
         # Remove None values
         pending_parameters = {
@@ -1363,18 +1336,9 @@ CRITICAL RULES FOR VALIDATION:
                 )
 
             # Build declination context
-            decline_context = f"""
-The user DECLINED a {action_type} request.
-
-IMPORTANT INSTRUCTIONS:
-- Acknowledge that they've chosen not to proceed with the {action_type}
-- DO NOT mention the order ID (it's shown in the UI card)
-- Keep the tone friendly and supportive
-- Briefly mention they can still {action_type} later if they change their mind (based on FAQ policy)
-- Ask if there's anything else you can help with
-- Be concise (2-3 sentences maximum)
-- Respond in the user's language
-"""
+            decline_context = load_prompt(
+                "confirmation_declined_prompt.txt"
+            ).format(action=action_type)
 
             # Create a minimal Pass1Output for Pass 2
             from backend.api.agent_schema import (
@@ -1435,21 +1399,17 @@ IMPORTANT INSTRUCTIONS:
             tool_name = pending_action["action_type"]
             tool_params = pending_action["parameters"]
 
-            # CRITICAL: Filter parameters to match tool signature
-            valid_params = {
-                "process_order": ["order_id", "action", "store"],
-                "product_search": ["query", "store"],
-                "faq_search": ["query", "store"],
-                "variant_check": ["product_id", "size", "color"],
-                "list_orders": ["store", "user_id"],
-                "fetch_order_location": ["order_id", "store"],
-            }
-
-            if tool_name in valid_params:
-                allowed = valid_params[tool_name]
-                tool_params = {k: v for k, v in tool_params.items() if k in allowed}
+            # Filter parameters to match the tool signature (shared whitelist).
+            # The stored action_type is a string; map it to the enum to reuse
+            # the single source of truth in agent_schema.TOOL_VALID_PARAMS.
+            try:
+                tool_params = filter_tool_params(ToolName(tool_name), tool_params)
                 self.logger.info(
                     f"[Confirmation] Filtered parameters for {tool_name}: {list(tool_params.keys())}"
+                )
+            except ValueError:
+                self.logger.warning(
+                    f"[Confirmation] Unknown tool name in pending action: {tool_name}"
                 )
 
             result = await execute_tool(tool_name, tool_params)
@@ -1508,28 +1468,9 @@ IMPORTANT INSTRUCTIONS:
                 )
 
             # Build context for confirmation success message
-            success_context = f"""
-The user confirmed a {action_type} request. The action has been successfully processed.
-
-IMPORTANT INSTRUCTIONS:
-- DO NOT mention the order ID in your response (it's already shown in the UI card)
-- Confirm the {action_type} was successful
-- Provide clear NEXT STEPS based on the FAQ policy retrieved from tool results
-- Be concise but informative (3-4 sentences maximum)
-- Keep a friendly, helpful tone
-- Use the EXACT information from the FAQ (refund timelines, processing fees, return window, etc.)
-
-For RETURN actions:
-- Explain how to package the item (if mentioned in FAQ)
-- Mention return shipping instructions (if applicable)
-- State the EXACT refund timeline from FAQ (e.g., "7-10 business days")
-- Mention any processing fees from FAQ
-
-For CANCEL actions:
-- Confirm the cancellation
-- Mention refund timeline if applicable from FAQ
-- Offer to help with anything else
-"""
+            success_context = load_prompt(
+                "confirmation_success_prompt.txt"
+            ).format(action=action_type)
 
             # Create a minimal Pass1Output for Pass 2
             from backend.api.agent_schema import (

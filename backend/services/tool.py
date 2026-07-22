@@ -1,7 +1,7 @@
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_ as sa_or
 from sqlalchemy.orm import joinedload
 from backend.db.session import get_session
-from backend.db.schema import Product, Variant, Embedding, FAQ, Order
+from backend.db.schema import Product, Variant, Embedding, FAQ, Order, Image
 from backend.services.embedding import create_embedding
 from backend.api.helper import format_products
 from backend.services.cache import cache_manager
@@ -22,20 +22,88 @@ from typing import List
 logger = logging.getLogger(__name__)
 
 
-async def product_search(query: str, store=str, top_k: int = 1):
+# --- Retrieval tuning knobs -------------------------------------------------
+# Absolute cosine-distance ceiling: anything beyond this is never semantically
+# relevant regardless of the rest of the pool (guards against returning junk on
+# an empty store or a nonsense query). Looser than the old hard 0.6 so valid but
+# distant matches are not silently dropped.
+_MAX_VECTOR_DISTANCE = 0.85
+# Relative margin from the best vector hit — keep candidates within this window
+# of the top result so a good match doesn't drag in unrelated tail items.
+_RELATIVE_DISTANCE_MARGIN = 0.15
+# Reciprocal-rank-fusion constant (standard RRF; larger => flatter weighting).
+_RRF_K = 60
+
+
+def _rrf_scores(ranked_ids: list, weight: float = 1.0) -> dict:
+    """Reciprocal-rank-fusion contribution for one ranked id list."""
+    return {pid: weight / (_RRF_K + rank) for rank, pid in enumerate(ranked_ids)}
+
+
+async def get_product_primary_image(product_id: str, store: str) -> str | None:
+    """Return a product's primary image URL (or None).
+
+    Used by the "find similar to this SHOP item" flow to feed the item's own
+    picture into the vision→text→search path. Scoped by store as a safety check.
+    """
     try:
-        # Check cache first
-        cached_results = await cache_manager.get_product_search(query, store, top_k)
-        if cached_results is not None:
-            logger.info(f"[Product Search] Cache HIT for query='{query}', store={store}")
-            return cached_results
+        async with get_session() as session:
+            stmt = (
+                select(Image.url)
+                .join(Product, Product.id == Image.product_id)
+                .where(Product.id == product_id, Product.store == store)
+                .limit(1)
+            )
+            return (await session.execute(stmt)).scalars().first()
+    except Exception as e:
+        logger.error(f"get_product_primary_image error: {e}", exc_info=True)
+        return None
 
-        logger.debug(f"[Product Search] Cache MISS - Executing search for query='{query}', store={store}")
 
+async def product_search(
+    query: str,
+    store: str = "default",
+    top_k: int = 5,
+    exclude_product_id: str | None = None,
+):
+    """Hybrid (vector + keyword) product search.
+
+    Combines pgvector semantic similarity with a Postgres trigram/ILIKE keyword
+    pass over name/category/tags via reciprocal-rank fusion, so exact terms like
+    "dress" always surface even when the embedding is distant, while semantic
+    matches still rank for paraphrased queries. `top_k` is caller-tunable so the
+    LLM can widen recall.
+
+    `exclude_product_id` drops one product from the results — used by the
+    "find similar to THIS item" flow so the source product is never returned as
+    its own match. Searches that exclude an id skip the shared query cache
+    (they're personalized to a source item and rarer than plain queries).
+    """
+    try:
+        top_k = max(1, min(int(top_k or 5), 25))
+
+        use_cache = exclude_product_id is None
+        if use_cache:
+            cached_results = await cache_manager.get_product_search(query, store, top_k)
+            if cached_results is not None:
+                logger.info(
+                    f"[Product Search] Cache HIT for query='{query}', store={store}"
+                )
+                return cached_results
+
+        logger.debug(
+            f"[Product Search] Cache MISS - Executing hybrid search for query='{query}', store={store}"
+        )
+
+        # Pull a wider candidate pool than top_k so fusion has material to work
+        # with; final list is trimmed to top_k after merging. Widen slightly when
+        # excluding an id so removing the source item doesn't shrink the result.
+        pool = max(top_k * 4, 20) + (1 if exclude_product_id else 0)
         embedding_vector = await create_embedding(query)
 
         async with get_session() as session:
-            similarity_stmt = (
+            # 1) Vector candidates (ordered by cosine distance).
+            vector_stmt = (
                 select(
                     Product.id,
                     Embedding.embedding.cosine_distance(embedding_vector).label(
@@ -45,88 +113,108 @@ async def product_search(query: str, store=str, top_k: int = 1):
                 .join(Embedding, Product.id == Embedding.product_id)
                 .where(Product.store == store)
                 .order_by("distance")
-                .limit(top_k)
+                .limit(pool)
             )
+            vector_rows = (await session.execute(vector_stmt)).all()
 
-            similarity_result = await session.execute(similarity_stmt)
-            product_ids_with_distance = similarity_result.all()
+            # Apply an absolute ceiling + relative margin from the best hit.
+            vector_ids: list = []
+            if vector_rows:
+                best = vector_rows[0].distance
+                cutoff = min(
+                    _MAX_VECTOR_DISTANCE, best + _RELATIVE_DISTANCE_MARGIN
+                )
+                vector_ids = [r.id for r in vector_rows if r.distance <= cutoff]
 
-            if not product_ids_with_distance:
+            # 2) Keyword candidates: trigram/ILIKE over name & category, plus an
+            #    exact tag match. Catches lexical hits the embedding misses.
+            like = f"%{query.strip()}%"
+            keyword_stmt = (
+                select(Product.id)
+                .where(
+                    Product.store == store,
+                    sa_or(
+                        Product.name.ilike(like),
+                        Product.category.ilike(like),
+                        Product.tags.any(query.strip()),
+                    ),
+                )
+                .limit(pool)
+            )
+            keyword_ids = [row.id for row in (await session.execute(keyword_stmt)).all()]
+
+            # Never return the source item when finding items "similar to this".
+            if exclude_product_id is not None:
+                vector_ids = [
+                    pid for pid in vector_ids if str(pid) != str(exclude_product_id)
+                ]
+                keyword_ids = [
+                    pid for pid in keyword_ids if str(pid) != str(exclude_product_id)
+                ]
+
+            # 3) Reciprocal-rank fusion of the two rankings.
+            scores: dict = {}
+            for pid, s in _rrf_scores(vector_ids, weight=1.0).items():
+                scores[pid] = scores.get(pid, 0.0) + s
+            for pid, s in _rrf_scores(keyword_ids, weight=1.0).items():
+                scores[pid] = scores.get(pid, 0.0) + s
+
+            if not scores:
+                logger.info(
+                    f"No products found for query: {query}",
+                    extra={
+                        "query": query,
+                        "best_distance": vector_rows[0].distance if vector_rows else None,
+                        "vector_hits": len(vector_ids),
+                        "keyword_hits": len(keyword_ids),
+                    },
+                )
                 return []
 
-            RELEVANCE_THRESHOLD = 0.6
-            relevant_products = [
-                row
-                for row in product_ids_with_distance
-                if row.distance < RELEVANCE_THRESHOLD
+            ordered_ids = sorted(scores, key=lambda pid: scores[pid], reverse=True)[
+                :top_k
             ]
 
-            if relevant_products:
-                logger.info(
-                    f"Relevant products found for query: {query} Best distance: {product_ids_with_distance[0].distance if product_ids_with_distance else None}",
-                    extra={
-                        "query": query,
-                        "best_distance": product_ids_with_distance[0].distance,
-                        "threshold": RELEVANCE_THRESHOLD,
-                    },
-                )
+            logger.info(
+                f"Hybrid search for query: {query} -> {len(ordered_ids)} result(s)",
+                extra={
+                    "query": query,
+                    "best_distance": vector_rows[0].distance if vector_rows else None,
+                    "vector_hits": len(vector_ids),
+                    "keyword_hits": len(keyword_ids),
+                },
+            )
 
-            if not relevant_products:
-                logger.info(
-                    f"No relevant products found for query: {query} Best distance: {product_ids_with_distance[0].distance if product_ids_with_distance else None}",
-                    extra={
-                        "query": query,
-                        "best_distance": (
-                            product_ids_with_distance[0].distance
-                            if product_ids_with_distance
-                            else None
-                        ),
-                        "threshold": RELEVANCE_THRESHOLD,
-                    },
-                )
-                return []
-
-            product_ids = [row.id for row in product_ids_with_distance]
-
+            # 4) Load full product rows and preserve fused order.
             products_stmt = (
                 select(Product)
                 .options(joinedload(Product.variants), joinedload(Product.images))
-                .where(Product.id.in_(product_ids))
+                .where(Product.id.in_(ordered_ids))
             )
-
-            products_result = await session.execute(products_stmt)
-            products = products_result.unique().scalars().all()
+            products = (
+                (await session.execute(products_stmt)).unique().scalars().all()
+            )
             product_map = {p.id: p for p in products}
             ordered_products = [
-                product_map[pid] for pid in product_ids if pid in product_map
+                product_map[pid] for pid in ordered_ids if pid in product_map
             ]
 
-            # Format results
             results = format_products(ordered_products)
 
-            # Store in cache
-            await cache_manager.set_product_search(query, store, top_k, results)
-            logger.debug(f"[Product Search] Cached results for query='{query}', store={store}")
+            if use_cache:
+                await cache_manager.set_product_search(query, store, top_k, results)
+                logger.debug(
+                    f"[Product Search] Cached results for query='{query}', store={store}"
+                )
 
             return results
 
     except Exception as e:
-        logger.error(f"Product search error: {e}")
-        return [
-            format_products(
-                id="demo",
-                name="Demo Product",
-                description="Demo description",
-                price=0.0,
-                currency="USD",
-                inStock=False,
-                image="/placeholder-image.jpg",
-                images=[],
-                variants=[],
-                sizes=[],
-                colors=[],
-            )
-        ]
+        # Note: `format_products` takes a list of ORM rows, so the previous
+        # keyword-argument fallback here raised TypeError on any real error.
+        # Return an empty result; `call_tool` applies its own demo fallback.
+        logger.error(f"Product search error: {e}", exc_info=True)
+        return []
 
 
 async def faq_search(query: str, store: str, top_k: int = 1):

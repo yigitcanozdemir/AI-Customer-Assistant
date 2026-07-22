@@ -1,5 +1,6 @@
 import sys
 import os
+import argparse
 
 current_file = os.path.abspath(__file__) if "__file__" in globals() else os.getcwd()
 project_root = current_file
@@ -24,23 +25,68 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any
 import asyncio
-from backend.db.session import get_session, engine
-from sqlalchemy.ext.asyncio import AsyncSession
-from backend.db.services.database_logic import (
-    process_faq_embeddings,
-    process_product_embeddings,
-)
-from backend.db.batcher import process_products_batch
-from sqlalchemy import select, func
-from backend.db.schema import Product
-from backend.db.utils.doc_converter import json_to_text
-
 BATCH_SIZE = 100
 logger = logging.getLogger(__name__)
 
 
-async def main():
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Load convention-based store catalog and FAQ data."
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=os.getenv("DATA_DIR"),
+        help="Directory containing <store>_products.json and <store>_faq.json files. Defaults to DATA_DIR or backend/db/jsons.",
+    )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help=(
+            "Wipe existing products, variants, images, embeddings and FAQs, then "
+            "reload from JSON. Use this to RE-EMBED after changing what gets "
+            "embedded (composite name+category+tags+description) or to backfill "
+            "the new product.category column. Destructive — catalog data only "
+            "(orders/sessions are untouched)."
+        ),
+    )
+    return parser.parse_args()
+
+
+async def main(data_dir: Path | None = None, reset: bool = False):
+    # Delay application imports so `--help` remains usable without a configured
+    # database/Redis environment, while normal runs still initialize the app.
+    from sqlalchemy import delete, func, select
+    from backend.db.batcher import process_products_batch
+    from backend.db.schema import Product, Variant, Image, Embedding, FAQ
+    from backend.db.services.database_logic import process_faq_embeddings
+    from backend.db.session import engine, get_session
+    from backend.db.utils.doc_converter import json_to_text
+    from backend.services.cache import cache_manager
+
     try:
+        # This standalone script runs outside the FastAPI lifespan, so Redis is
+        # not connected yet. Connect it here so embedding lookups use the cache
+        # instead of spamming "'NoneType' object has no attribute 'get'" errors.
+        await cache_manager.connect()
+
+        if reset:
+            # Destructive re-embed: clear catalog tables so the reload below
+            # regenerates category + composite embeddings from scratch. ON DELETE
+            # CASCADE handles variants/images/embeddings, but we delete them
+            # explicitly for clarity and to also clear FAQs.
+            async with get_session() as session:
+                await session.execute(delete(Embedding))
+                await session.execute(delete(Image))
+                await session.execute(delete(Variant))
+                await session.execute(delete(FAQ))
+                await session.execute(delete(Product))
+                await session.commit()
+                logger.warning(
+                    "Reset requested: wiped catalog tables before reload",
+                    extra={"action": "data_reset"},
+                )
+
         async with get_session() as session:
             result = await session.execute(select(func.count(Product.id)))
             product_count = result.scalar()
@@ -57,7 +103,9 @@ async def main():
                 extra={"action": "start_data_load"},
             )
 
-        json_folder = Path(__file__).parent / "jsons"
+        json_folder = (data_dir or Path(__file__).parent / "jsons").expanduser().resolve()
+        if not json_folder.is_dir():
+            raise FileNotFoundError(f"Data directory does not exist: {json_folder}")
         json_files = list(json_folder.glob("*.json"))
 
         stores = {}
@@ -71,10 +119,9 @@ async def main():
                 stores.setdefault(store_name, {})["products"] = file
 
         if not stores:
-            logger.error(
-                "No JSON files found in folder", extra={"json_folder": str(json_folder)}
+            raise FileNotFoundError(
+                f"No JSON files found in data directory: {json_folder}"
             )
-            return
 
         async with get_session() as session:
             for store_name, files in stores.items():
@@ -148,8 +195,10 @@ async def main():
         )
         raise
     finally:
+        await cache_manager.close()
         await engine.dispose()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    args = parse_args()
+    asyncio.run(main(args.data_dir, reset=args.reset))

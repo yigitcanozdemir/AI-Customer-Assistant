@@ -47,6 +47,8 @@ class ToolParameters(StrictModel):
     size: Optional[str] = None
     color: Optional[str] = None
     user_id: Optional[str] = None  # Used for user-scoped operations
+    top_k: Optional[int] = None  # product_search: how many results to retrieve
+    exclude_product_id: Optional[str] = None  # product_search: omit this source item
 
 
 class ToolCall(StrictModel):
@@ -81,14 +83,23 @@ class ToolCall(StrictModel):
         # Convert to dict for checking
         params_dict = v.model_dump(exclude_none=True) if hasattr(v, 'model_dump') else {}
 
-        # Define required parameters for each tool
+        # Define required parameters for each tool.
+        #
+        # NOTE: `store` is intentionally NOT listed here. The backend owns the
+        # store value authoritatively (it comes from the authenticated WS event
+        # payload) and back-fills it onto every tool call in
+        # `TwoPassAgent._execute_tools` before execution. Requiring the LLM to
+        # echo `store` into each tool call was the root cause of turn-killing
+        # `Missing required parameters ... ['store']` crashes, since smaller
+        # models occasionally drop it. Only list params the backend cannot
+        # supply on its own.
         required_params = {
-            ToolName.PRODUCT_SEARCH: ['query', 'store'],
-            ToolName.FAQ_SEARCH: ['query', 'store'],
+            ToolName.PRODUCT_SEARCH: ['query'],
+            ToolName.FAQ_SEARCH: ['query'],
             ToolName.VARIANT_CHECK: ['product_id'],
-            ToolName.PROCESS_ORDER: ['order_id', 'action', 'store'],
-            ToolName.LIST_ORDERS: ['store'],
-            ToolName.FETCH_ORDER_LOCATION: ['order_id', 'store'],
+            ToolName.PROCESS_ORDER: ['order_id', 'action'],
+            ToolName.LIST_ORDERS: [],
+            ToolName.FETCH_ORDER_LOCATION: ['order_id'],
         }
 
         if tool_name in required_params:
@@ -321,6 +332,51 @@ class ConversationContext(StrictModel):
     conversation_turn: int = Field(
         default=0,
         description="Current turn number in conversation"
+    )
+
+
+#: Per-tool parameter whitelist. Pass 1 (or a stored pending action) may emit
+#: extra/hallucinated parameters; only these are forwarded to each tool. Single
+#: source of truth — used by the tool executor and the confirmation handler.
+TOOL_VALID_PARAMS: Dict[ToolName, List[str]] = {
+    ToolName.PRODUCT_SEARCH: ["query", "store", "top_k", "exclude_product_id"],
+    ToolName.FAQ_SEARCH: ["query", "store"],
+    ToolName.VARIANT_CHECK: ["product_id", "size", "color"],
+    ToolName.PROCESS_ORDER: ["order_id", "action", "store"],
+    ToolName.LIST_ORDERS: ["store", "user_id"],
+    ToolName.FETCH_ORDER_LOCATION: ["order_id", "store"],
+}
+
+
+def filter_tool_params(tool_name: ToolName, params: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep only the parameters a given tool accepts (see TOOL_VALID_PARAMS)."""
+    allowed = TOOL_VALID_PARAMS.get(tool_name)
+    if allowed is None:
+        return dict(params)
+    return {k: v for k, v in params.items() if k in allowed}
+
+
+class PolicyValidationResult(StrictModel):
+    """
+    Structured result of validating an order-modifying action against store
+    policy. Replaces the fragile `VALIDATION:ALLOWED/DENIED` string-prefix
+    contract so the policy gate can fail closed on malformed output.
+    """
+
+    allowed: bool = Field(
+        ...,
+        description="True only if the action is permitted by the store's FAQ policy.",
+    )
+    message: str = Field(
+        ...,
+        description=(
+            "Customer-facing message. If allowed, a confirmation prompt; if "
+            "denied, a polite explanation of the policy rule and any alternative."
+        ),
+    )
+    reason: Optional[str] = Field(
+        None,
+        description="Short internal reason for a denial (policy rule that applied).",
     )
 
 
