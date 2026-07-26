@@ -22,6 +22,10 @@ import { useCallback } from "react";
 import { ThemeSelector } from "@/components/ui/theme-selector";
 import { FlaggedSessionsButton } from "@/components/ui/flagged-sessions";
 import type { Product } from "@/types/product";
+import {
+  GREETING_SUGGESTIONS,
+  PRODUCT_SUGGESTIONS,
+} from "@/lib/chat-suggestions";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -203,10 +207,7 @@ export default function ProductPage() {
           type: "assistant",
           content: `Hello! Welcome to ${currentStore}. How can I help you today?`,
           timestamp: new Date(),
-          suggestions: [
-            "I'm looking for a dress",
-            "Help me track my order",
-          ],
+          suggestions: [...GREETING_SUGGESTIONS],
         },
       ]);
     }
@@ -229,11 +230,7 @@ export default function ProductPage() {
       content: `I see you're interested in the ${product.name}. I can help with sizing, colors, or styling tips.`,
       timestamp: new Date(),
       products: [product],
-      suggestions: [
-        "What sizes are available?",
-        "How does this dress fit?",
-        "Show similar products",
-      ],
+      suggestions: [...PRODUCT_SUGGESTIONS],
       is_user_added: true,
     };
 

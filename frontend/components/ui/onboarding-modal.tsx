@@ -26,67 +26,74 @@ interface OnboardingModalProps {
   onClose: () => void;
 }
 
+// Each bullet below describes something the agent can actually do. Kept honest
+// on purpose: earlier copy promised "real-time delivery updates", "automated
+// estimates" and "personalized recommendations", none of which exist — tracking
+// returns a stored location, and recommendations are semantic similarity with no
+// user model.
 const onboardingSteps = [
   {
     title: "AI Shopping Assistant",
-    description: "Experience how AI handles product questions, order tracking, and returns across multiple demo stores.",
+    description: "Ask about products, track orders, and run returns across four demo stores — each with its own catalogue and policies.",
     icon: Sparkles,
     features: [
-      "Explore product inquiries across four different demo stores",
-      "See how AI provides real-time order tracking and delivery updates",
-      "Experience guided return and cancellation workflows",
-      "Test personalized product recommendations in action",
+      "Four demo stores, each with its own products and policy documents",
+      "Search by description, or upload a photo to find similar pieces",
+      "Look up an order and see where it is on the map",
+      "Start a return or cancellation and confirm it in the chat",
+      "Ask in any of 11 languages — replies follow your language",
     ],
   },
   {
     title: "Exploring Products",
-    description: "Interact with products and see how AI responds to various questions.",
+    description: "Interact with products and see how the assistant uses the catalogue to answer.",
     icon: ShoppingBag,
     features: [
-      "Click the chat icon on any product to start a conversation",
-      "Ask about sizing, colors, materials, or styling tips",
-      "Request similar products with 'Show me similar items'",
-      "Test availability queries like 'Is this available in medium?'",
+      "Click the chat icon on any product to ask about that item",
+      "Ask 'What sizes are available?' to read live stock per variant",
+      "Check a specific variant: 'Is this available in medium?'",
+      "Say 'Show me similar products' to find comparable pieces",
+      "Attach a photo with the image button to search by look",
     ],
   },
   {
     title: "Tracking Orders",
-    description: "See how AI provides order status and delivery information.",
+    description: "Look up a demo order and see its current status and location.",
     icon: Package,
     features: [
-      "Say 'Track my order' to view demo order history",
-      "Select an order to see real-time location tracking",
-      "Ask 'Where is my order?' for detailed shipping status",
-      "Experience automated delivery updates and estimates",
+      "Say 'Track my order' to list your demo orders",
+      "Pick an order to see its status and last known location on a map",
+      "Ask 'Where is my order?' for a plain-language status",
+      "Statuses cover placed, shipped and delivered",
     ],
   },
   {
     title: "Returns & Cancellations",
-    description: "Test how AI guides users through post-purchase processes.",
+    description: "Run a real return or cancellation, checked against that store's written policy.",
     icon: RotateCcw,
     features: [
       "Select an order and say 'I want to return this'",
-      "Try 'Can I cancel my order?' to see eligibility checks",
-      "Experience confirmation prompts and validation steps",
-      "See immediate feedback when actions are processed",
+      "Try 'Can I cancel my order?' to see the policy check run",
+      "Eligibility is read from the store's own FAQ, so stores differ",
+      "Confirm in the chat and the order status actually changes",
     ],
   },
   {
     title: "Safety & Moderation System",
-    description: "Explore how AI detects and handles inappropriate usage in real-time.",
+    description: "Explore how the assistant handles misuse and stays on topic.",
     icon: Shield,
     features: [
       "Test prompt injection detection with sample attacks",
-      "Try off-topic questions to see context validation",
+      "Try off-topic questions to see the assistant redirect",
       "Experience abusive language filtering and warnings",
       "Chat locks after two violations to demonstrate security",
       "View flagged sessions in the demo admin panel",
-      "System also flags insufficient context without locking chat",
+      "Vague requests get a clarifying question, not a lock",
     ],
   },
   {
     title: "About This Project and Me",
-    description: "A production-ready demonstration of AI-powered customer service using RAG pipelines and LLM orchestration.",
+    description: "A demonstration of AI-powered customer service built on retrieval, tool use, and a two-pass agent.",
     icon: User,
     features: [],
     isAboutPage: true,
@@ -120,8 +127,12 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
+      {/* Widths are mobile-first: the previous `sm:max-w-[95vw]` never applied
+          below 640px (Tailwind breakpoints are min-width), so phones fell back
+          to the dialog default. Height uses dvh so mobile browser chrome cannot
+          push the footer buttons out of reach. */}
       <DialogContent
-        className="sm:max-w-[95vw] md:max-w-[600px] max-h-[90vh] p-0 gap-0 bg-background border-border flex flex-col"
+        className="w-[calc(100%-1.5rem)] max-w-[95vw] md:max-w-[600px] max-h-[85dvh] p-0 gap-0 bg-background border-border flex flex-col"
         showCloseButton={false}
       >
         <VisuallyHidden>
@@ -229,7 +240,7 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
                     <p className="text-xs font-medium text-muted-foreground mb-1">Frontend</p>
                     <div className="flex flex-wrap gap-1.5">
                       {TECH_STACK.frontend.map((tech) => (
-                        <span key={tech} className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded">
+                        <span key={tech} className="text-[11px] leading-5 bg-primary/10 text-primary px-2 py-0.5 rounded">
                           {tech}
                         </span>
                       ))}
@@ -240,7 +251,7 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
                     <p className="text-xs font-medium text-muted-foreground mb-1">Backend</p>
                     <div className="flex flex-wrap gap-1.5">
                       {TECH_STACK.backend.map((tech) => (
-                        <span key={tech} className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded">
+                        <span key={tech} className="text-[11px] leading-5 bg-primary/10 text-primary px-2 py-0.5 rounded">
                           {tech}
                         </span>
                       ))}
@@ -251,7 +262,7 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
                     <p className="text-xs font-medium text-muted-foreground mb-1">AI & Deployment</p>
                     <div className="flex flex-wrap gap-1.5">
                       {[...TECH_STACK.ai, ...TECH_STACK.deployment].map((tech) => (
-                        <span key={tech} className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded">
+                        <span key={tech} className="text-[11px] leading-5 bg-primary/10 text-primary px-2 py-0.5 rounded">
                           {tech}
                         </span>
                       ))}
@@ -285,22 +296,36 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
 
         {/* Progress Dots */}
         <div className="flex-shrink-0 flex justify-center space-x-2 py-3 sm:py-4 border-t border-border bg-muted/10">
+          {/* The visible pill stays small, but the button itself is padded to a
+              tappable target — an 8px-tall hit area was far below the ~44px
+              guideline and easy to miss on a phone. */}
           {onboardingSteps.map((_, index) => (
             <button
               key={index}
               onClick={() => setCurrentStep(index)}
-              className={`h-2 rounded-full transition-all ${
-                index === currentStep
-                  ? "bg-primary w-6 sm:w-8"
-                  : "bg-muted-foreground/30 hover:bg-muted-foreground/50 w-2"
-              }`}
+              className="group grid place-items-center px-1 py-2.5 -my-1"
               aria-label={`Go to step ${index + 1}`}
-            />
+              aria-current={index === currentStep ? "step" : undefined}
+            >
+              <span
+                className={`block h-2 rounded-full transition-all ${
+                  index === currentStep
+                    ? "bg-primary w-6 sm:w-8"
+                    : "bg-muted-foreground/30 group-hover:bg-muted-foreground/50 w-2"
+                }`}
+              />
+            </button>
           ))}
         </div>
 
-        {/* Footer */}
-        <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-t border-border bg-muted/20">
+        {/* Footer. The safe-area inset keeps the buttons clear of the iOS home
+            indicator, matching user-entry-modal.tsx. */}
+        <div
+          className="flex-shrink-0 flex items-center justify-between gap-2 p-4 sm:p-6 border-t border-border bg-muted/20"
+          style={{
+            paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+          }}
+        >
           <Button
             variant="ghost"
             onClick={handlePrevious}

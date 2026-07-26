@@ -79,6 +79,24 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  // When the server-side session is gone (Redis TTL elapsed, or the data was
+  // deleted), the identity tied to it is meaningless — orders and history keyed
+  // to this user_id no longer exist. Drop it so the entry modal reappears and
+  // the visitor starts a genuinely fresh session. Raised by
+  // ChatContext.handleExpiredSession.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const onExpired = () => {
+      setUserId(null);
+      setUserName(null);
+      setIsUserSet(false);
+    };
+
+    window.addEventListener("session-expired", onExpired);
+    return () => window.removeEventListener("session-expired", onExpired);
+  }, []);
+
   const value: UserContextType = {
     userId,
     userName,

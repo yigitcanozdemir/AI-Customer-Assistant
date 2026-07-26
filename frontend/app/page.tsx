@@ -27,6 +27,10 @@ import { OnboardingModal } from "@/components/ui/onboarding-modal";
 import { useUser } from "@/context/UserContext";
 import type { Product } from "@/types/product";
 import { useVisualViewport } from "@/hooks/use-visual-viewport";
+import {
+  GREETING_SUGGESTIONS,
+  PRODUCT_SUGGESTIONS,
+} from "@/lib/chat-suggestions";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -198,10 +202,7 @@ export default function Store() {
           type: "assistant",
           content: `Hello! Welcome to ${selectedStore}. How can I help you today?`,
           timestamp: new Date(),
-          suggestions: [
-            "I'm looking for a dress",
-            "Help me track my order",
-          ],
+          suggestions: [...GREETING_SUGGESTIONS],
         },
       ]);
     }
@@ -223,12 +224,7 @@ export default function Store() {
       content: `I see you're interested in the ${product.name}. What would you like to know?`,
       timestamp: new Date(),
       products: [product],
-      suggestions: [
-        "What sizes are available?",
-        "How does this dress fit?",
-        "What occasions is this perfect for?",
-        "Show me similar products",
-      ],
+      suggestions: [...PRODUCT_SUGGESTIONS],
       is_user_added: true,
     };
 

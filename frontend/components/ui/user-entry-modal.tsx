@@ -253,8 +253,9 @@ export function UserEntryModal() {
                 </summary>
                 <div className="px-3 pb-3">
                   This system is a demonstration of a Retrieval-Augmented Generation (RAG)
-                  e-commerce experience. It does not represent a real store, and any personal
-                  data you enter will be automatically deleted when you close your browser tab.
+                  e-commerce experience. It does not represent a real store. The name you
+                  enter, your chat history and any demo orders are deleted when you close
+                  this tab, and in any case within 24 hours.
                 </div>
               </details>
               <details className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20 text-xs text-blue-800 dark:text-blue-200">
@@ -263,8 +264,9 @@ export function UserEntryModal() {
                   Location Data
                 </summary>
                 <div className="px-3 pb-3">
-                  We collect your approximate location for order tracking and delivery purposes. This
-                  data is stored temporarily and deleted when you close the tab.
+                  We use your approximate location (city level, from your IP) to show demo
+                  order tracking on a map. It is attached to demo orders and removed with
+                  them on the same schedule as above.
                 </div>
               </details>
             </>
@@ -277,8 +279,9 @@ export function UserEntryModal() {
                   <p>
                     This system is a demonstration of a Retrieval-Augmented
                     Generation (RAG) e-commerce experience. It does not represent a
-                    real store, and any personal data you enter will be
-                    automatically deleted when you close your browser tab.
+                    real store. The name you enter, your chat history and any demo
+                    orders are deleted when you close this tab, and in any case
+                    within 24 hours.
                   </p>
                 </div>
               </div>
@@ -288,9 +291,9 @@ export function UserEntryModal() {
                 <div className="text-xs text-blue-800 dark:text-blue-200">
                   <p className="font-medium mb-1">Location Data</p>
                   <p>
-                    We collect your approximate location for order tracking and
-                    delivery purposes. This data is stored temporarily and deleted
-                    when you close the tab.
+                    We use your approximate location (city level, from your IP) to
+                    show demo order tracking on a map. It is attached to demo orders
+                    and removed with them on the same schedule as above.
                   </p>
                 </div>
               </div>
