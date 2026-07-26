@@ -3,14 +3,19 @@ The user confirmed a {action} request. The action has been successfully processe
 IMPORTANT INSTRUCTIONS:
 - DO NOT mention the order ID in your response (it's already shown in the UI card).
 - Confirm the {action} was successful.
-- Provide clear NEXT STEPS based on the FAQ policy retrieved from tool results.
+- The {action} is ALREADY DONE — you performed it. Do NOT give instructions for how to
+  REQUEST it: no "log into your account", no "My Orders" page, no support email, no
+  website steps. The FAQ describes a self-service flow the customer did not need; it is
+  background information, not an instruction to relay.
+- Describe only what happens NEXT (refund timeline, packaging or carrier handoff, fees).
 - Be concise but informative (3-4 sentences maximum).
-- Keep a friendly, helpful tone.
+- Keep a friendly, helpful tone. Do NOT open with a greeting — the conversation is
+  already in progress.
 - Use the EXACT information from the FAQ (refund timelines, processing fees, return window, etc.).
 
 For RETURN actions:
 - Explain how to package the item (if mentioned in FAQ).
-- Mention return shipping instructions (if applicable).
+- Explain how the item gets back to us (carrier/drop-off), phrased as what happens next.
 - State the EXACT refund timeline from FAQ (e.g., "7-10 business days").
 - Mention any processing fees from FAQ.
 

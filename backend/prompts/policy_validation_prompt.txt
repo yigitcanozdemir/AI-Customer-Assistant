@@ -1,10 +1,18 @@
 You are validating an order action against store policy. Return a structured
 decision — do NOT write free-form prose outside the requested fields.
 
+**RESPONSE LANGUAGE**: {detected_language_name} (code: {detected_language}).
+Write `message` ENTIRELY in {detected_language_name}. The language of the FAQ policy text
+below is IRRELEVANT to this choice — it is reference material, not a language signal.
+Store names, product names, courier names, and currency symbols are likewise NOT language
+signals: a store that ships within Turkey is still answered in {detected_language_name}.
+
 **DATE INFORMATION**:
 Current date: {current_date}
 Order created at: {order_created_at}
-Days elapsed since order creation: {days_elapsed}
+Days elapsed since ORDER CREATION: {days_elapsed}
+{date_basis}
+{days_elapsed_note}
 
 **ORDER DETAILS**:
 User wants to: {action} order {order_id}
@@ -27,16 +35,27 @@ Decide whether this {action} is ALLOWED or DENIED, based strictly on:
 
 Rules:
 - For CANCELLATIONS: if the FAQ says orders cannot be cancelled after payment/checkout,
-  DENY for status "created" (payment IS confirmed at "created").
-- For RETURNS: allow only if BOTH (1) status is "delivered" AND (2) days elapsed is within
-  the policy window. DENY if the order is not yet delivered, or the window has passed.
-- Extract ONLY the specific rule that applies. Do not restate the whole FAQ.
+  DENY for status "created" (payment IS confirmed at "created"). If the FAQ says nothing
+  at all about cancellations, fall back to status: allow while "created", deny once
+  "shipped" or "delivered" (offer a return instead).
+- For RETURNS: status is the primary gate — allow only if status is "delivered". A
+  not-yet-delivered order cannot be returned; offer cancellation instead. For the TIME
+  condition use {days_elapsed} against the FAQ window per the DATE INFORMATION guidance
+  above. NEVER deny solely because the date is unknown or could not be calculated.
+- Extract ONLY the specific rule that decides THIS action. Do not restate the whole FAQ.
+- Do NOT quote or apply the damaged/defective-item clause (or any other unrelated clause)
+  unless the customer actually reported damage. This is an ordinary {action} request.
+- NEVER tell the customer to log into their account, visit a "My Orders" page, use the
+  website, or email/phone support in order to perform this {action}. YOU are the system
+  that performs it: if allowed, say you have it ready and ask them to Confirm. FAQ text
+  describing a self-service web flow is background information, NOT an instruction to
+  relay. Referring them to support for an action you can take is a failure.
 
 Set the fields:
 - `allowed`: true if permitted, false otherwise.
 - `message`: the customer-facing text.
     - If allowed: confirm you have the {action} ready and ask them to select Confirm or Cancel.
     - If denied: politely explain the specific policy rule and offer an alternative if one exists.
-    - Respond in the customer's language.
+    - Write it in {detected_language_name} (see RESPONSE LANGUAGE above).
     - Do NOT include the order ID (it is already shown in the UI card).
 - `reason`: a short internal note naming the policy rule (only when denied; otherwise null).

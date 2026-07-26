@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import List, Optional, Any, Union, Dict
+from typing import List, Literal, Optional, Any, Union, Dict
 from datetime import datetime, date
 import uuid
 
@@ -210,6 +210,11 @@ class ChatEventData(BaseModel):
     order: Optional[OrderStatus] = None
     is_initial_message: Optional[bool] = False
     confirm_action_id: Optional[str] = None
+    # Whether the customer accepted or declined `confirm_action_id`. Sent
+    # explicitly by the confirm/decline buttons because inferring it from the
+    # message text mis-read a CONFIRMED cancellation as a decline (the phrase
+    # "cancel" appears in both). Optional so older clients still validate.
+    confirm_decision: Optional[Literal["accept", "decline"]] = None
     # Optional user-uploaded image (data: URL or http(s) URL) for the
     # "find similar outfits from this picture" flow. Described to text and used
     # as the product-search query — see TwoPassAgent.execute / describe_image.

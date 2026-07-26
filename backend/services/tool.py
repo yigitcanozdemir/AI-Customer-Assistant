@@ -117,6 +117,16 @@ async def product_search(
             )
             vector_rows = (await session.execute(vector_stmt)).all()
 
+            # Drop the excluded item BEFORE measuring the relative window.
+            # "Similar to this" searches on the source product's own text, so the
+            # source is a near-exact match at distance ~0; anchoring the margin to
+            # it produced a window so tight that every genuine alternative fell
+            # outside, and excluding the source afterwards left NO results at all.
+            if exclude_product_id is not None:
+                vector_rows = [
+                    r for r in vector_rows if str(r.id) != str(exclude_product_id)
+                ]
+
             # Apply an absolute ceiling + relative margin from the best hit.
             vector_ids: list = []
             if vector_rows:
@@ -144,10 +154,9 @@ async def product_search(
             keyword_ids = [row.id for row in (await session.execute(keyword_stmt)).all()]
 
             # Never return the source item when finding items "similar to this".
+            # (Vector rows were already filtered above, before the distance
+            # window was measured.)
             if exclude_product_id is not None:
-                vector_ids = [
-                    pid for pid in vector_ids if str(pid) != str(exclude_product_id)
-                ]
                 keyword_ids = [
                     pid for pid in keyword_ids if str(pid) != str(exclude_product_id)
                 ]

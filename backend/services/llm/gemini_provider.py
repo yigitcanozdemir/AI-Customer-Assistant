@@ -35,17 +35,32 @@ class GeminiProvider(LLMProvider):
         self._embedder = OpenAIProvider()
 
     @staticmethod
-    def _split(messages: List[LLMMessage]) -> Tuple[str, str]:
+    def _split(messages: List[LLMMessage]) -> Tuple[str, list]:
         """
-        Split into (system_instruction, user_prompt).
+        Split into (system_instruction, contents).
 
-        The agent builds a single system prompt plus one user turn per call, so
-        we concatenate any user/assistant content into one prompt string — the
-        shape google-genai's single-shot `generate_content` expects.
+        Roles are preserved as a real multi-turn `contents` list. The agent
+        replays prior conversation turns, and flattening them into one string
+        made the current question indistinguishable from history — the model
+        could not tell what it was being asked. Gemini names the assistant role
+        "model" rather than "assistant".
         """
         system_parts = [m.content for m in messages if m.role == "system"]
-        user_parts = [m.content for m in messages if m.role != "system"]
-        return "\n\n".join(system_parts), "\n\n".join(user_parts) or "Continue."
+        contents = [
+            types.Content(
+                role="model" if m.role == "assistant" else "user",
+                parts=[types.Part.from_text(text=m.content)],
+            )
+            for m in messages
+            if m.role in ("user", "assistant") and m.content
+        ]
+        if not contents:
+            contents = [
+                types.Content(
+                    role="user", parts=[types.Part.from_text(text="Continue.")]
+                )
+            ]
+        return "\n\n".join(system_parts), contents
 
     async def generate(
         self,
