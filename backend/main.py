@@ -22,9 +22,14 @@ APP_NAME = settings.app_name
 
 
 async def clear_expired_orders():
-    """Demo housekeeping: periodically purge orders older than the configured
-    TTL so the sample data stays tidy. Interval and TTL are configurable; set
-    DEMO_ORDER_TTL_MINUTES<=0 to disable entirely."""
+    """Backstop sweep for orders left behind by sessions that never ended cleanly.
+
+    The primary path is POST /events/session/{id}/end, which deletes a leaving
+    visitor's own orders immediately. This job only reaps what that missed
+    (crash, force-quit, offline), so DEMO_ORDER_TTL_MINUTES must stay well
+    above any realistic session length — the DELETE below is deliberately
+    un-scoped by user, and a short TTL therefore destroys active visitors'
+    orders mid-session. Set DEMO_ORDER_TTL_MINUTES<=0 to disable entirely."""
     ttl_minutes = settings.demo_order_ttl_minutes
     interval = settings.demo_order_cleanup_interval_seconds
     while True:

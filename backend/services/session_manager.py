@@ -83,10 +83,16 @@ async def add_message(session_id: str, message: Message) -> bool:
 
 async def clear_session(session_id: str) -> bool:
     """
-    Remove all stored history for a session.
+    Remove every Redis key this module owns for a session.
+
+    Covers the transcript, the typing/presence state and the moderation lock.
+    Called when a visitor leaves, so "your data is deleted when you close the
+    tab" is actually true rather than waiting out the 24h TTL.
     """
     try:
         await cache_manager.delete(_history_key(session_id))
+        await cache_manager.delete(_state_key(session_id))
+        await cache_manager.delete(_lock_key(session_id))
         return True
     except Exception as exc:
         logger.error("Failed to clear session %s: %s", session_id, exc)

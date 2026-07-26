@@ -252,10 +252,23 @@ class ContextManager:
         """
         summary_parts = []
 
-        # Recent products
+        # Recent products — names and ids, not just a count. A bare count
+        # ("Recently discussed 5 product(s)") gave both passes no way to resolve
+        # a follow-up like "what pairs with the wolf tshirt" against what was
+        # actually shown. Prices are deliberately omitted: this summary feeds
+        # Pass 2, whose rules forbid quoting prices in chat text.
         if context.recent_products:
-            product_count = len(context.recent_products)
-            summary_parts.append(f"Recently discussed {product_count} product(s)")
+            recent = context.recent_products[-5:]
+            listed = "; ".join(
+                f"{p.get('name', 'Unknown')} (id: {p.get('id', 'unknown')})"
+                for p in recent
+            )
+            earlier = len(context.recent_products) - len(recent)
+            suffix = f" (+{earlier} earlier)" if earlier > 0 else ""
+            summary_parts.append(
+                f"Products shown to the customer so far, oldest first: {listed}{suffix}. "
+                "Use these ONLY to resolve what the customer is referring to."
+            )
 
         # Current order
         if context.current_order:

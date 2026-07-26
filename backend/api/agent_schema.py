@@ -25,6 +25,49 @@ class StrictModel(BaseModel):
     )
 
 
+#: Supported reply languages, keyed by the code Pass 1 emits. Single source of
+#: truth: Pass 2 and the policy-validation gate both render names from here, so
+#: a code can never be persisted that we cannot name (which used to silently
+#: fall back to English while storing e.g. "tr-TR").
+LANGUAGE_NAMES: Dict[str, str] = {
+    "en": "English",
+    "tr": "Turkish",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "ar": "Arabic",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+}
+
+SUPPORTED_LANGUAGE_CODES = frozenset(LANGUAGE_NAMES)
+
+
+def normalize_language_code(value: Any) -> str:
+    """Coerce a model-emitted language value to a supported 2-letter code.
+
+    Models return "tr-TR", "Turkish", "TR", or occasionally nothing. Rejecting
+    those would abort the whole Pass 1 parse and degrade the turn to a generic
+    fallback, so coerce instead and fall back to English.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return "en"
+
+    text = value.strip().lower()
+    code = text.replace("_", "-").split("-")[0]
+    if code in SUPPORTED_LANGUAGE_CODES:
+        return code
+
+    # Accept an English language name ("turkish") as a courtesy.
+    for candidate, name in LANGUAGE_NAMES.items():
+        if text == name.lower():
+            return candidate
+    return "en"
+
+
 class ToolName(str, Enum):
     """Available tool names in the system"""
     PRODUCT_SEARCH = "product_search"
@@ -127,8 +170,21 @@ class ContextUnderstanding(StrictModel):
 
     referenced_product: Optional[str] = None
     referenced_order: Optional[str] = None
-    language_detected: str = "en"
+    language_detected: Literal[
+        "en", "tr", "es", "fr", "de", "it", "pt", "ar", "zh", "ja", "ko"
+    ] = "en"
     conversation_flow: Optional[str] = None
+
+    @field_validator("language_detected", mode="before")
+    @classmethod
+    def _normalize_language(cls, v):
+        """Normalize to a supported code; never reject.
+
+        The Literal documents the allowed set for structured-output models, but
+        a hard failure here would abort the entire Pass 1 parse, so this
+        before-validator coerces "tr-TR"/"Turkish"/"" into a valid code first.
+        """
+        return normalize_language_code(v)
 
 
 class AssessmentInfo(StrictModel):
@@ -223,19 +279,42 @@ class Pass1Output(StrictModel):
     @field_validator('tool_calls')
     @classmethod
     def validate_tool_calls_logic(cls, v, info):
-        """Validate logical consistency of tool calls"""
+        """Auto-repair (do NOT reject) a missing policy lookup.
+
+        An ORDER_MODIFICATION plan calling process_order must also call
+        faq_search, so the policy gate has FAQ text to reason over. Smaller
+        models occasionally drop it. Raising here aborted the whole Pass 1 parse
+        and degraded a perfectly clear "return this order" into a generic
+        "could you please rephrase?", so inject the missing call instead.
+        """
         intent = info.data.get('intent')
+        if intent != IntentType.ORDER_MODIFICATION:
+            return v
 
-        # Check for required tools based on intent
-        if intent == IntentType.ORDER_MODIFICATION:
-            tool_names = [tc.tool_name for tc in v]
-            # Order modifications should include FAQ search for policy check
-            if ToolName.PROCESS_ORDER in tool_names and ToolName.FAQ_SEARCH not in tool_names:
-                raise ValueError(
-                    "ORDER_MODIFICATION intent with process_order must include faq_search for policy validation"
-                )
+        tool_names = [tc.tool_name for tc in v]
+        if ToolName.PROCESS_ORDER not in tool_names or ToolName.FAQ_SEARCH in tool_names:
+            return v
 
-        return v
+        action = next(
+            (
+                tc.parameters.action
+                for tc in v
+                if tc.tool_name == ToolName.PROCESS_ORDER and tc.parameters.action
+            ),
+            None,
+        )
+        query = f"{action} policy" if action else "return and cancellation policy"
+
+        # Inserted first so it reads before process_order in the trace; ordering
+        # is cosmetic since _execute_tools runs them via asyncio.gather.
+        return [
+            ToolCall(
+                tool_name=ToolName.FAQ_SEARCH,
+                parameters=ToolParameters(query=query),
+                reasoning="Auto-injected: policy lookup is mandatory for order modifications.",
+            ),
+            *v,
+        ]
 
 
 class ToolResult(StrictModel):

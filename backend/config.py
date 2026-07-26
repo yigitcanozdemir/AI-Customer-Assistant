@@ -55,10 +55,16 @@ class Settings(BaseSettings):
     auth_enforced: bool = False
 
     # ── Demo housekeeping ───────────────────────────────────
-    # This is a demo: orders older than this are periodically purged so the
-    # sample data stays tidy. Set demo_order_ttl_minutes<=0 to disable.
-    demo_order_ttl_minutes: int = 10
-    demo_order_cleanup_interval_seconds: int = 600
+    # A leaving visitor's own orders are deleted immediately by
+    # POST /events/session/{id}/end. This periodic sweep is only the backstop
+    # for sessions that never sent that signal (crash, force-quit, offline), so
+    # its TTL must stay comfortably longer than any plausible session.
+    #
+    # It was 10 minutes with a 600s interval, which meant orders vanished
+    # 10-20 minutes after creation *while the visitor was still shopping* —
+    # "track my order" would report no orders at all. Set <=0 to disable.
+    demo_order_ttl_minutes: int = 1440  # 24h
+    demo_order_cleanup_interval_seconds: int = 3600
 
     # ── Observability ───────────────────────────────────────
     tempo_endpoint: str = "tempo:4317"

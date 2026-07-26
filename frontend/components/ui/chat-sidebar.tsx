@@ -18,6 +18,7 @@ import {
   ImagePlus,
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
+import { CONNECTION_ERROR_SUGGESTIONS } from "@/lib/chat-suggestions";
 import { useStore } from "@/context/StoreContext";
 import { useChat, type Message, type Product } from "@/context/ChatContext";
 import { useUser } from "@/context/UserContext";
@@ -142,6 +143,11 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   );
   const pendingActionsRef = useRef<Record<string, PendingAction | null>>({});
   const ordersRegistryRef = useRef<Record<string, Order>>({});
+  // Content keys of locally-dismissed product cards. The history poll re-adds
+  // any message it does not recognise, and these cards are local-only (never
+  // persisted server-side), so without this a dismissed card reappears a second
+  // later on the next poll.
+  const dismissedProductKeysRef = useRef<Set<string>>(new Set());
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [keyboardInset, setKeyboardInset] = useState(0);
   const {
@@ -165,6 +171,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     setIsSessionLocked,
     sessionLockReason,
     setSessionLockReason,
+    handleExpiredSession,
   } = useChat();
   const sessionStateKey = useMemo(
     () => `${selectedStore || "default"}:${sessionId}`,
@@ -173,6 +180,8 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
   useEffect(() => {
     hasSentInitialMessage.current = false;
+    // Dismissals are per-session; a new session starts with a clean slate.
+    dismissedProductKeysRef.current = new Set();
   }, [sessionId]);
   useEffect(() => {
     setIsMounted(true);
@@ -184,9 +193,20 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
+      // Page from the newest SERVER-issued id (`<session>:<n>`). Locally added
+      // messages (product cards, optimistic echoes) use `Date.now()` ids that the
+      // server has never seen, so using one as the cursor made the backend fall
+      // back to returning the whole history.
       let lastMessageId: string | null = null;
       setMessages((currentMessages) => {
-        lastMessageId = currentMessages.length > 0 ? currentMessages[currentMessages.length - 1].id : null;
+        for (let i = currentMessages.length - 1; i >= 0; i -= 1) {
+          const candidate = currentMessages[i];
+          if (candidate.is_user_added === true) continue;
+          if (typeof candidate.id === "string" && candidate.id.includes(":")) {
+            lastMessageId = candidate.id;
+            break;
+          }
+        }
         return currentMessages;
       });
 
@@ -199,6 +219,28 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
       if (response.ok) {
         const data = await response.json();
+
+        // The server has forgotten this session (Redis TTL elapsed, or the data
+        // was deleted) while we still hold a transcript. Restoring it would show
+        // a healthy-looking conversation in which every reference silently
+        // fails, so reset instead and let the visitor start fresh.
+        if (data.session_exists === false) {
+          // Only meaningful once we hold messages the SERVER issued. A purely
+          // local transcript (product cards) legitimately has no server state.
+          let hasServerMessages = false;
+          setMessages((currentMessages) => {
+            hasServerMessages = currentMessages.some(
+              (m) => m.is_user_added !== true && String(m.id).includes(":")
+            );
+            return currentMessages;
+          });
+
+          if (hasServerMessages) {
+            logDebug("Session no longer exists on the server - resetting");
+            handleExpiredSession();
+            return;
+          }
+        }
 
         const newMessages = data.messages.map((msg: Record<string, unknown>) => {
           const timestamp = msg.timestamp;
@@ -222,6 +264,12 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
               const contentKey = `${msg.type}:${msg.content}`;
               if (existingContentKeys.has(contentKey)) {
                 logDebug("Skipping duplicate message with different ID");
+                return false;
+              }
+
+              // Never resurrect a product card the customer dismissed.
+              if (dismissedProductKeysRef.current.has(contentKey)) {
+                logDebug("Skipping dismissed product card");
                 return false;
               }
 
@@ -282,7 +330,13 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     } catch (error) {
       console.error("Failed to fetch undelivered messages:", error);
     }
-  }, [sessionId, setMessages, setIsTyping, sessionStateKey]);
+  }, [
+    sessionId,
+    setMessages,
+    setIsTyping,
+    sessionStateKey,
+    handleExpiredSession,
+  ]);
 
   const lastSessionRef = useRef<string>('');
   const lastStoreRef = useRef<string>('');
@@ -520,7 +574,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             content:
               "I'm currently in demo mode since the backend isn't connected. I can still help you explore our products! Try asking about sizing, styling, or specific items.",
             timestamp: new Date(),
-            suggestions: ["Try again", "Contact support"],
+            suggestions: [...CONNECTION_ERROR_SUGGESTIONS],
           },
         ]);
       };
@@ -661,7 +715,8 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     content: string,
     confirmActionId?: string,
     explicitProduct?: Product | null,
-    image?: string | null
+    image?: string | null,
+    confirmDecision?: "accept" | "decline"
   ) => {
     if (isSessionLocked) {
       setIsTyping(false);
@@ -694,6 +749,10 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
               }
             : undefined,
           confirm_action_id: confirmActionId,
+          // Sent explicitly so the backend never has to infer accept/decline
+          // from the message text — "cancel" appears in a confirmed
+          // cancellation, which used to be misread as a decline.
+          confirm_decision: confirmDecision,
           image: image ?? undefined,
         },
       };
@@ -727,7 +786,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
         content:
           "I'm currently in demo mode since the backend isn't connected. I can still help you explore our products! Try asking about sizing, styling, or specific items.",
         timestamp: new Date(),
-        suggestions: ["Try again", "Contact support"],
+        suggestions: [...CONNECTION_ERROR_SUGGESTIONS],
       },
     ]);
   };
@@ -819,7 +878,13 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       console.error("Failed to save confirmation message:", error);
     }
 
-    sendWebSocketMessage("User confirmed the action", pendingAction.action_id);
+    sendWebSocketMessage(
+      "User confirmed the action",
+      pendingAction.action_id,
+      undefined,
+      undefined,
+      "accept"
+    );
 
     setPendingAction(null);
     pendingActionsRef.current[sessionStateKey] = null;
@@ -859,7 +924,13 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       console.error("Failed to save decline message:", error);
     }
 
-    sendWebSocketMessage("User declined the action", pendingAction.action_id);
+    sendWebSocketMessage(
+      "User declined the action",
+      pendingAction.action_id,
+      undefined,
+      undefined,
+      "decline"
+    );
 
     setPendingAction(null);
     pendingActionsRef.current[sessionStateKey] = null;
@@ -883,6 +954,10 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     }
   })();
 
+  // The locally-added "I see you're interested in X" card is removable only
+  // while it is still the last thing in the thread. Once the customer has sent
+  // a message after it, that card is part of the conversation's history —
+  // deleting it would strand replies that refer to it, so the control is hidden.
   const latestProductMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const candidate = messages[i];
@@ -893,6 +968,9 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       ) {
         return candidate.id;
       }
+      // Anything else after the card (a user turn, or a real assistant reply)
+      // means the conversation has moved on.
+      return null;
     }
     return null;
   }, [messages]);
@@ -918,25 +996,23 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
       let removed = false;
 
       setMessages((prev) => {
-        const latest = (() => {
-          for (let i = prev.length - 1; i >= 0; i -= 1) {
-            const candidate = prev[i];
-            if (
-              candidate.type === "assistant" &&
-              candidate.products?.length &&
-              candidate.is_user_added === true
-            ) {
-              return candidate.id;
-            }
-          }
-          return null;
-        })();
+        // Re-check against the freshest state: a reply may have landed between
+        // render and click, in which case the card is no longer removable.
+        const last = prev[prev.length - 1];
+        const isRemovable =
+          last?.id === messageId &&
+          last.type === "assistant" &&
+          !!last.products?.length &&
+          last.is_user_added === true;
 
-        if (latest !== messageId) {
+        if (!isRemovable) {
           return prev;
         }
 
         removed = true;
+        dismissedProductKeysRef.current.add(`${last.type}:${last.content}`);
+        // Drops the bubble text and its product card together — they are one
+        // message, so there is no orphaned "I see you're interested in…" left.
         return prev.filter((message) => message.id !== messageId);
       });
 
@@ -967,26 +1043,36 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             <div className="flex items-center space-x-2">
               <Sparkles className="w-5 h-5" />
 
+              {/* Connection state is deliberately NOT labelled here. "Online"
+                  next to the title read as human presence, and the healthy case
+                  needs no words — a pip carries it. Problem states are surfaced
+                  next to the composer instead, where a failed send is felt. */}
               <div className="flex items-center space-x-2">
                 <h2 className="text-lg font-semibold">Assistant</h2>
-                <div className="flex items-center">
-                  <div
-                    className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                      connectionStatus === "connected"
-                        ? "bg-green-500"
-                        : connectionStatus === "connecting"
-                        ? "bg-secondary"
-                        : "bg-destructive"
-                    }`}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {connectionStatus === "connected"
-                      ? "Online"
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    connectionStatus === "connected"
+                      ? "bg-green-500"
                       : connectionStatus === "connecting"
-                      ? "Connecting..."
-                      : "Offline"}
-                  </span>
-                </div>
+                      ? "bg-secondary animate-pulse"
+                      : "bg-destructive"
+                  }`}
+                  title={
+                    connectionStatus === "connected"
+                      ? "Connected"
+                      : connectionStatus === "connecting"
+                      ? "Connecting…"
+                      : "Disconnected"
+                  }
+                  role="status"
+                  aria-label={
+                    connectionStatus === "connected"
+                      ? "Connected"
+                      : connectionStatus === "connecting"
+                      ? "Connecting"
+                      : "Disconnected"
+                  }
+                />
               </div>
             </div>
             <Button
@@ -1295,8 +1381,21 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                       {message.products.map((product) => (
                         <Card
                           key={product.id}
-                          className="rounded-2xl border border-border/50 bg-card/95 p-1 shadow-[0_16px_36px_-30px_rgb(15_23_42_/_0.9)] transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]"
+                          className="group relative rounded-2xl border border-border/50 bg-card/95 p-1 shadow-[0_16px_36px_-30px_rgb(15_23_42_/_0.9)] transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]"
                         >
+                          {isLatestProductMessage && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleRemoveProductMessage(message.id)
+                              }
+                              aria-label={`Remove ${product.name} from chat`}
+                              title="Remove from chat"
+                              className="absolute right-1.5 top-1.5 z-10 grid h-6 w-6 place-items-center rounded-full text-muted-foreground opacity-100 transition-all duration-200 hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:opacity-0 md:group-hover:opacity-100"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                           <CardContent className="rounded-[0.9rem] px-3 py-2.5">
                             <div className="flex items-center space-x-3">
                               <Image
@@ -1308,7 +1407,11 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                 unoptimized={false}
                               />
                               <div className="flex-1 min-w-0 space-y-0.5">
-                                <h4 className="font-medium text-sm text-card-foreground line-clamp-2 font-modern-body">
+                                <h4
+                                  className={`font-medium text-sm text-card-foreground line-clamp-2 font-modern-body ${
+                                    isLatestProductMessage ? "pr-6" : ""
+                                  }`}
+                                >
                                   {product.name}
                                 </h4>
                                 <div className="flex items-center justify-between">
@@ -1328,17 +1431,6 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                                 </div>
                               </div>
                             </div>
-                            {isLatestProductMessage && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleRemoveProductMessage(message.id)
-                                }
-                                className="mt-1.5 text-[11px] text-foreground hover:text-primary bg-transparent hover:bg-transparent transition-colors text-left w-full"
-                              >
-                                · Remove product from chat
-                              </button>
-                            )}
                           </CardContent>
                         </Card>
                       ))}
@@ -1860,6 +1952,30 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
           {isSessionLocked && (
             <div className="mb-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
               {lockedBannerMessage}
+            </div>
+          )}
+
+          {/* Only shown when the connection is NOT healthy: the composer is
+              where a dropped socket actually costs the customer a message. */}
+          {!isSessionLocked && connectionStatus !== "connected" && (
+            <div
+              className={`mb-2 flex items-center gap-1.5 text-xs ${
+                connectionStatus === "connecting"
+                  ? "text-muted-foreground"
+                  : "text-destructive"
+              }`}
+              role="status"
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  connectionStatus === "connecting"
+                    ? "bg-secondary animate-pulse"
+                    : "bg-destructive"
+                }`}
+              />
+              {connectionStatus === "connecting"
+                ? "Reconnecting…"
+                : "Connection lost — your message may not send."}
             </div>
           )}
 

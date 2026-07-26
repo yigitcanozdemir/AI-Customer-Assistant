@@ -13,11 +13,22 @@ served at `/docs` when the backend is running.
 ## Authentication
 
 Sessions are stateless, HMAC-signed tokens bound to a `user_id` + `session_id`
-with an expiry ([`services/auth.py`](../backend/services/auth.py)). The frontend
+with an expiry ([`services/auth.py`](../backend/services/auth.py)). A client
 calls `POST /session/init` once, then sends the returned token on the WebSocket
 and on user-scoped REST calls. The server verifies the signature and scopes
 those operations to the token's `user_id`, so a client cannot act as another
 user. Rotate `AUTH_SECRET` to invalidate all outstanding tokens.
+
+> **Enforcement is opt-in and currently OFF.** Tokens are only *required* when
+> `AUTH_ENFORCED=true` **and** `AUTH_SECRET` is set. The bundled storefront does
+> not yet call `/session/init`, so enabling enforcement rejects every WebSocket
+> with close code `4401` and the chat stops working. The ✓ in the table below
+> marks routes that *scope to* a token's `user_id` when one is supplied — not
+> routes that reject anonymous callers today.
+>
+> Because of that, the demo's protection is deployment-level (reverse proxy /
+> private network), not application-level. Do not expose it to the open internet
+> and assume the API is access-controlled.
 
 ```mermaid
 sequenceDiagram
@@ -43,6 +54,7 @@ sequenceDiagram
 | `GET` | `/chat/history/{session_id}` | – | Replay stored chat messages |
 | `GET` | `/chat/typing/{session_id}` | – | Poll assistant typing state |
 | `POST` | `/chat/message/{session_id}` | – | Post a message via REST (WS alternative) |
+| `POST` | `/session/{session_id}/end` | – | Delete a visitor's session data (see [Data retention](#data-retention)) |
 | `GET` | `/flagged-sessions` | ✓ | List sessions flagged for human review (`?store=`) |
 | `POST` | `/flagged-sessions/{flagged_id}/review` | ✓ | Mark a flagged session reviewed |
 | `WS` | `/ws/chat/{session_id}` | ✓ | Real-time chat (see protocol below) |
@@ -66,6 +78,54 @@ Returns an array of products (id, name, description, price, currency, `inStock`,
 ### `POST /orders`  *(auth)*
 
 Creates demo order(s) for the token's `user_id`. Response: `{ "orders": [OrderStatus, …] }`.
+
+### `POST /session/{session_id}/end?user_id=<uuid>`
+
+Deletes everything belonging to one visitor: the Redis transcript, typing state
+and moderation lock for `session_id`, the structured conversation context, and —
+when `user_id` is supplied — that user's demo orders. Other users' data is never
+touched.
+
+```jsonc
+// Response
+{ "status": "ok", "session": true, "context": true, "orders": 2 }
+```
+
+A `POST` rather than a `DELETE` because the browser fires it with
+`navigator.sendBeacon` on `pagehide`, and beacons are always POST. Idempotent
+and best-effort: repeat calls, a missing session, and a malformed `user_id` all
+return `200` (`"status": "partial"` if some step failed), because the tab is
+already gone by the time it runs and the sweep below is the backstop.
+
+## Data retention
+
+The storefront tells visitors their data is deleted when they close the tab, so
+the deletion path is part of the contract:
+
+| Data | Where | Deleted |
+| --- | --- | --- |
+| Chat transcript | Redis `session_history:` | On tab close, else 24h TTL |
+| Conversation context | Redis `context:` / `turn:` | On tab close, else 24h TTL |
+| Moderation lock | Redis `session_lock:` | On tab close, else 24h TTL |
+| Typing state | Redis `session_state:` | 5 min TTL |
+| Pending confirmation | Redis `pending_action:` | 5 min TTL |
+| Demo orders (+ location) | Postgres `orders` | On tab close, else the sweep below |
+| Name, geo, cart | Browser `sessionStorage` | On tab close (browser-managed) |
+
+Tab close is the primary path (`POST /session/{id}/end` above). A beacon can be
+dropped — crash, force-quit, offline — so `clear_expired_orders`
+([`backend/main.py`](../backend/main.py)) sweeps orders older than
+`DEMO_ORDER_TTL_MINUTES` (default 1440 = 24h, interval 3600s).
+
+**That sweep's `DELETE` is not scoped by user**, so the TTL must stay well above
+any realistic session length. It was previously 10 minutes, which destroyed
+active visitors' orders mid-session — "track my order" would report no orders at
+all. Set `DEMO_ORDER_TTL_MINUTES<=0` to disable it.
+
+`GET /chat/history/{session_id}` returns `session_exists: false` once the server
+has no record of a session. The frontend uses this to reset a stale tab (a
+`sessionStorage` transcript can outlive the Redis keys) instead of showing a
+conversation the backend has forgotten.
 
 ## WebSocket chat protocol
 

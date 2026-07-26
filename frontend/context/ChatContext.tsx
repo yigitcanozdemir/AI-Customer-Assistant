@@ -10,6 +10,10 @@ import {
   useCallback,
 } from "react";
 import { v4 as uuidv4 } from "uuid";
+import {
+  requestSessionDeletion,
+  wipeLocalSession,
+} from "@/lib/session-lifecycle";
 import { useStore } from "@/context/StoreContext";
 import type { Product } from "@/types/product";
 
@@ -110,6 +114,12 @@ interface ChatContextType {
   sessionLockReason: string | null;
   setSessionLockReason: React.Dispatch<React.SetStateAction<string | null>>;
   resetChatForStore: () => void;
+  /**
+   * The server no longer has this session (Redis TTL elapsed, or its data was
+   * deleted). Drops all local state so the visitor starts clean instead of
+   * staring at a transcript the backend has forgotten.
+   */
+  handleExpiredSession: () => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -155,6 +165,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
     Record<string, StoreSession>
   >({});
 
+  // Mirrors storeSessionMap for the unload handler, which must read the latest
+  // value without re-registering the listener on every message.
+  const sessionMapRef = useRef<Record<string, StoreSession>>({});
+  useEffect(() => {
+    sessionMapRef.current = storeSessionMap;
+  }, [storeSessionMap]);
+
   useEffect(() => {
     setIsMounted(true);
     if (typeof window !== "undefined") {
@@ -179,6 +196,40 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
   }, [storeSessionMap, isMounted]);
+
+  // Delete this visitor's server-side data the moment the tab goes away, so the
+  // entry modal's "deleted when you close your browser tab" is actually true.
+  // Nothing used to run on unload; data just aged out of Redis 24h later.
+  //
+  // `pagehide` rather than `beforeunload`: it fires on mobile Safari tab
+  // eviction and is compatible with the back/forward cache, whereas
+  // `beforeunload` is unreliable on iOS. `persisted` means the page is being
+  // frozen for reuse, not discarded, so we leave the data alone.
+  useEffect(() => {
+    if (!isMounted || typeof window === "undefined") return;
+
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (event.persisted) return;
+
+      const sessionIds = Object.values(sessionMapRef.current).map(
+        (session) => session.sessionId
+      );
+      if (sessionId) sessionIds.push(sessionId);
+
+      let storedUserId: string | null = null;
+      try {
+        storedUserId = sessionStorage.getItem("user_id");
+      } catch {
+        storedUserId = null;
+      }
+
+      requestSessionDeletion(sessionIds, storedUserId);
+      wipeLocalSession();
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [isMounted, sessionId]);
 
   const resetChatForStore = useCallback(() => {
     const newSessionId = uuidv4();
@@ -207,6 +258,38 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
       }));
     }
   }, [currentStore]);
+
+  const handleExpiredSession = useCallback(() => {
+    logDebug("Server no longer has this session - resetting to a clean state");
+
+    // Close the socket first: it is bound to a session id the server has
+    // dropped, so anything sent on it would land in a brand-new context.
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    setWs(null);
+
+    setMessages([]);
+    setSelectedProduct(null);
+    setSelectedOrder(null);
+    setIsTyping(false);
+    setIsSessionLocked(false);
+    setSessionLockReason(null);
+    setConnectionStatus("disconnected");
+    setIsAssistantOpen(false);
+    setStoreSessionMap({});
+    setSessionId(uuidv4());
+
+    // Clears user_id/user_name too, so the entry modal reappears and the
+    // visitor identifies themselves again rather than acting as a ghost user
+    // whose server-side record is gone.
+    wipeLocalSession();
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("session-expired"));
+    }
+  }, []);
 
   useEffect(() => {
     if (!currentStore || !isMounted) return;
@@ -245,9 +328,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
         logDebug('Not restoring typing indicator - response already received (last message is from assistant)');
       }
 
+      // Having a cached transcript says nothing about the socket. Reporting
+      // "connected" here lit the green indicator before any WebSocket was
+      // opened, so a dead session looked perfectly healthy. The real status
+      // comes from the socket's own open/close handlers.
       if (storeState.messages.length > 0) {
-        logDebug("Setting connection to connected - has messages");
-        setConnectionStatus("connected");
+        logDebug("Restored transcript - awaiting real socket status");
+        setConnectionStatus("connecting");
       } else if (storeState.isAssistantOpen) {
         logDebug(
           "Setting connection to connecting - chat open but no messages"
@@ -341,6 +428,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
     sessionLockReason,
     setSessionLockReason,
     resetChatForStore,
+    handleExpiredSession,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

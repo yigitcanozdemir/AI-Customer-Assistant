@@ -1,0 +1,99 @@
+name: Backend CI
+
+# The frontend is built and deployed by Vercel, so this covers the backend only.
+# Deployment to Hetzner stays manual (`./scripts/deploy.sh` over Tailscale) —
+# the server is not reachable from GitHub-hosted runners by design.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/backend.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    # The tests never open a connection — they cover pure logic (history
+    # building, language normalization, date coercion, provider message shaping,
+    # name scoping). But importing the agent pulls in backend.config.Settings,
+    # which *requires* these three fields, so supply placeholders. Deliberately
+    # not defaulted in config.py: a production boot should fail loudly rather
+    # than start against a bogus DSN.
+    env:
+      FRONTEND_URL: http://localhost:3000
+      DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/ci
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Unit tests
+        run: uv run python -m unittest discover -s backend/tests -t . -v
+
+      # A missing kwarg for a prompt placeholder raises KeyError at runtime,
+      # which the agent swallows into a generic fallback — silent in production
+      # and invisible in review. Fail the build instead.
+      - name: Prompt templates resolve
+        run: uv run python scripts/check_prompts.py
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Deliberately not a style gate. E9 = syntax/indentation errors,
+      # F82 = undefined names, F63/F7 = broken comparisons and statements.
+      # These are real defects, and an undefined name is exactly how the
+      # ToolName crash would have presented.
+      - name: Ruff
+        run: uvx ruff check backend/ --select E9,F63,F7,F82
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # GitHub Actions cache export needs the docker-container driver; the
+      # runner's default `docker` driver rejects it with
+      # "Cache export is not supported for the docker driver".
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Catches a broken Dockerfile or an unlocked dependency before it reaches
+      # the server, where the deploy script would fail mid-rebuild.
+      - name: Build production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./backend/Dockerfile.prod
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

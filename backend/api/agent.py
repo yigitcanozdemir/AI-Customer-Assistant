@@ -22,7 +22,7 @@ import time
 import uuid
 import asyncio
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from backend.config import settings
 from backend.api.agent_schema import (
@@ -32,10 +32,13 @@ from backend.api.agent_schema import (
     ToolResult,
     ToolName,
     IntentType,
+    ContextUnderstanding,
+    AssessmentInfo,
     ConversationContext,
     AgentState,
     TwoPassExecutionTrace,
     PolicyValidationResult,
+    LANGUAGE_NAMES,
     filter_tool_params,
 )
 from backend.api.schema import (
@@ -56,6 +59,83 @@ from backend.prompts.loader import load_prompt
 from fastapi.encoders import jsonable_encoder
 
 logger = logging.getLogger(__name__)
+
+#: Flagging reasons that genuinely warrant a human. `unclear_request` is
+#: excluded on purpose — asking a clarifying question is normal conversation,
+#: and flagging it surfaced "Team reviewing for assistance" on an ordinary
+#: "I'm looking for a dress".
+ESCALATING_FLAGS = (
+    "abusive_language",
+    "policy_violation",
+    "prompt_injection",
+    "potential_error",
+)
+
+#: Queries that describe the *relationship* rather than the garment. They match
+#: nothing in the catalog, so a "similar products" search using one returns zero
+#: results — substitute the source product's own name instead.
+_NON_SPECIFIC_SIMILAR_QUERIES = frozenset(
+    {
+        "similar",
+        "similar products",
+        "similar product",
+        "similar items",
+        "similar item",
+        "products like this",
+        "product like this",
+        "items like this",
+        "like this",
+        "this product",
+        "this item",
+        "show me similar products",
+        "show me similar",
+        "more like this",
+        "something like this",
+        "recommendations",
+        "recommendation",
+    }
+)
+
+
+def _coerce_to_date(value: Any) -> Optional[date]:
+    """Best-effort parse of an order timestamp into a date.
+
+    Order timestamps reach the policy gate in several shapes: a tz-aware
+    `datetime` straight from the ORM, or a string produced by `str(datetime)`
+    when the order was round-tripped through the Redis conversation context.
+    Returning None made the policy gate DENY a legitimate return (it could not
+    confirm the window), so handle every shape we actually produce.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+
+    text = str(value).strip()
+    if not text or text.lower() in ("none", "unknown", "null", "n/a"):
+        return None
+
+    # Normalize a trailing "Z" so fromisoformat accepts it on older Pythons.
+    normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        return datetime.fromisoformat(normalized).date()
+    except ValueError:
+        pass
+
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S.%f%z",
+        "%Y-%m-%d %H:%M:%S%z",
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d",
+    ):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 class TwoPassAgent:
@@ -79,8 +159,11 @@ class TwoPassAgent:
         user_id: str,
         user_name: str,
         selected_order: Any = None,
+        selected_product: Any = None,
         confirm_action_id: Optional[str] = None,
+        confirm_decision: Optional[str] = None,
         image: Optional[str] = None,
+        message_history: Optional[List[Message]] = None,
     ) -> MessageResponse:
         """
         Execute the complete two-pass flow.
@@ -98,9 +181,16 @@ class TwoPassAgent:
             user_id: User identifier
             user_name: User's display name
             selected_order: Currently selected order (if any)
+            selected_product: Product the customer picked this turn (if any).
+                Authoritative for "similar products" / "this product" — passed
+                explicitly rather than read back from the Redis ring buffer,
+                whose tail pointed at the wrong item on a re-selection.
             confirm_action_id: ID of action to confirm (if any)
+            confirm_decision: "accept" or "decline" for `confirm_action_id`.
             image: Optional user-uploaded image (data:/http URL) — described to
                 text and folded into the query for "find similar outfits".
+            message_history: Recent transcript for this session, so both passes
+                can resolve references to earlier turns.
 
         Returns:
             MessageResponse with final response and metadata
@@ -117,8 +207,11 @@ class TwoPassAgent:
                 user_id=user_id,
                 user_name=user_name,
                 selected_order=selected_order,
+                selected_product=selected_product,
                 confirm_action_id=confirm_action_id,
+                confirm_decision=confirm_decision,
                 image=image,
+                message_history=message_history,
             )
 
     async def _execute_turn(
@@ -129,17 +222,32 @@ class TwoPassAgent:
         user_id: str,
         user_name: str,
         selected_order: Any = None,
+        selected_product: Any = None,
         confirm_action_id: Optional[str] = None,
+        confirm_decision: Optional[str] = None,
         image: Optional[str] = None,
+        message_history: Optional[List[Message]] = None,
     ) -> MessageResponse:
         """Run the two-pass flow. Called within the `turn_trace` root span."""
         start_time = time.perf_counter()
+
+        # Capture the message as the customer actually sent it, BEFORE the image
+        # describer rewrites it. History matching compares against this, since
+        # the transcript stores the original text.
+        raw_user_input = user_input
 
         # Vision → text: if the user attached an image, describe the garment and
         # fold that description into the query so Pass 1 produces a product_search
         # with a rich, attribute-laden query against the existing pgvector index.
         if image and not confirm_action_id:
             user_input = await self._describe_image_into_query(image, user_input)
+
+        # The endpoint appends the current user message to the session log before
+        # calling us, so the tail of message_history IS this turn's input. Drop it:
+        # Pass 1 receives it as the live user turn, Pass 2 via {user_message}.
+        history_messages = self._build_history_messages(
+            message_history, current_user_input=raw_user_input
+        )
 
         # Initialize execution trace
         trace = TwoPassExecutionTrace(
@@ -152,13 +260,21 @@ class TwoPassAgent:
         try:
             # Get or create conversation context
             context = await self._get_or_create_context(
-                session_id, user_id, user_name, store, selected_order
+                session_id, user_id, user_name, store, selected_order, selected_product
             )
 
-            # Handle confirmation flow if applicable
+            # Handle confirmation flow if applicable.
+            # NOTE: this short-circuits BEFORE Pass 1, so no language detection
+            # runs on the canned "User confirmed the action" text — the reply
+            # deliberately reuses the stored session language. Do not "fix" that.
             if confirm_action_id:
                 return await self._handle_confirmation(
-                    confirm_action_id, context, trace, user_input
+                    confirm_action_id,
+                    context,
+                    trace,
+                    user_input,
+                    confirm_decision=confirm_decision,
+                    history=history_messages,
                 )
 
             # PASS 1: Intent Recognition & Tool Planning
@@ -172,6 +288,7 @@ class TwoPassAgent:
                 context=context,
                 selected_order=selected_order,
                 trace=trace,
+                history=history_messages,
             )
 
             if not pass1_output:
@@ -224,6 +341,8 @@ class TwoPassAgent:
                 store=store,
                 pass1_output=pass1_output,
                 trace=trace,
+                selected_order=selected_order,
+                selected_product=selected_product,
             )
 
             trace.tools_completed_at = time.perf_counter()
@@ -319,6 +438,8 @@ class TwoPassAgent:
                     detected_language=detected_language,
                     tracking_data=tracking_data,
                     trace=trace,
+                    history=history_messages,
+                    turn_number=trace.turn_number,
                 )
 
                 trace.pass2_completed_at = time.perf_counter()
@@ -330,17 +451,15 @@ class TwoPassAgent:
             # Determine if human intervention is needed based on Pass 1 assessment.
             # A successful policy denial is the system working as intended, so it
             # must not be flagged for human review.
+            # `unclear_request` is deliberately NOT here: asking one clarifying
+            # question is normal conversation, not a handoff. Flagging it made
+            # "I'm looking for a dress" show "Team reviewing for assistance".
+            # `off_topic` was also dead code — it is an IntentType, never a valid
+            # flagging_reason (see AssessmentInfo), so genuine off-topic arrives
+            # as "policy_violation".
             requires_human = (
                 pass1_assessment.confidence < 0.5
-                or pass1_assessment.flagging_reason
-                in [
-                    "off_topic",
-                    "unclear_request",
-                    "abusive_language",
-                    "policy_violation",
-                    "prompt_injection",
-                    "potential_error",
-                ]
+                or pass1_assessment.flagging_reason in ESCALATING_FLAGS
             ) and not policy_denied
 
             # Use suggested fallback if provided and confidence is low
@@ -351,12 +470,13 @@ class TwoPassAgent:
             ):
                 response_content = pass1_assessment.suggested_fallback
 
-            # Convert flagging reason to warning message
+            # Convert flagging reason to warning message.
+            # `unclear_request` gets no banner: the response body already IS the
+            # clarifying question (suggested_fallback replaces response_content
+            # above), so a "needs clarification" warning just restates it.
             warning_message = None
             if pass1_assessment.flagging_reason == "potential_error":
                 warning_message = "There may be an issue with your request."
-            elif pass1_assessment.flagging_reason == "unclear_request":
-                warning_message = "Your request needs clarification."
 
             self.logger.info(
                 f"[Assessment] From Pass 1: confidence={pass1_assessment.confidence:.2f}, "
@@ -403,8 +523,10 @@ class TwoPassAgent:
             if pass1_assessment.flagging_reason != "none":
                 flag_messages = {
                     "potential_error": "Potential issue detected",
-                    "off_topic": "Request outside e-commerce domain",
                     "unclear_request": "Request needs clarification",
+                    "policy_violation": "Request outside e-commerce domain",
+                    "abusive_language": "Abusive language detected",
+                    "prompt_injection": "Attempt to override instructions detected",
                 }
                 reasoning_parts.append(
                     flag_messages.get(
@@ -464,6 +586,7 @@ class TwoPassAgent:
         user_name: str,
         store: str,
         selected_order: Any,
+        selected_product: Any = None,
     ) -> ConversationContext:
         """Get existing context or create a new one"""
         context = await context_manager.get_context(session_id)
@@ -476,6 +599,31 @@ class TwoPassAgent:
                 store=store,
             )
             await context_manager.save_context(context)
+
+        # A product picked this turn must end up at the TAIL of recent_products,
+        # because that tail is what resolves "this product" / "similar products".
+        # update_context skips ids already in the buffer, so re-clicking a product
+        # that appeared in an earlier result list left the tail pointing at a
+        # different item — the reason "show me similar products" searched for, and
+        # excluded, the wrong source.
+        if selected_product is not None:
+            product_id = str(getattr(selected_product, "id", "") or "")
+            if product_id:
+                product_dict = (
+                    selected_product.model_dump()
+                    if hasattr(selected_product, "model_dump")
+                    else dict(selected_product)
+                )
+                context.recent_products = [
+                    p
+                    for p in context.recent_products
+                    if str(p.get("id", "")) != product_id
+                ]
+                context.recent_products.append(product_dict)
+                context.recent_products = context.recent_products[
+                    -context_manager.MAX_RECENT_PRODUCTS :
+                ]
+                await context_manager.save_context(context)
 
         # Update selected order if provided
         if selected_order:
@@ -546,56 +694,118 @@ class TwoPassAgent:
         context: ConversationContext,
         pass1_output: Pass1Output,
         store: str,
-    ) -> None:
+        selected_product: Any = None,
+    ) -> Optional[str]:
         """Make "find similar to THIS shop item" visual, and exclude the source.
 
-        When Pass 1 resolved a `referenced_product` (user said "similar",
-        "like this", "this product") and a product is selected in context, we:
+        When the customer refers to a specific item ("similar", "like this",
+        "this product"), we:
           1. exclude that product's id from results (so "similar" never returns
-             the same item), and
-          2. replace the name-based query with a VISUAL description of the item's
-             own catalog image (true visual similarity), reusing the same
-             vision→text path as user-uploaded images.
+             the same item),
+          2. replace a non-specific query ("similar products") with something the
+             catalog can actually match, and
+          3. where the provider supports vision, upgrade to a VISUAL description
+             of the item's own catalog image, reusing the same vision→text path
+             as user-uploaded images.
 
-        Everything is best-effort: if there's no selected product, no image, or
-        the provider lacks vision, we leave the LLM's name-based query intact
-        (still applying the exclusion when we know the id).
+        Everything is best-effort: with no source product, no image, or a
+        provider without vision, the name-based query stays intact (still
+        applying the exclusion when we know the id).
+
+        Returns a broader fallback query to retry with if the (narrow) visual
+        search returns nothing, else None.
         """
-        referenced = pass1_output.context_understanding.referenced_product
-        if not referenced or not context.recent_products:
-            return
+        # Resolve the SOURCE product, most authoritative first. The ring-buffer
+        # tail alone used to decide this, which silently picked the wrong item.
+        source: Optional[Dict[str, Any]] = None
 
-        source = context.recent_products[-1]
-        source_id = source.get("id")
-        if not source_id:
-            return
+        if selected_product is not None:
+            product_id = str(getattr(selected_product, "id", "") or "")
+            if product_id:
+                source = {
+                    "id": product_id,
+                    "name": getattr(selected_product, "name", "") or "",
+                }
+
+        referenced = pass1_output.context_understanding.referenced_product
+        if source is None and referenced:
+            wanted = referenced.strip().lower()
+            for product in reversed(context.recent_products or []):
+                candidates = {
+                    str(product.get("name", "")).strip().lower(),
+                    str(product.get("id", "")).strip().lower(),
+                }
+                if wanted in candidates:
+                    source = product
+                    break
+
+        if source is None and referenced and context.recent_products:
+            source = context.recent_products[-1]
+
+        if not source or not source.get("id"):
+            return None
+
+        source_id = source["id"]
 
         # 1) Always exclude the source item from its own "similar" results.
         tool_call.parameters.exclude_product_id = str(source_id)
 
-        # 2) Upgrade to visual similarity using the item's own image.
+        # 2) Never search a phrase the catalog cannot match. Pass 1 is told not to
+        # search "similar products" verbatim, but when it does the embedding
+        # search returns nothing and the customer is told we found nothing and
+        # asked which item they meant — while we knew all along.
+        query = (tool_call.parameters.query or "").strip()
+        if not query or query.lower() in _NON_SPECIFIC_SIMILAR_QUERIES:
+            fallback = str(source.get("name") or "").strip()
+            if fallback:
+                tool_call.parameters.query = fallback
+                self.logger.info(
+                    "[Similar] Replaced non-specific query %r with source product name %r",
+                    query,
+                    fallback,
+                )
+
+        # 3) Upgrade to visual similarity using the item's own image.
         provider = get_provider()
         if not getattr(provider, "supports_vision", False):
-            return
+            return None
         try:
             from backend.services.tool import get_product_primary_image
 
             image_url = await get_product_primary_image(str(source_id), store)
             if not image_url:
-                return  # keep the name-based query
+                return None  # keep the name-based query
             description = await provider.describe_image(
                 image_url, self._IMAGE_DESCRIBE_INSTRUCTION
             )
             description = (description or "").strip()
             if description:
+                # Remember the broader query. A visual description is very
+                # specific ("sleeveless V-neck, contrast gold belt, tailored
+                # crepe"), which on a small catalogue can fall outside the
+                # relevance cutoff and return NOTHING — the customer then hears
+                # "no matches" for an item sitting right next to two similar
+                # ones. The caller retries with this if the search comes back
+                # empty. Returned rather than stashed on self, so concurrent
+                # turns cannot interfere with each other.
+                #
+                # Prefer the product's own NAME over whatever Pass 1 wrote: its
+                # query often carries the relationship word ("… similar
+                # dresses"), which is noise the catalogue cannot match on.
+                fallback_query = (
+                    str(source.get("name") or "").strip()
+                    or (tool_call.parameters.query or "").strip()
+                )
                 tool_call.parameters.query = description
                 self.logger.info(
                     f"[Vision] Similar-item search using visual query: {description}"
                 )
+                return fallback_query or None
         except Exception as e:
             self.logger.error(
                 f"[Vision] similar-item enrichment failed: {e}", exc_info=True
             )
+        return None
 
     async def _execute_pass1(
         self,
@@ -603,6 +813,7 @@ class TwoPassAgent:
         context: ConversationContext,
         selected_order: Any,
         trace: TwoPassExecutionTrace,
+        history: Optional[List[LLMMessage]] = None,
     ) -> Optional[Pass1Output]:
         """
         Execute Pass 1: Intent Recognition & Tool Planning
@@ -697,16 +908,24 @@ The user is referring to this order when they say "this order", "it", "that one"
                 user_name=context.user_name,
                 user_id=context.user_id,
                 session_id=context.session_id,
-                conversation_turn=context.conversation_turn,
+                # trace.turn_number is the authoritative count. context
+                # .conversation_turn is inflated: update_context increments it and
+                # runs several times per turn.
+                conversation_turn=trace.turn_number,
                 context_summary=context_summary,
                 product_context_info=product_context_info,
                 order_context_info=order_context_info,
             )
 
-            # Call the active provider with structured output.
+            # Call the active provider with structured output. Prior turns are
+            # sent as real chat turns: Pass 1's job is reference resolution
+            # ("that wolf tshirt" → which product), and native chat structure is
+            # what models are trained on for anaphora, whereas a system-prompt
+            # blob competes with 200+ lines of instructions for attention.
             pass1_output = await get_provider().parse(
                 [
                     LLMMessage("system", pass1_prompt),
+                    *(history or []),
                     LLMMessage("user", user_input),
                 ],
                 Pass1Output,
@@ -751,6 +970,8 @@ The user is referring to this order when they say "this order", "it", "that one"
         store: str,
         pass1_output: Pass1Output,
         trace: TwoPassExecutionTrace,
+        selected_order: Any = None,
+        selected_product: Any = None,
     ) -> List[ToolResult]:
         """
         Execute tools in parallel where possible.
@@ -762,8 +983,12 @@ The user is referring to this order when they say "this order", "it", "that one"
 
         tool_results = []
         tool_tasks = []
+        # index in `tool_calls` -> a broader query to retry with if that call's
+        # narrow visual similar-item search returns nothing. Keyed by index
+        # because ToolCall is a Pydantic model and therefore unhashable.
+        similar_fallbacks: Dict[int, str] = {}
 
-        for tool_call in tool_calls:
+        for tool_index, tool_call in enumerate(tool_calls):
             # Back-fill server-owned parameters the LLM must not be trusted to
             # supply. `store` comes from the authenticated WS payload and is
             # authoritative, so we always set it (this is what prevents the
@@ -777,12 +1002,43 @@ The user is referring to this order when they say "this order", "it", "that one"
                 if not tool_call.parameters.user_id:
                     tool_call.parameters.user_id = user_id
 
+            # An order the customer picked THIS turn wins over whatever Pass 1
+            # inferred. Pass 1 reads the order from a prompt block that falls back
+            # to a possibly stale context.current_order, which is how tracking
+            # came back for a previously selected order. The frontend clears its
+            # selection after every send, so `selected_order` is only set when the
+            # customer just clicked a card — that click should win.
+            if selected_order is not None and tool_call.tool_name in (
+                ToolName.FETCH_ORDER_LOCATION,
+                ToolName.PROCESS_ORDER,
+            ):
+                authoritative_order_id = str(
+                    getattr(selected_order, "order_id", "") or ""
+                )
+                if (
+                    authoritative_order_id
+                    and tool_call.parameters.order_id != authoritative_order_id
+                ):
+                    self.logger.warning(
+                        "[Tools] Overriding %s order_id %r with this turn's selected order %r",
+                        tool_call.tool_name.value,
+                        tool_call.parameters.order_id,
+                        authoritative_order_id,
+                    )
+                    tool_call.parameters.order_id = authoritative_order_id
+
             # "Find similar to THIS shop item": enrich the search with the source
             # product's own image (visual similarity) and exclude it from results.
             if tool_call.tool_name == ToolName.PRODUCT_SEARCH:
-                await self._enrich_similar_product_search(
-                    tool_call, context, pass1_output, store
+                fallback = await self._enrich_similar_product_search(
+                    tool_call,
+                    context,
+                    pass1_output,
+                    store,
+                    selected_product=selected_product,
                 )
+                if fallback:
+                    similar_fallbacks[tool_index] = fallback
 
             # Execute tool
             tool_tasks.append(self._execute_single_tool(tool_call, trace))
@@ -797,7 +1053,57 @@ The user is referring to this order when they say "this order", "it", "that one"
                 self.logger.error(f"Tool execution failed: {result}")
                 trace.tool_execution_errors.append(str(result))
 
+        # A visual similar-item query is deliberately specific, which on a small
+        # catalogue can miss everything. Rather than tell the customer we found
+        # nothing while comparable items sit in the same category, retry once
+        # with the broader name-based query.
+        tool_results = await self._retry_empty_similar_searches(
+            tool_calls, tool_results, similar_fallbacks, trace
+        )
+
         trace.tools_executed = tool_results
+
+        return tool_results
+
+    async def _retry_empty_similar_searches(
+        self,
+        tool_calls: List[ToolCall],
+        tool_results: List[ToolResult],
+        similar_fallbacks: Dict[int, str],
+        trace: TwoPassExecutionTrace,
+    ) -> List[ToolResult]:
+        """Re-run a similar-item search that came back empty, with a wider query."""
+        if not similar_fallbacks:
+            return tool_results
+
+        # Only product_search results can be retried, and they appear in
+        # `tool_results` in the same relative order as in `tool_calls`.
+        empty_search_positions = [
+            i
+            for i, r in enumerate(tool_results)
+            if r.tool_name == ToolName.PRODUCT_SEARCH
+            and r.success
+            and not (isinstance(r.data, list) and r.data)
+        ]
+        if not empty_search_positions:
+            return tool_results
+
+        for tool_index, fallback in similar_fallbacks.items():
+            if tool_index >= len(tool_calls) or not empty_search_positions:
+                continue
+
+            tool_call = tool_calls[tool_index]
+            current = (tool_call.parameters.query or "").strip()
+            if not fallback or fallback == current:
+                continue
+
+            self.logger.info(
+                "[Similar] Visual query returned nothing; retrying with %r", fallback
+            )
+            tool_call.parameters.query = fallback
+            retried = await self._execute_single_tool(tool_call, trace)
+            if retried.success and isinstance(retried.data, list) and retried.data:
+                tool_results[empty_search_positions.pop(0)] = retried
 
         return tool_results
 
@@ -877,6 +1183,8 @@ The user is referring to this order when they say "this order", "it", "that one"
         tracking_data: Any,
         trace: TwoPassExecutionTrace,
         confirmation_context: str = "",
+        history: Optional[List[LLMMessage]] = None,
+        turn_number: int = 1,
     ) -> str:
         """
         Execute Pass 2: Natural Language Response Generation.
@@ -884,6 +1192,10 @@ The user is referring to this order when they say "this order", "it", "that one"
         Args:
             confirmation_context: Optional context for confirmation/declination
                 responses (success/decline messages after a pending action).
+            history: Prior conversation turns, rendered into the prompt as a
+                labeled transcript so the reply can resolve references.
+            turn_number: Authoritative turn count (`trace.turn_number`), used to
+                gate greetings to the first turn.
 
         Returns the natural language response string. Policy validation is a
         separate structured call (see `_validate_action_against_policy`).
@@ -896,25 +1208,33 @@ The user is referring to this order when they say "this order", "it", "that one"
                 tracking_guidance = self._build_tracking_guidance(tracking_data)
 
             policy_context = self._extract_policy_context(tool_results)
-
-            language_names = {
-                "en": "English",
-                "es": "Spanish",
-                "fr": "French",
-                "de": "German",
-                "it": "Italian",
-                "pt": "Portuguese",
-                "tr": "Turkish",
-                "ar": "Arabic",
-                "zh": "Chinese",
-                "ja": "Japanese",
-                "ko": "Korean",
-            }
-            detected_language_name = language_names.get(detected_language, "English")
+            detected_language_name = LANGUAGE_NAMES.get(detected_language, "English")
 
             conversation_context_summary = context_manager.build_context_summary(
                 context
             )
+
+            # Decide the ORDER_TRACKING branch here rather than leaving Pass 2 to
+            # guess between two competing templates — it used to satisfy both,
+            # showing tracking data while also asking the customer to pick an order.
+            if tracking_data is not None:
+                tracking_branch = (
+                    "TRACKING_SHOWN — live tracking for ONE specific order is already "
+                    "on screen. Report its status. You MUST NOT ask the customer to "
+                    "select or pick an order."
+                )
+            elif any(
+                r.tool_name == ToolName.LIST_ORDERS and r.success for r in tool_results
+            ):
+                tracking_branch = (
+                    "ORDER_LIST_SHOWN — a list of orders is on screen and NO tracking "
+                    "data was fetched. Ask the customer to select which order they want "
+                    "to track. You MUST NOT describe any tracking status."
+                )
+            else:
+                tracking_branch = (
+                    "NO_ORDER_DATA — no order list and no tracking data this turn."
+                )
 
             pass2_prompt = load_prompt("pass2_response_prompt.txt").format(
                 store=context.store,
@@ -926,8 +1246,12 @@ The user is referring to this order when they say "this order", "it", "that one"
                 flagging_reason=pass1_output.assessment.flagging_reason,
                 tool_results_summary=tool_results_summary,
                 tracking_guidance=tracking_guidance,
+                tracking_branch=tracking_branch,
                 policy_context=policy_context,
                 conversation_context_summary=conversation_context_summary,
+                conversation_transcript=self._render_history_transcript(history),
+                turn_number=turn_number,
+                is_first_turn="yes" if turn_number <= 1 else "no",
                 confirmation_context=confirmation_context,
             )
 
@@ -949,6 +1273,103 @@ The user is referring to this order when they say "this order", "it", "that one"
             self.logger.error(f"[Pass 2] Error: {e}", exc_info=True)
             trace.errors.append(f"Pass 2 failed: {str(e)}")
             return "I'm here to help! How can I assist you today?"
+
+    #: How many trailing transcript messages are replayed to the LLM. ~8 covers
+    #: roughly four exchanges — enough to resolve "that wolf tshirt" without
+    #: bloating the prompt or drifting onto stale intent.
+    HISTORY_MESSAGE_LIMIT = 8
+    #: Total replayed characters, and the per-message truncation length.
+    HISTORY_CHAR_BUDGET = 4000
+    HISTORY_PER_MESSAGE_CHARS = 600
+
+    def _build_history_messages(
+        self,
+        message_history: Optional[List[Message]],
+        *,
+        current_user_input: str = "",
+        limit: Optional[int] = None,
+    ) -> List[LLMMessage]:
+        """Render the recent transcript as prior chat turns for the LLM.
+
+        Neither pass used to see any prior turn, which is why the agent behaved
+        as though nothing had happened before.
+
+        Skips:
+          - the CURRENT user message. The endpoint appends it to the session log
+            before calling us, so it is the tail; Pass 1 receives it as the live
+            user turn and Pass 2 via {user_message}.
+          - `hide_content` markers. The endpoint writes a hidden "User selected
+            order: <uuid>" row per order pick; replaying those teaches the model
+            to talk in raw UUIDs.
+          - `[SYSTEM_INIT]` bootstrap text, image data URLs, and empty content.
+
+        Truncates per message and enforces a total character budget, keeping the
+        most recent turns, so a long session cannot blow up the prompt.
+        """
+        if not message_history:
+            return []
+
+        limit = self.HISTORY_MESSAGE_LIMIT if limit is None else limit
+        if limit <= 0:
+            return []
+
+        current = (current_user_input or "").strip()
+        budget = self.HISTORY_CHAR_BUDGET
+        collected: List[LLMMessage] = []
+
+        # Walk newest → oldest so the character budget keeps the newest turns.
+        # The slice is generous because skipped rows do not count toward `limit`.
+        pending_current_skip = bool(current)
+        for message in reversed(list(message_history)[-(limit + 12):]):
+            if getattr(message, "hide_content", False):
+                continue
+
+            content = (getattr(message, "content", "") or "").strip()
+            if not content or content.startswith("data:image"):
+                continue
+            if content.startswith("[SYSTEM_INIT]"):
+                continue
+
+            role = "assistant" if getattr(message, "type", "") == "assistant" else "user"
+
+            # Drop only the newest user message equal to this turn's input.
+            if pending_current_skip and role == "user" and content == current:
+                pending_current_skip = False
+                continue
+
+            if len(content) > self.HISTORY_PER_MESSAGE_CHARS:
+                content = (
+                    content[: self.HISTORY_PER_MESSAGE_CHARS].rsplit(" ", 1)[0] + "…"
+                )
+            if len(content) > budget:
+                break
+            budget -= len(content)
+
+            collected.append(LLMMessage(role, content))
+            if len(collected) >= limit:
+                break
+
+        collected.reverse()
+
+        # Providers dislike a leading assistant turn; drop it defensively.
+        while collected and collected[0].role == "assistant":
+            collected.pop(0)
+        return collected
+
+    def _render_history_transcript(self, history: Optional[List[LLMMessage]]) -> str:
+        """Render prior turns as a labeled transcript block for the Pass 2 prompt.
+
+        Pass 2 receives the current question interpolated into its system prompt
+        ({user_message}) plus a dummy user turn, so real message turns would
+        appear *before* the question they follow. A labeled transcript keeps the
+        ordering unambiguous.
+        """
+        if not history:
+            return "This is the first exchange in the conversation."
+        return "\n".join(
+            f"{'Assistant' if m.role == 'assistant' else 'Customer'}: {m.content}"
+            for m in history
+        )
 
     def _build_tool_results_summary(self, tool_results: List[ToolResult]) -> str:
         """Build a summary of tool results for Pass 2 prompt"""
@@ -1093,31 +1514,44 @@ The user is referring to this order when they say "this order", "it", "that one"
                 )
                 break
 
-        # Get current date for validation
-        from datetime import datetime, timezone
-
         current_date = datetime.now(timezone.utc).date()
 
-        # Calculate days elapsed since order creation
-        days_elapsed = None
-        if order_created_at:
-            try:
-                # Parse order_created_at (format: YYYY-MM-DD HH:MM:SS or YYYY-MM-DD)
-                if isinstance(order_created_at, str):
-                    order_date = datetime.fromisoformat(
-                        order_created_at.replace("Z", "+00:00")
-                    ).date()
-                else:
-                    order_date = (
-                        order_created_at.date()
-                        if hasattr(order_created_at, "date")
-                        else order_created_at
-                    )
-                days_elapsed = (current_date - order_date).days
-            except Exception as e:
-                self.logger.warning(
-                    f"[Policy Validation] Could not parse order_created_at: {e}"
-                )
+        # Days elapsed since order creation. Timestamps arrive in several shapes
+        # (ORM datetime, or a str() round-tripped through Redis context), and a
+        # parse failure used to leave this as None — which the gate read as
+        # "cannot confirm the window" and DENIED a legitimate return.
+        order_date = _coerce_to_date(order_created_at)
+        days_elapsed = (current_date - order_date).days if order_date else None
+        if order_created_at and order_date is None:
+            self.logger.warning(
+                "[Policy Validation] Unparseable order_created_at=%r — the gate is "
+                "told the date is unknown rather than treating it as out-of-window.",
+                order_created_at,
+            )
+
+        # The Order model has no delivery timestamp, only creation. Delivery is
+        # always on or after creation, so days-since-creation is an UPPER BOUND on
+        # days-since-delivery: if creation is inside the window, delivery certainly
+        # is. Spelling that out keeps the gate from denying for lack of an exact
+        # delivery date.
+        date_basis = (
+            "IMPORTANT: the only timestamp available is the order CREATION date; "
+            "there is no delivery timestamp in the system. When a policy window is "
+            "measured from DELIVERY, treat days-since-creation as an UPPER BOUND on "
+            "days-since-delivery — if days elapsed since creation is within the "
+            "window, the delivery-based window is certainly also within it, so the "
+            "time condition is SATISFIED."
+        )
+        days_elapsed_note = (
+            ""
+            if days_elapsed is not None
+            else (
+                "NOTE: the order date could not be determined. An UNKNOWN date is NOT "
+                "evidence that the window has passed. Do NOT deny on window grounds. "
+                "If the status condition is otherwise met, ALLOW the action and let "
+                "the confirmation step proceed."
+            )
+        )
 
         policy_context = self._extract_policy_context(tool_results)
 
@@ -1127,10 +1561,14 @@ The user is referring to this order when they say "this order", "it", "that one"
             days_elapsed=(
                 days_elapsed if days_elapsed is not None else "Unable to calculate"
             ),
+            date_basis=date_basis,
+            days_elapsed_note=days_elapsed_note,
             action=action,
             order_id=order_id,
             order_status=order_status,
             policy_context=policy_context,
+            detected_language=detected_language,
+            detected_language_name=LANGUAGE_NAMES.get(detected_language, "English"),
         )
 
         # Structured, fail-closed policy decision. The model returns a
@@ -1288,6 +1726,8 @@ The user is referring to this order when they say "this order", "it", "that one"
         context: ConversationContext,
         trace: TwoPassExecutionTrace,
         user_input: str,
+        confirm_decision: Optional[str] = None,
+        history: Optional[List[LLMMessage]] = None,
     ) -> MessageResponse:
         """Handle confirmation or declination of a pending action"""
         from backend.services.cache import cache_manager
@@ -1304,8 +1744,22 @@ The user is referring to this order when they say "this order", "it", "that one"
                 is_context_relevant=True,
             )
 
-        # Check if user declined the action
-        is_declined = "declined" in user_input.lower() or "cancel" in user_input.lower()
+        # Whether the customer accepted or declined. Prefer the explicit signal
+        # from the confirm/decline buttons.
+        if confirm_decision in ("accept", "decline"):
+            is_declined = confirm_decision == "decline"
+        else:
+            # Legacy fallback for clients that predate `confirm_decision`.
+            # Deliberately does NOT test for "cancel": confirming a *cancel
+            # order* action sends text containing that word, which used to be
+            # misread as a decline so the cancellation never happened.
+            lowered = (user_input or "").strip().lower()
+            is_declined = "declined" in lowered
+            self.logger.warning(
+                "[Confirmation] No confirm_decision in payload; inferred from text "
+                "(is_declined=%s). Client is out of date.",
+                is_declined,
+            )
 
         if is_declined:
             # User declined the action
@@ -1314,9 +1768,13 @@ The user is referring to this order when they say "this order", "it", "that one"
 
             action_type = pending_action["parameters"].get("action", "action")
 
-            # Get FAQ context for declination response
-            from backend.api.agent_schema import ToolResult, ToolName
-
+            # Get FAQ context for declination response.
+            # NOTE: ToolResult/ToolName/Pass1Output/IntentType/ContextUnderstanding/
+            # AssessmentInfo are imported at MODULE scope. Do NOT re-import them
+            # here — a function-local import binds the name as local for the
+            # ENTIRE function body, which made the `ToolName(tool_name)` call on
+            # the confirm path raise UnboundLocalError and broke every return and
+            # cancel confirmation.
             faq_query = f"{action_type} policy"
             faq_result = await execute_tool(
                 "faq_search", {"query": faq_query, "store": context.store}
@@ -1341,13 +1799,6 @@ The user is referring to this order when they say "this order", "it", "that one"
             ).format(action=action_type)
 
             # Create a minimal Pass1Output for Pass 2
-            from backend.api.agent_schema import (
-                Pass1Output,
-                IntentType,
-                ContextUnderstanding,
-                AssessmentInfo,
-            )
-
             pass1_output = Pass1Output(
                 intent=IntentType.ORDER_MODIFICATION,
                 tool_calls=[],
@@ -1377,6 +1828,8 @@ The user is referring to this order when they say "this order", "it", "that one"
                 tracking_data=None,
                 trace=trace,
                 confirmation_context=decline_context,
+                history=history,
+                turn_number=trace.turn_number,
             )
 
             content = (
@@ -1419,9 +1872,19 @@ The user is referring to this order when they say "this order", "it", "that one"
                 error_msg = result.get("message") or result.get("error") or "Unknown error"
                 self.logger.error(f"[Confirmation] Tool execution failed: {error_msg}")
 
-                # Return friendly error message to user
+                # Only `process_order` returns curated, customer-appropriate
+                # messages ("Cannot cancel a shipped order…"). For anything else
+                # the string is not vetted for customer eyes, so stay generic.
+                if tool_name == ToolName.PROCESS_ORDER.value:
+                    content = f"I couldn't complete that action: {error_msg}"
+                else:
+                    content = (
+                        "I couldn't complete that action. Nothing has been changed "
+                        "on your order — please try again in a moment."
+                    )
+
                 return MessageResponse(
-                    content=f"I couldn't complete that action: {error_msg}",
+                    content=content,
                     store=context.store,
                     timestamp=datetime.now(timezone.utc),
                     requires_human=False,
@@ -1446,9 +1909,7 @@ The user is referring to this order when they say "this order", "it", "that one"
                 f"[Context] Cleared last_intent after {action_type} operation. Order {order_id} remains in context for follow-up questions."
             )
 
-            # Get FAQ context for next steps
-            from backend.api.agent_schema import ToolResult, ToolName
-
+            # Get FAQ context for next steps (see the module-scope import note above)
             faq_query = f"{action_type} policy"
             faq_result = await execute_tool(
                 "faq_search", {"query": faq_query, "store": context.store}
@@ -1473,13 +1934,6 @@ The user is referring to this order when they say "this order", "it", "that one"
             ).format(action=action_type)
 
             # Create a minimal Pass1Output for Pass 2
-            from backend.api.agent_schema import (
-                Pass1Output,
-                IntentType,
-                ContextUnderstanding,
-                AssessmentInfo,
-            )
-
             pass1_output = Pass1Output(
                 intent=IntentType.ORDER_MODIFICATION,
                 tool_calls=[],
@@ -1509,6 +1963,8 @@ The user is referring to this order when they say "this order", "it", "that one"
                 tracking_data=None,
                 trace=trace,
                 confirmation_context=success_context,
+                history=history,
+                turn_number=trace.turn_number,
             )
 
             content = (
@@ -1527,10 +1983,21 @@ The user is referring to this order when they say "this order", "it", "that one"
             )
 
         except Exception as e:
-            self.logger.error(f"Error executing confirmed action: {e}")
+            # Never surface raw exception text to the customer: it can carry
+            # connection strings, table/column names and internal IDs. Detail
+            # goes to the logs and the trace only.
+            self.logger.error("Error executing confirmed action", exc_info=True)
+            trace.errors.append(f"Confirmation execution failed: {str(e)}")
 
+            # `process_order` performs its mutation inside `session.begin()`, so
+            # an exception rolls the transaction back — the order really is
+            # untouched, and saying so avoids the customer double-submitting.
             return MessageResponse(
-                content=f"I encountered an error while processing your request: {str(e)}. Please contact support for assistance.",
+                content=(
+                    "I wasn't able to complete that request just now, and nothing "
+                    "has been changed on your order. Please try again in a moment "
+                    "— if it keeps happening I can connect you with our team."
+                ),
                 store=context.store,
                 timestamp=datetime.now(timezone.utc),
                 requires_human=True,
@@ -1543,23 +2010,32 @@ The user is referring to this order when they say "this order", "it", "that one"
         store: str,
         trace: TwoPassExecutionTrace,
     ) -> MessageResponse:
-        """Create a fallback response when Pass 1 fails"""
+        """Create a fallback response when Pass 1 fails.
+
+        A Pass 1 parse failure is recovered by the customer simply rephrasing,
+        so this is deliberately NOT a human handoff and carries no warning
+        badge — a scary banner above "could you rephrase?" is pure noise.
+        """
         return MessageResponse(
             content="I'm here to help! Could you please rephrase your question?",
             store=store,
             timestamp=datetime.now(timezone.utc),
-            requires_human=True,
+            requires_human=False,
             confidence_score=0.0,
             is_context_relevant=True,
-            warning_message="System encountered an issue processing your request.",
         )
 
     async def _create_error_response(
         self,
         store: str,
-        error_message: str,
+        error_detail: str,
     ) -> MessageResponse:
-        """Create an error response"""
+        """Create an error response.
+
+        `error_detail` is for logs/tracing ONLY. It must never reach the
+        response: the frontend renders `warning_message` verbatim into the chat
+        bubble, so an exception string there leaks internals to the customer.
+        """
         return MessageResponse(
             content="I'm having trouble processing your request right now. Please try again or contact support.",
             store=store,
@@ -1567,7 +2043,6 @@ The user is referring to this order when they say "this order", "it", "that one"
             requires_human=True,
             confidence_score=0.0,
             is_context_relevant=True,
-            warning_message=f"Error: {error_message}",
         )
 
     def _log_trace(self, trace: TwoPassExecutionTrace):

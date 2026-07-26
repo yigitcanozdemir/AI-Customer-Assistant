@@ -40,17 +40,34 @@ class AnthropicProvider(LLMProvider):
 
     @staticmethod
     def _split(messages: List[LLMMessage]) -> Tuple[str, list[dict]]:
-        """Split normalized messages into (system_prompt, anthropic_messages)."""
+        """Split normalized messages into (system_prompt, anthropic_messages).
+
+        The agent replays prior conversation turns, so this normalizes the two
+        shapes Anthropic rejects: a leading assistant turn (a session's stored
+        transcript can start with the assistant's greeting) and two consecutive
+        turns with the same role.
+        """
         system_parts = [m.content for m in messages if m.role == "system"]
         chat = [
             {"role": m.role, "content": m.content}
             for m in messages
-            if m.role in ("user", "assistant")
+            if m.role in ("user", "assistant") and m.content
         ]
+
         # Anthropic requires the conversation to start with a user turn.
-        if not chat:
-            chat = [{"role": "user", "content": "Continue."}]
-        return "\n\n".join(system_parts), chat
+        while chat and chat[0]["role"] == "assistant":
+            chat.pop(0)
+
+        merged: list[dict] = []
+        for message in chat:
+            if merged and merged[-1]["role"] == message["role"]:
+                merged[-1]["content"] += "\n\n" + message["content"]
+            else:
+                merged.append(dict(message))
+
+        if not merged:
+            merged = [{"role": "user", "content": "Continue."}]
+        return "\n\n".join(system_parts), merged
 
     async def generate(
         self,

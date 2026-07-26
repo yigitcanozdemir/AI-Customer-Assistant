@@ -42,7 +42,26 @@ name and category carry strong signal that a sparse description misses:
 
 Built by `build_embedding_text()` so ingestion and any re-embed produce
 byte-identical text. Products are embedded even when the description is empty, so
-every item is retrievable. FAQs embed their full text.
+every item is retrievable.
+
+### FAQs are embedded whole, on purpose
+
+Each store's FAQ becomes **one embedding for the entire document** — there is no
+chunking or clause-splitting pipeline. These documents are short (a dozen or so
+Q&A pairs), so splitting them would cost more than it returns: the retrieval win
+is marginal, and a per-clause index risks handing the policy gate one rule while
+hiding the one that actually decides the request.
+
+The practical consequence is that `faq_search` with `top_k=1` returns the whole
+policy document rather than the matching clause, so retrieval is effectively
+query-independent for FAQs. The *selection* of the relevant rule therefore
+happens in the prompt, not in retrieval — `policy_validation_prompt.txt`
+instructs the model to extract only the rule that decides the current action and
+not to quote unrelated clauses (the damaged-goods clause in particular, which it
+used to volunteer during ordinary returns).
+
+If you load a substantially larger FAQ corpus, this is the first thing to
+revisit: add chunking plus a re-rank pass and lift `top_k`.
 
 Embeddings always use OpenAI `text-embedding-3-small` (1536-dim) regardless of
 the chat provider — the pgvector column is dimension-locked, so swapping it would

@@ -8,6 +8,7 @@ from typing import Optional
 from backend.services.session_manager import (
     get_message_history,
     add_message,
+    clear_session,
     is_session_locked,
     lock_session,
     set_typing_state,
@@ -33,6 +34,8 @@ from backend.api.schema import (
     CreateOrderRequest,
     CreateOrderResponse,
     OrderStatus,
+    OrderItem,
+    OrderProduct,
     CurrentLocation,
     DeliveryAddress,
     FlaggedSessionsResponse,
@@ -44,7 +47,7 @@ import time
 from backend.db.session import get_session
 from backend.db.schema import Product, Order
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import joinedload
 from backend.api.helper import format_products
 import uuid
@@ -89,12 +92,16 @@ websocket_disconnects_total = Counter(
 def _auth_required() -> bool:
     """Whether a valid session token is required to proceed.
 
-    Enforced when explicitly enabled, or always in production when an
-    AUTH_SECRET is configured. Off by default in dev so the backend can be
-    deployed ahead of the token-sending frontend without breaking the demo.
+    Requires AUTH_ENFORCED=true *and* a configured AUTH_SECRET — an explicit
+    opt-in, in every environment.
+
+    This deliberately does NOT auto-enable in production. It used to, which
+    meant `ENVIRONMENT=production` plus any AUTH_SECRET (both set by
+    .env.prod.example) silently enforced tokens — while the frontend never calls
+    /session/init and so has none. Every WebSocket was closed with 4401 and the
+    chat was dead on arrival. Turn this on only once the frontend obtains and
+    sends a token.
     """
-    if settings.auth_secret and settings.environment == "production":
-        return True
     return settings.auth_enforced and bool(settings.auth_secret)
 
 
@@ -313,6 +320,7 @@ async def websocket_chat(
                     event.event_data, "is_initial_message", False
                 )
                 confirm_action_id = getattr(event.event_data, "confirm_action_id", None)
+                confirm_decision = getattr(event.event_data, "confirm_decision", None)
                 image = getattr(event.event_data, "image", None)
 
                 product_context = product_data
@@ -402,12 +410,14 @@ async def websocket_chat(
                     )
                     next_message_id += 1
                 if product_context:
-                    logger.info(f"Product {product_context.id} ({product_context.name}) in message context, updating context manager")
-
-                    from backend.services.context_manager import context_manager
-                    await context_manager.update_context(
-                        session_id=session_id,
-                        products=[product_context.model_dump() if hasattr(product_context, 'model_dump') else product_context],
+                    # The agent owns writing this into conversation context (see
+                    # TwoPassAgent._get_or_create_context), which moves a
+                    # re-selected product to the tail of recent_products. Writing
+                    # it here too left the tail pointing at a different item when
+                    # the product was already in the buffer, so "show me similar
+                    # products" resolved against the wrong source.
+                    logger.info(
+                        f"Product {product_context.id} ({product_context.name}) in message context"
                     )
 
                 if not confirm_action_id:
@@ -430,8 +440,11 @@ async def websocket_chat(
                     user_id=str(user_id),
                     user_name=user_name,
                     selected_order=order_data,
+                    selected_product=product_context,
                     confirm_action_id=confirm_action_id,
+                    confirm_decision=confirm_decision,
                     image=image,
+                    message_history=message_history,
                 )
 
                 span_context = trace.get_current_span().get_span_context()
@@ -488,7 +501,10 @@ async def websocket_chat(
                 message_history.append(assistant_message)
 
                 if response.requires_human:
-                    flagging_reason = getattr(response, "flagging_reason", "unclear_request")
+                    # No default of "unclear_request" here: ordinary ambiguity no
+                    # longer escalates (see agent.ESCALATING_FLAGS), so defaulting
+                    # to it would misclassify an unknown flag as a technical issue.
+                    flagging_reason = getattr(response, "flagging_reason", None)
 
                     is_policy_violation = flagging_reason in ["policy_violation", "abusive_language", "prompt_injection"]
                     is_technical_issue = flagging_reason in ["potential_error", "unclear_request"]
@@ -710,6 +726,51 @@ async def get_product(product_id: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+async def _resolve_order_product(
+    session, item: OrderItem
+) -> Optional[OrderProduct]:
+    """Build the response product for an order line.
+
+    `OrderItem.product` is optional but `OrderStatus.product` is required, so a
+    caller that omitted it used to insert the order row and then fail validating
+    the RESPONSE — rolling the whole thing back with an opaque 500. Look the
+    product up instead, which also means the response reflects the catalogue
+    rather than echoing back whatever price the client claimed.
+    """
+    if item.product is not None:
+        return item.product
+
+    result = await session.execute(
+        select(Product)
+        .options(joinedload(Product.variants))
+        .where(Product.id == item.product_id)
+    )
+    product = result.unique().scalar_one_or_none()
+    if product is None:
+        raise HTTPException(
+            status_code=404, detail=f"Product {item.product_id} not found"
+        )
+
+    # `variant_id` is required on OrderProduct; fall back to any variant of the
+    # product so a variant-less request still produces a valid response.
+    variant_id = item.variant_id
+    if variant_id is None and product.variants:
+        variant_id = product.variants[0].id
+    if variant_id is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Product {item.product_id} has no variants to order",
+        )
+
+    return OrderProduct(
+        id=product.id,
+        variant_id=variant_id,
+        name=product.name,
+        price=product.price,
+        currency=product.currency,
+    )
+
+
 @router.post("/orders", response_model=CreateOrderResponse)
 async def create_order(request: CreateOrderRequest):
     created_orders = []
@@ -747,6 +808,8 @@ async def create_order(request: CreateOrderRequest):
                         "country": item.delivery_address.country,
                     }
 
+                response_product = await _resolve_order_product(session, item)
+
                 for _ in range(item.quantity):
                     order_id = uuid.uuid4()
                     created_at = datetime.utcnow()
@@ -772,7 +835,7 @@ async def create_order(request: CreateOrderRequest):
                             status=order_status,
                             user_name=request.user_name,
                             created_at=created_at,
-                            product=item.product,
+                            product=response_product,
                         )
                     )
 
@@ -892,11 +955,18 @@ async def get_chat_history(session_id: str, after: Optional[str] = None):
 
         is_typing = await get_typing_state(session_id)
 
+        # Tells the client whether the server still knows this session at all.
+        # A restored transcript in sessionStorage can long outlive the Redis
+        # keys; without this the UI shows a full conversation the backend has
+        # entirely forgotten, and every reference in it silently fails.
+        session_exists = bool(all_messages) or context is not None
+
         return {
             "messages": message_dicts,
             "session_id": session_id,
             "pending_action": pending_action,
-            "is_typing": is_typing
+            "is_typing": is_typing,
+            "session_exists": session_exists,
         }
 
     except Exception as e:
@@ -905,6 +975,63 @@ async def get_chat_history(session_id: str, after: Optional[str] = None):
             extra={"session_id": session_id, "error": str(e)},
         )
         raise HTTPException(status_code=500, detail="Unable to fetch chat history")
+
+
+@router.post("/session/{session_id}/end")
+async def end_session(session_id: str, user_id: Optional[str] = None):
+    """Delete everything belonging to one visitor, immediately.
+
+    Called when the tab closes (via `navigator.sendBeacon`, which is why this is
+    a POST and not a DELETE — beacons cannot set a method). This is what makes
+    the "your data is deleted when you close your tab" notice true; previously
+    nothing ran on unload and the data simply aged out of Redis after 24h.
+
+    Best-effort and idempotent: a beacon can be dropped, fired twice, or arrive
+    after the periodic sweep already cleaned up, so nothing here treats a
+    missing key as an error.
+    """
+    cleared = {"session": False, "context": False, "orders": 0}
+
+    try:
+        from backend.services.context_manager import context_manager
+
+        cleared["session"] = await clear_session(session_id)
+        cleared["context"] = await context_manager.clear_session(session_id)
+
+        # Only this visitor's orders, scoped by the id they were created with.
+        if user_id:
+            try:
+                parsed_user_id = uuid.UUID(user_id)
+            except ValueError:
+                parsed_user_id = None
+
+            if parsed_user_id is not None:
+                async with get_session() as session:
+                    async with session.begin():
+                        result = await session.execute(
+                            delete(Order).where(Order.user_id == parsed_user_id)
+                        )
+                    cleared["orders"] = result.rowcount or 0
+
+        logger.info(
+            "Session ended by client; data cleared",
+            extra={
+                "session_id": session_id,
+                "cleared_context": cleared["context"],
+                "deleted_orders": cleared["orders"],
+                "event": "session_ended",
+            },
+        )
+        return {"status": "ok", **cleared}
+
+    except Exception as e:
+        # Never surface a failure here: the tab is already gone, and the TTL
+        # sweep remains as the backstop.
+        logger.error(
+            "Failed to fully clear session on end",
+            extra={"session_id": session_id, "error": str(e)},
+        )
+        return {"status": "partial", **cleared}
 
 
 @router.get("/chat/typing/{session_id}")
