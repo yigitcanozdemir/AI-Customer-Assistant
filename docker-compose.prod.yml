@@ -74,6 +74,43 @@ services:
       - app-network
       - proxy-tier
 
+  # Application telemetry: traces, metrics and logs in one ~300MB container.
+  # Behind the `obs` profile so a plain `docker compose -f docker-compose.prod.yml
+  # up -d` stays lean; start it with `--profile obs`.
+  #
+  # No published ports: the UI is reachable over Tailscale on the host, or via
+  # Nginx Proxy Manager if you choose to expose it. Leaving 5080 unpublished
+  # keeps an unauthenticated-by-default dashboard off the public internet.
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:latest
+    container_name: openobserve
+    profiles: ["obs"]
+    restart: unless-stopped
+    # Credentials and retention come from .env.prod (ZO_ROOT_USER_EMAIL,
+    # ZO_ROOT_USER_PASSWORD, ZO_COMPACT_DATA_RETENTION_DAYS).
+    #
+    # Read via env_file rather than `${VAR:?...}` interpolation: interpolation is
+    # resolved when compose PARSES this file, which only sees the shell env and a
+    # root .env — not env_file. A `:?` guard here therefore fails even when the
+    # value is correctly set in .env.prod.
+    #
+    # Without ZO_COMPACT_DATA_RETENTION_DAYS, OpenObserve keeps telemetry for its
+    # default 3650 days (10 years) and will fill a small VPS disk. Minimum is 3.
+    env_file:
+      - .env.prod
+    environment:
+      ZO_DATA_DIR: "/data"
+    expose:
+      - "5080"
+    volumes:
+      - openobserve_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge
@@ -83,3 +120,4 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  openobserve_data:
