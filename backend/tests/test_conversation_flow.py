@@ -390,6 +390,62 @@ class TestEmptySimilarSearchRetry(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(mock.await_count, 0)
 
 
+class TestPriceFilterParams(unittest.TestCase):
+    """A budget is a hard constraint, not a ranking hint.
+
+    "under $45" in the query text is invisible to the embedding — prices are not
+    semantically encoded — so it was silently dropped while Pass 2 still claimed
+    the budget had been applied, showing $80 items to someone who asked for $45.
+    """
+
+    def test_price_params_are_accepted(self):
+        params = ToolParameters(query="casual dress", max_price=45, min_price=20)
+        self.assertEqual(params.max_price, 45.0)
+        self.assertEqual(params.min_price, 20.0)
+
+    def test_price_params_reach_the_tool(self):
+        from backend.api.agent_schema import TOOL_VALID_PARAMS, filter_tool_params
+
+        allowed = TOOL_VALID_PARAMS[ToolName.PRODUCT_SEARCH]
+        self.assertIn("max_price", allowed)
+        self.assertIn("min_price", allowed)
+
+        # filter_tool_params must not strip them on the way to product_search.
+        kept = filter_tool_params(
+            ToolName.PRODUCT_SEARCH,
+            {"query": "dress", "max_price": 45, "min_price": 20, "bogus": 1},
+        )
+        self.assertEqual(kept["max_price"], 45)
+        self.assertEqual(kept["min_price"], 20)
+        self.assertNotIn("bogus", kept)
+
+    def test_price_is_not_offered_to_unrelated_tools(self):
+        from backend.api.agent_schema import filter_tool_params
+
+        kept = filter_tool_params(
+            ToolName.FAQ_SEARCH, {"query": "returns", "max_price": 45}
+        )
+        self.assertNotIn("max_price", kept)
+
+    def test_predicates_compile_to_sql(self):
+        from sqlalchemy import select
+        from backend.db.schema import Product
+
+        def where_clause(max_price=None, min_price=None):
+            filters = []
+            if max_price is not None:
+                filters.append(Product.price <= max_price)
+            if min_price is not None:
+                filters.append(Product.price >= min_price)
+            stmt = select(Product.id).where(Product.store == "S", *filters)
+            return str(stmt.compile(compile_kwargs={"literal_binds": True}))
+
+        self.assertIn("products.price <= 45", where_clause(max_price=45))
+        self.assertIn("products.price >= 20", where_clause(min_price=20))
+        # No budget given → no price predicate at all.
+        self.assertNotIn("products.price", where_clause())
+
+
 class TestCoerceToDate(unittest.TestCase):
     """A None here used to make the policy gate DENY a legitimate return."""
 

@@ -65,6 +65,8 @@ async def product_search(
     store: str = "default",
     top_k: int = 5,
     exclude_product_id: str | None = None,
+    max_price: float | None = None,
+    min_price: float | None = None,
 ):
     """Hybrid (vector + keyword) product search.
 
@@ -78,11 +80,20 @@ async def product_search(
     "find similar to THIS item" flow so the source product is never returned as
     its own match. Searches that exclude an id skip the shared query cache
     (they're personalized to a source item and rarer than plain queries).
+
+    `max_price` / `min_price` are real SQL predicates. A budget stated in prose
+    ("under $45") is invisible to the embedding — prices are not semantically
+    encoded — so before this existed the constraint was silently dropped and the
+    reply claimed a budget it had not applied.
     """
     try:
         top_k = max(1, min(int(top_k or 5), 25))
 
-        use_cache = exclude_product_id is None
+        # The cache key is (query, store, top_k), so a price-filtered search must
+        # not share it — otherwise "dresses under $45" and "dresses" collide.
+        use_cache = (
+            exclude_product_id is None and max_price is None and min_price is None
+        )
         if use_cache:
             cached_results = await cache_manager.get_product_search(query, store, top_k)
             if cached_results is not None:
@@ -101,6 +112,15 @@ async def product_search(
         pool = max(top_k * 4, 20) + (1 if exclude_product_id else 0)
         embedding_vector = await create_embedding(query)
 
+        # A budget is a hard constraint, not a ranking hint: apply it as SQL on
+        # BOTH retrieval passes so an over-budget item can never enter the pool
+        # and get fused into the results.
+        price_filters = []
+        if max_price is not None:
+            price_filters.append(Product.price <= max_price)
+        if min_price is not None:
+            price_filters.append(Product.price >= min_price)
+
         async with get_session() as session:
             # 1) Vector candidates (ordered by cosine distance).
             vector_stmt = (
@@ -111,7 +131,7 @@ async def product_search(
                     ),
                 )
                 .join(Embedding, Product.id == Embedding.product_id)
-                .where(Product.store == store)
+                .where(Product.store == store, *price_filters)
                 .order_by("distance")
                 .limit(pool)
             )
@@ -143,6 +163,7 @@ async def product_search(
                 select(Product.id)
                 .where(
                     Product.store == store,
+                    *price_filters,
                     sa_or(
                         Product.name.ilike(like),
                         Product.category.ilike(like),

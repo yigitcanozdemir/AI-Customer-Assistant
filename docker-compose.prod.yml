@@ -115,8 +115,16 @@ services:
       - .env.prod
     environment:
       ZO_DATA_DIR: "/data"
-    expose:
-      - "5080"
+    # Dashboard + OTLP ingest on 5080. Bound to a specific host address rather
+    # than all interfaces, so the UI (whose login is the only thing in front of
+    # your telemetry) is not published to the public internet.
+    #
+    # OBSERVE_BIND_ADDR in .env.prod picks where it listens:
+    #   127.0.0.1   → loopback only; reach it via `ssh -L 5080:127.0.0.1:5080`
+    #   <tailnet IP> → browse http://<tailnet IP>:5080 from any tailnet device
+    # Note it is plain HTTP — there is no TLS on this port.
+    ports:
+      - "${OBSERVE_BIND_ADDR:-127.0.0.1}:5080:5080"
     volumes:
       - openobserve_data:/data
     deploy:
