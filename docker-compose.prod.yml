@@ -65,11 +65,26 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # Probed with python, not curl: Dockerfile.prod installs curl in the builder
+    # stage only, so the slim runtime image has no curl and a curl-based check
+    # could never pass — the container reported (unhealthy) while serving fine.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test:
+        - CMD
+        - /app/.venv/bin/python
+        - -c
+        - |
+          import sys, urllib.request
+          try:
+              sys.exit(0 if urllib.request.urlopen(
+                  "http://127.0.0.1:8000/health", timeout=5
+              ).status == 200 else 1)
+          except Exception:
+              sys.exit(1)
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
     networks:
       - app-network
       - proxy-tier

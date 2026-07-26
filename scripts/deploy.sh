@@ -37,7 +37,9 @@ RETRY_COUNT=0
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     # Try reaching the container via its name or localhost
-    if docker exec fastapi curl -s -f http://127.0.0.1:8000/health > /dev/null 2>&1; then
+    # Probe from the HOST: the slim runtime image ships no curl, so
+    # `docker exec fastapi curl` always failed and reported a false red.
+    if curl -s -f http://127.0.0.1:8000/health > /dev/null 2>&1; then
         echo -e "${GREEN}✅ Deployment successful!${NC}"
         echo ""
         echo "📊 Service Status:"
