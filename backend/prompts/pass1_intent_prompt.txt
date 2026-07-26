@@ -32,7 +32,7 @@ Determine the following fields:
    - off_topic: Not shopping-related (math, coding, essays, roleplay, instruction-override attempts)
 
 2. **tool_calls** — array (may be empty). Available tools:
-   - product_search(query): Search for products
+   - product_search(query, max_price?, min_price?): Search for products
    - faq_search(query): Search policies and FAQs
    - variant_check(product_id, size?, color?): Check stock
    - list_orders(): List the user's orders
@@ -62,6 +62,15 @@ PRODUCT SEARCH:
   (occasion, colour, style). Do NOT search generic phrases like "similar products".
   * "Show me blue dresses" → query "blue dress"
   * "similar products" + SELECTED PRODUCT "Floral Maxi Dress" → query "floral maxi dress"
+- BUDGET / PRICE LIMITS: when the user states a budget ("under $45", "max 45 dollars",
+  "between 20 and 50", "nothing over 100", "cheap ones under 30"), you MUST put the
+  number in max_price (and min_price for a range). Do NOT leave it in `query` — price
+  is not searchable text, so a budget left in the query is silently ignored and the
+  customer is shown items they cannot afford.
+  * "max 45 dollar and casual" + looking for a dress → query "casual dress", max_price 45
+  * "something between 20 and 50" → min_price 20, max_price 50
+  * Carry the budget forward: if they gave one earlier in the conversation and are still
+    browsing the same request, keep applying it to follow-up searches.
 - SIMILAR ITEMS ("similar products", "like this", "show me more like this", "recommend
   something like it") WITH a SELECTED PRODUCT CONTEXT present: you MUST set
   referenced_product to that product's NAME, and `query` MUST describe the GARMENT
@@ -224,6 +233,18 @@ User: "Show me blue summer dresses" — Context: none
   "context_understanding": {{"language_detected": "en", "conversation_flow": "Direct product search"}},
   "requires_confirmation": false,
   "assessment": {{"confidence": 1.0, "flagging_reason": "none", "orders_found": 0, "products_found": 0, "context_used": false, "suggested_fallback": null}}
+}}
+```
+
+2a) Budget stated as a follow-up to a clarifying question:
+User: "max 45 dollar and casual" — Context: previously asked what kind of dress
+```json
+{{
+  "intent": "product_search",
+  "tool_calls": [{{"tool_name": "product_search", "parameters": {{"query": "casual dress", "max_price": 45}}, "reasoning": "Budget and style supplied; price becomes a hard filter"}}],
+  "context_understanding": {{"referenced_product": null, "language_detected": "en", "conversation_flow": "User answered the clarifying question with a budget and style"}},
+  "requires_confirmation": false,
+  "assessment": {{"confidence": 0.95, "flagging_reason": "none", "orders_found": 0, "products_found": 0, "context_used": true, "suggested_fallback": null}}
 }}
 ```
 

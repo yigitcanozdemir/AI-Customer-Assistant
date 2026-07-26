@@ -92,6 +92,10 @@ class ToolParameters(StrictModel):
     user_id: Optional[str] = None  # Used for user-scoped operations
     top_k: Optional[int] = None  # product_search: how many results to retrieve
     exclude_product_id: Optional[str] = None  # product_search: omit this source item
+    # product_search: hard price window, applied as SQL. A budget stated in prose
+    # ("under $45") is invisible to the embedding, so it must be extracted here.
+    max_price: Optional[float] = None
+    min_price: Optional[float] = None
 
 
 class ToolCall(StrictModel):
@@ -418,7 +422,14 @@ class ConversationContext(StrictModel):
 #: extra/hallucinated parameters; only these are forwarded to each tool. Single
 #: source of truth — used by the tool executor and the confirmation handler.
 TOOL_VALID_PARAMS: Dict[ToolName, List[str]] = {
-    ToolName.PRODUCT_SEARCH: ["query", "store", "top_k", "exclude_product_id"],
+    ToolName.PRODUCT_SEARCH: [
+        "query",
+        "store",
+        "top_k",
+        "exclude_product_id",
+        "max_price",
+        "min_price",
+    ],
     ToolName.FAQ_SEARCH: ["query", "store"],
     ToolName.VARIANT_CHECK: ["product_id", "size", "color"],
     ToolName.PROCESS_ORDER: ["order_id", "action", "store"],

@@ -1210,6 +1210,32 @@ The user is referring to this order when they say "this order", "it", "that one"
             policy_context = self._extract_policy_context(tool_results)
             detected_language_name = LANGUAGE_NAMES.get(detected_language, "English")
 
+            # Tell Pass 2 exactly which price window was enforced. Without this it
+            # only sees "Found N product(s)" and cannot know whether a budget was
+            # honoured — it used to claim "under $45" over unfiltered results.
+            price_filter_note = "No price filter was applied to this search."
+            for tc in pass1_output.tool_calls:
+                if tc.tool_name != ToolName.PRODUCT_SEARCH:
+                    continue
+                low = tc.parameters.min_price
+                high = tc.parameters.max_price
+                if high is not None and low is not None:
+                    price_filter_note = (
+                        f"Results are filtered to prices between {low} and {high}. "
+                        "You may state this budget."
+                    )
+                elif high is not None:
+                    price_filter_note = (
+                        f"Results are filtered to a maximum price of {high}. "
+                        "You may state this budget."
+                    )
+                elif low is not None:
+                    price_filter_note = (
+                        f"Results are filtered to a minimum price of {low}. "
+                        "You may state this budget."
+                    )
+                break
+
             conversation_context_summary = context_manager.build_context_summary(
                 context
             )
@@ -1247,6 +1273,7 @@ The user is referring to this order when they say "this order", "it", "that one"
                 tool_results_summary=tool_results_summary,
                 tracking_guidance=tracking_guidance,
                 tracking_branch=tracking_branch,
+                price_filter_note=price_filter_note,
                 policy_context=policy_context,
                 conversation_context_summary=conversation_context_summary,
                 conversation_transcript=self._render_history_transcript(history),
