@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { CONNECTION_ERROR_SUGGESTIONS } from "@/lib/chat-suggestions";
+import { prepareImageForUpload, transcodeToJpeg } from "@/lib/image-validation";
 import { useStore } from "@/context/StoreContext";
 import { useChat, type Message, type Product } from "@/context/ChatContext";
 import { useUser } from "@/context/UserContext";
@@ -120,6 +121,27 @@ const getStepClassForStatus = (status: string, index: number) => {
   return index === 0 ? "bg-primary" : "bg-border/70";
 };
 
+/** Longest edge of the transcript thumbnail, in px. */
+const IMAGE_THUMBNAIL_MAX_EDGE = 256;
+
+/**
+ * Shrink a prepared data URL for storage in the message transcript.
+ *
+ * The full upload goes to the vision model and is then discarded, but the
+ * transcript is persisted per flagged row — storing the original there would
+ * put ~6.7 MB of base64 in a JSONB column for every flag in the session.
+ * On failure we return null rather than falling back to the full image, so a
+ * thumbnail bug can never silently reintroduce that cost.
+ */
+async function makeThumbnail(dataUrl: string): Promise<string | null> {
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    return await transcodeToJpeg(blob, IMAGE_THUMBNAIL_MAX_EDGE, 0.7);
+  } catch {
+    return null;
+  }
+}
+
 interface ChatSidebarProps {
   right: number;
   sideWidth: number;
@@ -127,6 +149,13 @@ interface ChatSidebarProps {
 
 export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   const [inputValue, setInputValue] = useState("");
+  // Downscaled copy of `attachedImage`, persisted in the transcript so the
+  // flagged-session review can show it without storing megabytes of base64.
+  const [attachedImageThumbnail, setAttachedImageThumbnail] = useState<string | null>(null);
+  // Surfaced in the composer: the old code silently `return`ed on a bad file,
+  // so an unsupported upload looked like a broken button.
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [isPreparingImage, setIsPreparingImage] = useState(false);
   // Optional garment image the user attaches to search "similar outfits".
   // Stored as a data: URL and sent alongside the question.
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
@@ -663,19 +692,33 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
 
   const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     // Reset the input so selecting the same file again re-fires onChange.
     e.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) return;
-    if (file.size > MAX_IMAGE_BYTES) {
-      console.warn("Attached image exceeds size limit");
-      return;
+
+    setImageError(null);
+    setIsPreparingImage(true);
+    try {
+      // Validates by MAGIC BYTES, not file.type — the latter comes from the
+      // extension, so an AVIF renamed to .png used to sail through here and be
+      // rejected by the vision API with a 400 the customer never saw explained.
+      // Unsupported-but-decodable formats are transcoded to JPEG rather than
+      // refused, so the search still works.
+      const prepared = await prepareImageForUpload(file, MAX_IMAGE_BYTES);
+      if (!prepared.ok) {
+        setImageError(prepared.error);
+        return;
+      }
+      setAttachedImage(prepared.dataUrl);
+      // Small copy for the stored transcript; the full image goes to the model.
+      setAttachedImageThumbnail(await makeThumbnail(prepared.dataUrl));
+    } catch {
+      setImageError("That image couldn't be processed. Try another one.");
+    } finally {
+      setIsPreparingImage(false);
     }
-    const reader = new FileReader();
-    reader.onload = () => setAttachedImage(reader.result as string);
-    reader.readAsDataURL(file);
   };
 
   const sendMessage = async (content: string, explicitProduct?: Product | null) => {
@@ -684,6 +727,7 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     if ((!trimmed && !attachedImage) || isSessionLocked || isTyping) return;
 
     const imageToSend = attachedImage;
+    const thumbnailToSend = attachedImageThumbnail;
     const effectiveContent =
       trimmed || (imageToSend ? "Find outfits similar to this image" : "");
 
@@ -706,9 +750,18 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
     setAttachedImage(null);
+    setAttachedImageThumbnail(null);
+    setImageError(null);
     setIsTyping(true);
 
-    sendWebSocketMessage(effectiveContent, undefined, productToUse, imageToSend);
+    sendWebSocketMessage(
+      effectiveContent,
+      undefined,
+      productToUse,
+      imageToSend,
+      undefined,
+      thumbnailToSend
+    );
   };
 
   const sendWebSocketMessage = (
@@ -716,7 +769,8 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     confirmActionId?: string,
     explicitProduct?: Product | null,
     image?: string | null,
-    confirmDecision?: "accept" | "decline"
+    confirmDecision?: "accept" | "decline",
+    imageThumbnail?: string | null
   ) => {
     if (isSessionLocked) {
       setIsTyping(false);
@@ -754,6 +808,9 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
           // cancellation, which used to be misread as a decline.
           confirm_decision: confirmDecision,
           image: image ?? undefined,
+          // Small copy persisted in the transcript; `image` itself is sent to
+          // the vision model and not stored.
+          image_thumbnail: imageThumbnail ?? undefined,
         },
       };
 
@@ -1339,7 +1396,12 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
                             : "bg-muted text-foreground"
                         }`}
                       >
-                        <div className="prose prose-sm dark:prose-invert max-w-none font-modern-body">
+                        {/* `prose prose-sm dark:prose-invert` used to be here,
+                            but @tailwindcss/typography was never installed, so
+                            those classes styled nothing and the markdown fell
+                            back to browser defaults — hence the uneven gaps
+                            between lines. See .chat-markdown in globals.css. */}
+                        <div className="chat-markdown font-modern-body">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {message.content}
                           </ReactMarkdown>
@@ -1979,6 +2041,31 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             </div>
           )}
 
+          {/* A rejected upload used to fail silently, so the attach button just
+              looked broken. Say what went wrong and what to do instead. */}
+          {imageError && (
+            <div
+              className="mb-2 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive"
+              role="alert"
+            >
+              <span className="flex-1">{imageError}</span>
+              <button
+                type="button"
+                onClick={() => setImageError(null)}
+                className="shrink-0 opacity-70 hover:opacity-100"
+                aria-label="Dismiss image error"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          {isPreparingImage && (
+            <div className="mb-2 text-xs text-muted-foreground" role="status">
+              Preparing image…
+            </div>
+          )}
+
           {attachedImage && (
             <div className="mb-2 flex items-center gap-2 rounded-lg border border-border/50 bg-background p-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1993,7 +2080,10 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setAttachedImage(null)}
+                onClick={() => {
+                  setAttachedImage(null);
+                  setAttachedImageThumbnail(null);
+                }}
                 className="h-6 w-6 p-0"
                 aria-label="Remove attached image"
               >
@@ -2006,7 +2096,9 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              // Deliberately broad: AVIF/HEIC are not accepted by the vision
+              // API, but we transcode them to JPEG, so let the user pick them.
+              accept="image/*,.avif,.heic,.heif"
               onChange={handleImageSelect}
               className="hidden"
             />

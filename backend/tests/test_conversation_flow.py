@@ -15,6 +15,8 @@ Covers the logic most likely to regress silently:
   - provider message-role normalization
 """
 
+import asyncio
+import base64
 import symtable
 import unittest
 from datetime import date, datetime, timezone
@@ -30,6 +32,7 @@ from backend.api.agent import (
 )
 from backend.api.agent_schema import (
     AssessmentInfo,
+    ConversationContext,
     ToolResult,
     TwoPassExecutionTrace,
     ContextUnderstanding,
@@ -41,6 +44,8 @@ from backend.api.agent_schema import (
     ToolParameters,
     normalize_language_code,
 )
+from backend.api.schema import ChatEventData, Message
+from backend.services.session_manager import VIOLATION_FLAGS, record_violation
 from backend.services.llm.anthropic_provider import AnthropicProvider
 from backend.services.llm.base import LLMMessage
 from backend.services.llm.gemini_provider import GeminiProvider
@@ -521,6 +526,207 @@ class TestProviderRoleNormalization(unittest.TestCase):
     def test_anthropic_handles_system_only(self):
         _, chat = AnthropicProvider._split([LLMMessage("system", "S")])
         self.assertEqual(chat, [{"role": "user", "content": "Continue."}])
+
+
+def _search_plan(flag="none", confidence=0.74, intent=IntentType.PRODUCT_SEARCH, **params):
+    """A Pass 1 plan containing a single product_search."""
+    return Pass1Output(
+        intent=intent,
+        tool_calls=[
+            ToolCall(
+                tool_name=ToolName.PRODUCT_SEARCH,
+                parameters=ToolParameters(query="top", **params),
+            )
+        ],
+        assessment=AssessmentInfo(
+            confidence=confidence,
+            flagging_reason=flag,
+            orders_found=0,
+            products_found=0,
+            context_used=True,
+        ),
+    )
+
+
+class TestAssessmentReconciliation(unittest.TestCase):
+    """Pass 1 assesses BEFORE tools run, so its outcome flags are predictions.
+
+    It reported `products_found: 0` for a search it had not executed, concluded
+    that was an error, and set `potential_error` — which escalates. Every
+    successful product search therefore raised "There may be an issue with your
+    request" above five perfectly good results and wrote a flagged row.
+    """
+
+    def setUp(self):
+        self.agent = TwoPassAgent()
+
+    def _ok(self, data):
+        return ToolResult(tool_name=ToolName.PRODUCT_SEARCH, success=True, data=data)
+
+    def test_predicted_error_cleared_when_search_returned_products(self):
+        plan = _search_plan("potential_error")
+        products = [1, 2, 3, 4, 5]
+        self.agent._reconcile_assessment(
+            plan, [self._ok(products)], products, None, None
+        )
+        self.assertEqual(plan.assessment.flagging_reason, "none")
+        self.assertEqual(plan.assessment.products_found, 5)
+        self.assertGreaterEqual(
+            plan.assessment.confidence, 0.9, "stale low confidence must not linger"
+        )
+
+    def test_counts_replaced_with_ground_truth(self):
+        plan = _search_plan()
+        plan.assessment.products_found = 99  # a guess, and wrong
+        self.agent._reconcile_assessment(plan, [self._ok([1, 2])], [1, 2], None, None)
+        self.assertEqual(plan.assessment.products_found, 2)
+
+    def test_real_tool_failure_still_raises_potential_error(self):
+        plan = _search_plan("none", confidence=0.95)
+        failed = ToolResult(
+            tool_name=ToolName.PRODUCT_SEARCH, success=False, error="db down"
+        )
+        self.agent._reconcile_assessment(plan, [failed], [], None, None)
+        self.assertEqual(plan.assessment.flagging_reason, "potential_error")
+
+    def test_message_level_flags_are_never_cleared_by_tool_results(self):
+        for flag in ("abusive_language", "policy_violation", "prompt_injection",
+                     "unclear_request"):
+            with self.subTest(flag=flag):
+                plan = _search_plan(flag, confidence=0.98)
+                self.agent._reconcile_assessment(
+                    plan, [self._ok([1])], [1], None, None
+                )
+                self.assertEqual(plan.assessment.flagging_reason, flag)
+
+    def test_empty_search_is_a_normal_outcome_not_an_error(self):
+        plan = _search_plan("potential_error")
+        self.agent._reconcile_assessment(plan, [self._ok([])], [], None, None)
+        self.assertEqual(plan.assessment.flagging_reason, "none")
+
+
+class TestImageByteSniffing(unittest.TestCase):
+    """`file.type` / the data: URL MIME come from the extension, not the bytes.
+
+    An AVIF renamed to .png arrives declared as image/png and the vision API
+    rejects the whole turn with a 400 the customer never sees explained.
+    """
+
+    def setUp(self):
+        self.agent = TwoPassAgent()
+
+    @staticmethod
+    def _data_url(raw: bytes, declared="image/png") -> str:
+        return f"data:{declared};base64,{base64.b64encode(raw).decode()}"
+
+    def test_detects_real_formats_regardless_of_declared_mime(self):
+        cases = {
+            b"\xff\xd8\xff\xe0" + b"\x00" * 24: "image/jpeg",
+            b"\x89PNG\r\n\x1a\n" + b"\x00" * 24: "image/png",
+            b"GIF89a" + b"\x00" * 24: "image/gif",
+            b"RIFF\x00\x00\x00\x00WEBP" + b"\x00" * 24: "image/webp",
+        }
+        for raw, expected in cases.items():
+            with self.subTest(expected=expected):
+                # Declared as something else entirely — bytes must win.
+                url = self._data_url(raw, declared="application/octet-stream")
+                self.assertEqual(self.agent._sniff_data_url_image(url), expected)
+
+    def test_avif_mislabelled_as_png_is_rejected(self):
+        # ftyp box with the 'avif' brand — the exact reported failure.
+        avif = b"\x00\x00\x00\x20ftypavif" + b"\x00" * 24
+        url = self._data_url(avif, declared="image/png")
+        self.assertIsNone(self.agent._sniff_data_url_image(url))
+
+    def test_non_image_payload_is_rejected(self):
+        url = self._data_url(b"not an image at all" + b"\x00" * 24)
+        self.assertIsNone(self.agent._sniff_data_url_image(url))
+
+    def test_http_urls_are_left_to_the_provider(self):
+        self.assertIsNone(
+            self.agent._sniff_data_url_image("https://example.com/a.png")
+        )
+
+    def test_malformed_data_url_does_not_raise(self):
+        for bad in ("data:image/png;base64,", "data:garbage", "data:image/png;base64,!!"):
+            with self.subTest(bad=bad):
+                self.assertIsNone(self.agent._sniff_data_url_image(bad))
+
+
+class TestModerationLockCounting(unittest.TestCase):
+    """Only genuine violations may count toward the two-strikes session lock.
+
+    The lock previously counted every row in flagged_sessions regardless of
+    reason, so two spurious `potential_error` rows (see
+    TestAssessmentReconciliation) plus one off-topic question ended a session
+    mid-conversation. The tally now lives in Redis and counts violations only —
+    no schema change required.
+    """
+
+    def test_technical_flags_are_excluded(self):
+        for flag in ("potential_error", "unclear_request", "none"):
+            with self.subTest(flag=flag):
+                self.assertNotIn(flag, VIOLATION_FLAGS)
+
+    def test_real_violations_are_included(self):
+        for flag in ("policy_violation", "abusive_language", "prompt_injection"):
+            with self.subTest(flag=flag):
+                self.assertIn(flag, VIOLATION_FLAGS)
+
+    def test_counter_increments_per_violation(self):
+        store = {}
+
+        async def fake_get(key):
+            return store.get(key)
+
+        async def fake_set(key, value, ttl=None):
+            store[key] = value
+            return True
+
+        with patch("backend.services.session_manager.cache_manager.get", new=fake_get), \
+             patch("backend.services.session_manager.cache_manager.set", new=fake_set):
+            first = asyncio.run(record_violation("s1"))
+            second = asyncio.run(record_violation("s1"))
+            other = asyncio.run(record_violation("s2"))
+
+        self.assertEqual((first, second), (1, 2))
+        self.assertEqual(other, 1, "sessions must be counted independently")
+
+    def test_counter_fails_open_on_redis_error(self):
+        async def boom(key):
+            raise RuntimeError("redis down")
+
+        with patch("backend.services.session_manager.cache_manager.get", new=boom):
+            self.assertEqual(
+                asyncio.run(record_violation("s1")),
+                0,
+                "a Redis hiccup must never contribute toward locking a session",
+            )
+
+    def test_violation_tally_is_cleared_with_the_session(self):
+        # Otherwise a fresh conversation inherits the previous one's strikes.
+        source = Path(__file__).resolve().parents[1] / "services" / "session_manager.py"
+        body = source.read_text().split("async def clear_session")[1].split("async def")[0]
+        self.assertIn("_violation_key", body)
+
+
+class TestTranscriptFidelity(unittest.TestCase):
+    """The flagged-session review must replay what the customer actually sent."""
+
+    def test_message_carries_image_and_selected_product(self):
+        for field in ("image", "reply_product"):
+            with self.subTest(field=field):
+                self.assertIn(
+                    field,
+                    Message.model_fields,
+                    "dropped here, the reviewer sees text referencing "
+                    "an image or product card they cannot see",
+                )
+
+    def test_event_accepts_a_separate_thumbnail(self):
+        # The full upload goes to the vision model; only the thumbnail is
+        # persisted, so a 5 MB photo does not become ~6.7 MB of base64 per row.
+        self.assertIn("image_thumbnail", ChatEventData.model_fields)
 
 
 if __name__ == "__main__":

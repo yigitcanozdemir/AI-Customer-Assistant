@@ -76,6 +76,9 @@ interface Message {
   confirmation_action?: string;
   hide_content?: boolean;
   reply_order?: OrderStatus | null;
+  reply_product?: Product | null;
+  /** Thumbnail of an image the customer attached for visual search. */
+  image?: string | null;
   tracking_data?: TrackingData;
 }
 
@@ -159,11 +162,64 @@ export const MiniChatHistory = memo(({ messageHistory }: MiniChatHistoryProps) =
                   <div className="font-medium text-[10px] mb-1 opacity-70">
                     {isUser ? "User" : "Assistant"}
                   </div>
-                  <div className="prose prose-sm max-w-none">
+                  {/* `prose prose-sm` styled nothing here either — the
+                      typography plugin is not installed. See globals.css. */}
+                  <div className="chat-markdown text-xs">
                     <ReactMarkdown>{content}</ReactMarkdown>
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* Image the customer attached for visual search. Without this the
+                turn reads as a contextless "Find outfits similar to this
+                image" and the reviewer cannot see what was actually sent. */}
+            {entry.image && (
+              <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+                <div className="max-w-[85%] rounded-lg border border-border/50 bg-background p-1.5">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={entry.image}
+                    alt="Image attached by the customer"
+                    className="max-h-40 rounded object-contain"
+                  />
+                  <p className="mt-1 text-[9px] text-muted-foreground">
+                    Attached image
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Product the customer explicitly clicked before sending. */}
+            {entry.reply_product && (
+              <Card className="border-2 border-primary/50 shadow-sm bg-primary/5">
+                <CardContent className="px-2 py-1.5">
+                  <p className="text-[9px] font-medium text-primary mb-1">
+                    Product selected
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    <Image
+                      src={entry.reply_product.image || "/placeholder.svg"}
+                      alt={entry.reply_product.name}
+                      width={40}
+                      height={53}
+                      className="w-8 h-11 object-cover rounded"
+                      unoptimized={false}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-[10px] text-card-foreground line-clamp-1">
+                        {entry.reply_product.name}
+                      </h4>
+                      <span className="font-semibold text-primary text-[10px]">
+                        {formatCurrency(
+                          entry.reply_product.price,
+                          entry.reply_product.currency
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             )}
 
             {/* Product Cards */}

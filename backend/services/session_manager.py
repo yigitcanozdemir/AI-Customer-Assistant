@@ -9,10 +9,19 @@ logger = logging.getLogger(__name__)
 
 SESSION_HISTORY_PREFIX = "session_history:"
 SESSION_LOCK_PREFIX = "session_lock:"
+SESSION_VIOLATION_PREFIX = "session_violations:"
 SESSION_STATE_PREFIX = "session_state:"
 SESSION_HISTORY_TTL = 3600 * 24
 SESSION_LOCK_TTL = 3600 * 24
+SESSION_VIOLATION_TTL = 3600 * 24
 SESSION_STATE_TTL = 300
+
+#: Reasons that count toward locking a session. Technical flags
+#: (`potential_error`, `unclear_request`) are deliberately absent: they describe
+#: our own failures or an ambiguous question. The lock previously counted every
+#: flagged row regardless of reason, so two spurious `potential_error` rows plus
+#: one off-topic question ended a session mid-demo.
+VIOLATION_FLAGS = ("policy_violation", "abusive_language", "prompt_injection")
 
 
 def _history_key(session_id: str) -> str:
@@ -21,6 +30,10 @@ def _history_key(session_id: str) -> str:
 
 def _lock_key(session_id: str) -> str:
     return f"{SESSION_LOCK_PREFIX}{session_id}"
+
+
+def _violation_key(session_id: str) -> str:
+    return f"{SESSION_VIOLATION_PREFIX}{session_id}"
 
 
 def _state_key(session_id: str) -> str:
@@ -85,18 +98,41 @@ async def clear_session(session_id: str) -> bool:
     """
     Remove every Redis key this module owns for a session.
 
-    Covers the transcript, the typing/presence state and the moderation lock.
-    Called when a visitor leaves, so "your data is deleted when you close the
-    tab" is actually true rather than waiting out the 24h TTL.
+    Covers the transcript, the typing/presence state, the moderation lock and
+    the violation tally. Called when a visitor leaves, so "your data is deleted
+    when you close the tab" is actually true rather than waiting out the 24h TTL.
     """
     try:
         await cache_manager.delete(_history_key(session_id))
         await cache_manager.delete(_state_key(session_id))
         await cache_manager.delete(_lock_key(session_id))
+        await cache_manager.delete(_violation_key(session_id))
         return True
     except Exception as exc:
         logger.error("Failed to clear session %s: %s", session_id, exc)
         return False
+
+
+async def record_violation(session_id: str) -> int:
+    """Count one genuine policy violation for this session; return the new total.
+
+    Kept in Redis alongside the lock rather than derived from the flagged_sessions
+    table: the flag reason is not stored there, and adding it would require a
+    schema migration. Counting here also means only violations are ever counted —
+    the table-based count included technical flags, so ordinary failed searches
+    used to push a session toward being locked.
+
+    Fails OPEN (returns 0) so a Redis hiccup can never end a session.
+    """
+    try:
+        key = _violation_key(session_id)
+        current = await cache_manager.get(key)
+        total = (int(current) if current else 0) + 1
+        await cache_manager.set(key, str(total), ttl=SESSION_VIOLATION_TTL)
+        return total
+    except Exception as exc:
+        logger.error("Failed to record violation for %s: %s", session_id, exc)
+        return 0
 
 
 async def lock_session(session_id: str) -> bool:

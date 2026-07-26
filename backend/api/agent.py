@@ -16,6 +16,7 @@ Architecture Flow:
 5. Return final response to user
 """
 
+import base64
 import json
 import logging
 import time
@@ -287,6 +288,7 @@ class TwoPassAgent:
                 user_input=user_input,
                 context=context,
                 selected_order=selected_order,
+                selected_product=selected_product,
                 trace=trace,
                 history=history_messages,
             )
@@ -377,6 +379,21 @@ class TwoPassAgent:
                     "[Context] Updated current_order from tracking data "
                     f"(order_id={tracking_data.order_id}, intent={pass1_output.intent})"
                 )
+
+            # Reconcile Pass 1's *predicted* assessment against what actually
+            # happened. Pass 1 runs BEFORE any tool, so its counts are guesses;
+            # it would write products_found=0 for a search it had not run yet,
+            # reason "a search that found nothing is a problem", and set
+            # potential_error — flagging every successful search for human
+            # review and showing "There may be an issue with your request"
+            # above five perfectly good results.
+            self._reconcile_assessment(
+                pass1_output=pass1_output,
+                tool_results=tool_results,
+                products=products,
+                orders=orders,
+                tracking_data=tracking_data,
+            )
 
             # Record this turn's intent and tool calls in context.
             tool_names = [tc.tool_name.value for tc in pass1_output.tool_calls]
@@ -656,6 +673,41 @@ class TwoPassAgent:
         "Do not mention the person, background, or pose. Output the phrase only."
     )
 
+    #: Magic-byte signatures for the formats the vision API accepts. The MIME
+    #: declared in a `data:` URL is client-supplied and therefore untrusted —
+    #: an AVIF renamed to .png arrives labelled "image/png" and is rejected
+    #: downstream with an opaque 400.
+    _IMAGE_MAGIC: Dict[bytes, str] = {
+        b"\xff\xd8\xff": "image/jpeg",
+        b"\x89PNG\r\n\x1a\n": "image/png",
+        b"GIF87a": "image/gif",
+        b"GIF89a": "image/gif",
+    }
+
+    def _sniff_data_url_image(self, image: str) -> Optional[str]:
+        """Real MIME of a `data:` image from its bytes, or None if unsupported.
+
+        Returns None for anything we cannot positively identify as a supported
+        format. http(s) URLs return None too — they are not ours to inspect and
+        the provider fetches them itself.
+        """
+        if not image.startswith("data:"):
+            return None
+        try:
+            _, b64 = image.split(",", 1)
+            # 32 base64 chars decode to 24 bytes — plenty for every signature,
+            # and padded so a non-multiple-of-4 slice still decodes.
+            raw = base64.b64decode(b64[:32] + "===", validate=False)
+        except Exception:
+            return None
+
+        for magic, mime in self._IMAGE_MAGIC.items():
+            if raw.startswith(magic):
+                return mime
+        if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+            return "image/webp"
+        return None
+
     async def _describe_image_into_query(self, image: str, user_input: str) -> str:
         """Describe an uploaded garment image and fold it into the search query.
 
@@ -667,6 +719,17 @@ class TwoPassAgent:
         if not getattr(provider, "supports_vision", False):
             self.logger.warning(
                 "[Vision] Image provided but active provider lacks vision support"
+            )
+            return user_input
+
+        # Defence in depth: the frontend validates by magic bytes, but it is not
+        # a trust boundary. Skip the vision call for anything we cannot confirm
+        # is a supported image rather than burning a request on a certain 400.
+        if image.startswith("data:") and not self._sniff_data_url_image(image):
+            self.logger.warning(
+                "[Vision] Rejecting attachment — bytes do not match a supported "
+                "image format (declared prefix: %r)",
+                image[:32],
             )
             return user_input
         try:
@@ -813,6 +876,7 @@ class TwoPassAgent:
         context: ConversationContext,
         selected_order: Any,
         trace: TwoPassExecutionTrace,
+        selected_product: Any = None,
         history: Optional[List[LLMMessage]] = None,
     ) -> Optional[Pass1Output]:
         """
@@ -824,10 +888,46 @@ class TwoPassAgent:
             # Build context summary
             context_summary = context_manager.build_context_summary(context)
 
-            # Build product context info
+            # Build product context info.
+            #
+            # CRITICAL distinction: a product the customer CLICKED this turn is
+            # authoritative and unambiguous; the tail of `recent_products` is
+            # merely the last item we happened to show them. Both used to render
+            # under the same "SELECTED PRODUCT CONTEXT" heading, so after any
+            # product search that heading pointed at an item nobody had chosen.
+            # The model learned the block was unreliable and hedged even on a
+            # real click — "Which item do you mean (the RUFFLED SLEEVE SKIRT
+            # SET), or a different product?" — naming the right product while
+            # still asking. Two distinct headings restore the signal.
             product_context_info = ""
-            if context.recent_products:
-                # Get the most recent product
+            if selected_product is not None:
+                sp_id = getattr(selected_product, "id", "unknown")
+                sp_name = getattr(selected_product, "name", "Unknown")
+                sp_price = getattr(selected_product, "price", "N/A")
+                sp_currency = getattr(selected_product, "currency", "USD")
+
+                product_context_info = f"""
+**PRODUCT EXPLICITLY SELECTED BY THE CUSTOMER THIS TURN** (they clicked its card
+in the chat — this is a deliberate, unambiguous choice):
+- Product ID: {sp_id}
+- Product Name: {sp_name}
+- Price: {sp_price} {sp_currency}
+
+THIS IS AUTHORITATIVE. Any question the customer asks this turn — "what sizes are
+available?", "is this in stock?", "what colours?", "similar items", "how much?" —
+refers to THIS product. Therefore:
+- You MUST set context_understanding.referenced_product to "{sp_name}".
+- You MUST NOT ask which product they mean. There is no ambiguity to resolve.
+- You MUST NOT set flagging_reason="unclear_request" on the grounds of not knowing
+  which item is meant — you know exactly which item.
+- Sizes / stock / availability / colour question → emit variant_check with
+  product_id="{sp_id}" (add size or color only if the customer named one).
+- "Similar"/"like this" → emit product_search describing THIS garment.
+"""
+            elif context.recent_products:
+                # No click this turn — these are just items previously displayed.
+                # Use them to resolve a reference the customer actually makes;
+                # do NOT treat the newest as "selected".
                 latest_product = context.recent_products[-1]
                 product_name = latest_product.get("name", "Unknown")
                 product_id = latest_product.get("id", "Unknown")
@@ -835,13 +935,14 @@ class TwoPassAgent:
                 product_currency = latest_product.get("currency", "USD")
 
                 product_context_info = f"""
-**SELECTED PRODUCT CONTEXT**:
-- Product ID: {product_id}
-- Product Name: {product_name}
-- Price: {product_price} {product_currency}
+**PRODUCTS RECENTLY SHOWN** (nothing was explicitly selected this turn):
+- Most recent: {product_name} (ID: {product_id}, {product_price} {product_currency})
+- See CONVERSATION CONTEXT above for the full list.
 
-The user is referring to this product when they say "similar products", "products like this", "this product", etc.
-When searching for similar products, use the product name or characteristics to guide the search query.
+Use these ONLY to resolve a reference the customer actually makes ("this product",
+"similar products", "the second one", "that skirt set"). If they refer to one,
+set referenced_product to its name and use its characteristics in the search query.
+Do NOT assume the customer means the most recent item when they made no reference.
 """
 
             # Build order context info
@@ -1145,6 +1246,100 @@ The user is referring to this order when they say "this order", "it", "that one"
                 error=str(e),
                 execution_time_ms=execution_time,
             )
+
+    #: Flags Pass 1 raises about the *customer's message* (abuse, off-topic,
+    #: injection, genuine ambiguity). These are knowable from the message alone,
+    #: so tool results can never disprove them and reconciliation leaves them be.
+    _MESSAGE_LEVEL_FLAGS = frozenset(
+        {
+            "abusive_language",
+            "policy_violation",
+            "prompt_injection",
+            "unclear_request",
+        }
+    )
+
+    def _reconcile_assessment(
+        self,
+        pass1_output: Pass1Output,
+        tool_results: List[ToolResult],
+        products: List[Any],
+        orders: Any,
+        tracking_data: Any,
+    ) -> None:
+        """Replace Pass 1's predicted assessment with post-execution ground truth.
+
+        Pass 1 emits `assessment` before a single tool has run, so
+        `products_found` / `orders_found` are predictions and `potential_error`
+        is a guess about an outcome it cannot observe. In practice the model
+        wrote `products_found: 0` for a search it had not executed, concluded
+        that finding nothing was an error, and set `potential_error` — which is
+        in ESCALATING_FLAGS, so every successful product search raised the
+        "There may be an issue with your request" banner and wrote a row to
+        flagged_sessions.
+
+        `potential_error` is an OUTCOME judgement and belongs to the backend,
+        which can see what the tools actually returned. Message-level flags
+        (abuse, injection, off-topic, ambiguity) are left untouched — tool
+        results are irrelevant to whether the customer swore at us.
+
+        Mutates `pass1_output.assessment` in place.
+        """
+        assessment = pass1_output.assessment
+
+        # 1) Ground truth counts, replacing the pre-execution guess.
+        assessment.products_found = len(products) if products else 0
+        assessment.orders_found = len(orders) if orders else 0
+
+        if assessment.flagging_reason in self._MESSAGE_LEVEL_FLAGS:
+            return
+
+        # 2) A tool that raised, or returned an explicit error payload, is the
+        #    one thing that genuinely warrants `potential_error`.
+        failed = [r for r in tool_results if not r.success]
+        if failed:
+            if assessment.flagging_reason != "potential_error":
+                self.logger.info(
+                    "[Assessment] Raising potential_error — tool(s) failed: %s",
+                    [r.tool_name.value for r in failed],
+                )
+                assessment.flagging_reason = "potential_error"
+            return
+
+        # 3) Tools all succeeded. If they produced anything for the customer,
+        #    a predicted `potential_error` is disproven — clear it.
+        produced_results = bool(products or orders or tracking_data)
+        if assessment.flagging_reason == "potential_error" and produced_results:
+            self.logger.info(
+                "[Assessment] Clearing predicted potential_error — tools returned "
+                "results (products=%d, orders=%d, tracking=%s)",
+                assessment.products_found,
+                assessment.orders_found,
+                tracking_data is not None,
+            )
+            assessment.flagging_reason = "none"
+            # Pass 1 lowered confidence to justify a flag that turned out to be
+            # wrong; don't let that stale number trip the <0.7 fallback swap or
+            # the <0.5 human handoff.
+            assessment.confidence = max(assessment.confidence, 0.9)
+            return
+
+        # 4) Tools succeeded but returned nothing at all. That is a legitimate
+        #    empty result ("no products match"), NOT a system error — Pass 2 has
+        #    copy for it. Only flag when a tool that should always return
+        #    something came back empty.
+        if assessment.flagging_reason == "potential_error" and not produced_results:
+            searched_only = all(
+                r.tool_name in (ToolName.PRODUCT_SEARCH, ToolName.FAQ_SEARCH)
+                for r in tool_results
+            )
+            if tool_results and searched_only:
+                self.logger.info(
+                    "[Assessment] Clearing potential_error — empty search result is "
+                    "a normal outcome, not a system fault"
+                )
+                assessment.flagging_reason = "none"
+                assessment.confidence = max(assessment.confidence, 0.8)
 
     def _extract_data_from_tools(
         self,

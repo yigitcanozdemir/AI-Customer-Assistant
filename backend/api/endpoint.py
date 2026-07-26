@@ -11,6 +11,7 @@ from backend.services.session_manager import (
     clear_session,
     is_session_locked,
     lock_session,
+    record_violation,
     set_typing_state,
     get_typing_state,
 )
@@ -322,6 +323,12 @@ async def websocket_chat(
                 confirm_action_id = getattr(event.event_data, "confirm_action_id", None)
                 confirm_decision = getattr(event.event_data, "confirm_decision", None)
                 image = getattr(event.event_data, "image", None)
+                # Persisted in the transcript instead of `image` — see
+                # ChatEventData.image_thumbnail. Falls back to the full image
+                # for older clients that do not send a thumbnail.
+                image_thumbnail = (
+                    getattr(event.event_data, "image_thumbnail", None) or image
+                )
 
                 product_context = product_data
                 order_context = order_data if order_data else None
@@ -426,6 +433,13 @@ async def websocket_chat(
                         type="user",
                         content=question,
                         timestamp=datetime.utcnow(),
+                        # Both are stored so the flagged-session review is a
+                        # faithful replay: previously an attached image and a
+                        # clicked product card were dropped here, leaving the
+                        # reviewer with text that referenced things they could
+                        # not see.
+                        image=image_thumbnail,
+                        reply_product=product_context,
                     )
                     await add_message(session_id, user_message)
 
@@ -544,9 +558,17 @@ async def websocket_chat(
                     )
 
                     if stored_flag:
-                        flag_count = await get_flag_count_for_session(session_id)
+                        # Count ONLY genuine violations, in Redis. The previous
+                        # count came from flagged_sessions and included technical
+                        # flags, so our own failed searches pushed a session
+                        # toward the lock threshold mid-conversation.
+                        violation_count = (
+                            await record_violation(session_id)
+                            if is_policy_violation
+                            else 0
+                        )
 
-                        if is_policy_violation and flag_count >= 2:
+                        if is_policy_violation and violation_count >= 2:
                             await lock_session(session_id)
                             response.session_locked = True
                             response.lock_reason = flagging_reason
@@ -569,15 +591,21 @@ async def websocket_chat(
 
                             response.warning_message = f"Session locked after repeated {flagging_reason}"
 
-                        elif is_technical_issue and flag_count >= 3:
-                            logger.info(
-                                f"Technical issue flagged for team review after {flag_count} occurrences",
-                                extra={
-                                    "session_id": session_id,
-                                    "flagging_reason": flagging_reason,
-                                    "flag_count": flag_count,
-                                }
-                            )
+                        elif is_technical_issue:
+                            # Deliberately the ALL-reasons count, not the
+                            # violation count: this branch is about repeated
+                            # technical trouble in a session, which is exactly
+                            # what the violation counter excludes.
+                            total_flags = await get_flag_count_for_session(session_id)
+                            if total_flags >= 3:
+                                logger.info(
+                                    f"Technical issue flagged for team review after {total_flags} occurrences",
+                                    extra={
+                                        "session_id": session_id,
+                                        "flagging_reason": flagging_reason,
+                                        "flag_count": total_flags,
+                                    }
+                                )
 
                 ws_response = assistant_message.model_dump(mode='json')
                 ws_response['session_locked'] = response.session_locked
