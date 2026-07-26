@@ -146,6 +146,19 @@ def setup_otlp(
         #   "http"/"http/protobuf" → OpenObserve, Tempo HTTP, etc. (port 5080/4318)
         #   "grpc" (default)       → gRPC collectors (port 4317)
         protocol = (settings.otel_exporter_otlp_protocol or "grpc").lower()
+
+        # Parse OTEL_EXPORTER_OTLP_HEADERS ("k=v,k2=v2"), the standard OTLP var.
+        # OpenObserve rejects unauthenticated ingest with 401 and the exporter
+        # retries quietly, so a missing header looks exactly like "tracing is
+        # enabled but nothing ever arrives".
+        headers: dict[str, str] = {}
+        raw_headers = (settings.otel_exporter_otlp_headers or "").strip()
+        if raw_headers:
+            for pair in raw_headers.split(","):
+                key, sep, value = pair.partition("=")
+                if sep and key.strip():
+                    headers[key.strip()] = value.strip()
+
         if protocol.startswith("http"):
             from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
                 OTLPSpanExporter as HTTPSpanExporter,
@@ -157,16 +170,25 @@ def setup_otlp(
             http_endpoint = endpoint
             if not http_endpoint.rstrip("/").endswith("/v1/traces"):
                 http_endpoint = http_endpoint.rstrip("/") + "/v1/traces"
-            exporter = HTTPSpanExporter(endpoint=http_endpoint)
+            exporter = HTTPSpanExporter(
+                endpoint=http_endpoint, headers=headers or None
+            )
         else:
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
                 OTLPSpanExporter as GRPCSpanExporter,
             )
 
-            exporter = GRPCSpanExporter(endpoint=endpoint, insecure=True)
+            exporter = GRPCSpanExporter(
+                endpoint=endpoint, insecure=True, headers=headers or None
+            )
 
         tracer_provider.add_span_processor(BatchSpanProcessor(exporter))
-        logger.info("OTLP tracing enabled → %s (%s)", endpoint, protocol)
+        logger.info(
+            "OTLP tracing enabled → %s (%s, auth=%s)",
+            endpoint,
+            protocol,
+            "yes" if headers else "NONE — backends like OpenObserve will 401",
+        )
     elif environment != "production":
         tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
         logger.info("OTLP endpoint unset; using console span exporter (dev)")

@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     tempo_endpoint: str = "tempo:4317"
     otel_exporter_otlp_endpoint: str | None = None
     otel_exporter_otlp_protocol: str = "grpc"
+    # Standard OTLP header var, e.g. "Authorization=Basic <base64 user:token>".
+    # OpenObserve requires auth on its ingest endpoint and returns 401 without
+    # it — the exporter retries silently, so traces just never appear.
+    otel_exporter_otlp_headers: str | None = None
     otel_service_name: str = "fastapi-service"
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
