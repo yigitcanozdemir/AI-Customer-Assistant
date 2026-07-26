@@ -57,7 +57,8 @@ echo ""
 echo "🏥 Health check..."
 sleep 30 
 
-if docker exec fastapi curl -f http://localhost:8000/health > /dev/null 2>&1; then
+# Probe from the HOST: the slim runtime image ships no curl.
+if curl -s -f http://127.0.0.1:8000/health > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Backend updated successfully!${NC}"
     echo "🌐 API: https://api.yigitcanozdemir.com"
     docker compose -f docker-compose.prod.yml ps
