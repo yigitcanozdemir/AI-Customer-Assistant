@@ -96,44 +96,31 @@ export function CheckoutModal({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Lock the page while this modal is open.
+  //
+  // Two bugs fixed versus the previous version: it only locked when
+  // `window.innerWidth < 1024`, so on desktop the page behind stayed
+  // scrollable and its scrollbar stayed live and draggable; and it keyed off
+  // the CART's open state as well as its own, so it locked while invisible.
+  // Keyed solely on `isOpen` now, at every viewport width.
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (!isOpen) return;
 
-    const lockBody = () => {
-      document.body.style.overflow = "hidden";
-      document.body.style.position = "fixed";
-      document.body.style.width = "100%";
-      document.body.style.height = "100dvh";
+    const body = document.body;
+    const previous = {
+      overflow: body.style.overflow,
+      paddingRight: body.style.paddingRight,
     };
-
-    const unlockBody = () => {
-      document.body.style.overflow = "";
-      document.body.style.position = "";
-      document.body.style.width = "";
-      document.body.style.height = "";
-    };
-
-    const updateBodyLock = () => {
-      const isMobile = window.innerWidth < 1024;
-      if (isMobile && (isOpen || state.isOpen)) {
-        lockBody();
-      } else if (!state.isOpen && !isOpen) {
-        unlockBody();
-      } else if (!isMobile && !state.isOpen && !isOpen) {
-        unlockBody();
-      }
-    };
-
-    updateBodyLock();
-    window.addEventListener("resize", updateBodyLock);
+    // Reserve the width the scrollbar gives up, so the page does not shift.
+    const gap = window.innerWidth - document.documentElement.clientWidth;
+    if (gap > 0) body.style.paddingRight = `${gap}px`;
+    body.style.overflow = "hidden";
 
     return () => {
-      window.removeEventListener("resize", updateBodyLock);
-      if (!state.isOpen && !isOpen) {
-        unlockBody();
-      }
+      body.style.overflow = previous.overflow;
+      body.style.paddingRight = previous.paddingRight;
     };
-  }, [isOpen, state.isOpen]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || typeof window === "undefined") return;

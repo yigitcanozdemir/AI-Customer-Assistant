@@ -221,6 +221,10 @@
   html {
     height: 100%;
     min-height: 100dvh;
+    /* The track belongs to <html>, which had no background of its own and so
+       painted the browser's white default — a bright strip down the side of
+       every dark theme. */
+    @apply bg-background;
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
@@ -314,20 +318,149 @@
   }
 }
 
+/* Scrollbars.
+   `--scroll` was only ever defined on :root as opaque black, and neither .dark
+   nor any [data-theme] block overrode it — so dark mode drew a black thumb on a
+   dark track (invisible), and the `--muted` track read as a flat white slab
+   against panels that are not white. Deriving both from `currentColor` instead
+   means every theme, light and dark, gets a correctly contrasting scrollbar for
+   free. */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--muted);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--scroll);
+  background: color-mix(in oklab, currentColor 28%, transparent);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--scroll-hover);
+  background: color-mix(in oklab, currentColor 45%, transparent);
+}
+
+/* Firefox has no ::-webkit pseudo-elements; this is the standards equivalent. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, currentColor 28%, transparent) transparent;
+}
+
+/* ---------------------------------------------------------------------------
+   Chat message body
+   ---------------------------------------------------------------------------
+   Assistant text is rendered through react-markdown inside a small chat bubble.
+   It previously carried `prose prose-sm dark:prose-invert`, but
+   @tailwindcss/typography was never installed — those classes produced NO
+   styles at all, so the markdown fell back to browser defaults: <p> got 1em of
+   BOTH top and bottom margin, which is where the odd gaps between lines came
+   from, and lists/headings rendered at document scale inside a 280px bubble.
+
+   Rather than pull in the typography plugin (the agent is now instructed to
+   write plain prose, so heading/table styling would be dead weight), style the
+   handful of elements that can actually appear, tuned for a chat bubble.
+   -------------------------------------------------------------------------- */
+.chat-markdown {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+/* The core fix: no stray vertical margins inside the bubble. Paragraphs are
+   separated by a small, even gap instead of the browser's 1em top AND bottom. */
+.chat-markdown > *:first-child {
+  margin-top: 0;
+}
+.chat-markdown > *:last-child {
+  margin-bottom: 0;
+}
+.chat-markdown p {
+  margin: 0 0 0.5em;
+}
+
+/* Defensive: the prompt forbids these, but a model slip must not blow up the
+   bubble's rhythm the way document-scale margins did. */
+.chat-markdown ul,
+.chat-markdown ol {
+  margin: 0 0 0.5em;
+  padding-left: 1.15em;
+}
+.chat-markdown li {
+  margin: 0.15em 0;
+}
+.chat-markdown li::marker {
+  color: var(--muted-foreground);
+}
+
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3,
+.chat-markdown h4 {
+  font-size: 1em;
+  font-weight: 600;
+  margin: 0 0 0.35em;
+  line-height: 1.4;
+}
+
+.chat-markdown strong {
+  font-weight: 600;
+}
+
+.chat-markdown a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-markdown code {
+  font-size: 0.9em;
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+  background: color-mix(in oklab, currentColor 12%, transparent);
+}
+
+.chat-markdown pre {
+  margin: 0 0 0.5em;
+  padding: 0.5em 0.65em;
+  border-radius: 8px;
+  overflow-x: auto;
+  background: color-mix(in oklab, currentColor 10%, transparent);
+}
+.chat-markdown pre code {
+  padding: 0;
+  background: none;
+}
+
+/* Wide content must scroll inside the bubble, never widen it. */
+.chat-markdown table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  margin: 0 0 0.5em;
+}
+.chat-markdown th,
+.chat-markdown td {
+  border: 1px solid color-mix(in oklab, currentColor 20%, transparent);
+  padding: 0.25em 0.5em;
+  text-align: left;
+}
+
+.chat-markdown blockquote {
+  margin: 0 0 0.5em;
+  padding-left: 0.7em;
+  border-left: 2px solid color-mix(in oklab, currentColor 25%, transparent);
+  color: inherit;
+  opacity: 0.85;
+}
+
+.chat-markdown hr {
+  border: 0;
+  border-top: 1px solid color-mix(in oklab, currentColor 20%, transparent);
+  margin: 0.6em 0;
 }

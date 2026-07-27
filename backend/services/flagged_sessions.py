@@ -167,6 +167,14 @@ async def mark_reviewed(flagged_id: str, reviewed_by: str, notes: Optional[str] 
 
 
 async def get_flag_count_for_session(session_id: str) -> int:
+    """Total flagged rows for a session (all reasons).
+
+    NOTE: this cannot distinguish a policy violation from a technical flag,
+    because the reason is not persisted (deliberately — adding the column would
+    mean a schema migration, and this is a portfolio app deployed by pulling on
+    the server). The lock path compensates by counting violations in Redis
+    instead; see `services.session_manager.record_violation`.
+    """
     try:
         async with get_session() as session:
             stmt = select(func.count(FlaggedSession.id)).where(

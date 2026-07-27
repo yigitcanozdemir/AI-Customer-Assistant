@@ -24,6 +24,51 @@ const LOCAL_SESSION_KEYS = [
   "user-geo",
 ] as const;
 
+/**
+ * Set while the app is deliberately navigating within itself.
+ *
+ * `pagehide` cannot distinguish "the visitor closed the tab" from "the document
+ * is being replaced by another page on this same origin" — both fire it with
+ * `persisted: false`. That made an in-app navigation (or a plain refresh) delete
+ * the visitor's server-side session and wipe their identity, so opening a
+ * product re-prompted for name and details and lost the transcript.
+ *
+ * Lives in sessionStorage rather than a module variable because the module is
+ * re-evaluated from scratch on the new document, and the flag has to survive
+ * that gap. Read-and-clear on the way in, so it can never get stuck on and
+ * suppress a genuine teardown.
+ */
+const INTERNAL_NAV_KEY = "internal-nav";
+
+/** Call immediately before any navigation that stays inside this app. */
+export function markInternalNavigation(): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(INTERNAL_NAV_KEY, String(Date.now()));
+  } catch {
+    // Storage unavailable — worst case we fall back to the old behaviour.
+  }
+}
+
+/**
+ * True when this teardown is an in-app navigation we flagged.
+ *
+ * Consumes the flag, and ignores a stale one: the marker is only trusted for a
+ * few seconds, so a flag set before something went wrong cannot silently
+ * disable deletion for the rest of the visit.
+ */
+export function consumeInternalNavigation(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = sessionStorage.getItem(INTERNAL_NAV_KEY);
+    if (!raw) return false;
+    sessionStorage.removeItem(INTERNAL_NAV_KEY);
+    return Date.now() - Number(raw) < 5000;
+  } catch {
+    return false;
+  }
+}
+
 function apiBase(): string {
   return process.env.NEXT_PUBLIC_API_URL || "";
 }

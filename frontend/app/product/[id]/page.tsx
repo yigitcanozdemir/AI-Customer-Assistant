@@ -515,7 +515,6 @@ export default function ProductPage() {
 
                 <div className="space-y-7 lg:pt-6">
                   <div>
-                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary">Curated edit</p>
                     <h1 className="text-4xl font-semibold tracking-[-0.035em] text-foreground mb-3 font-modern-heading sm:text-5xl">
                       {product.name}
                     </h1>

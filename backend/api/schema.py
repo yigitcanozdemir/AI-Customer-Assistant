@@ -199,6 +199,16 @@ class Message(BaseModel):
     confirmation_order: Optional[Dict[str, Any]] = None
     confirmation_action: Optional[str] = None
     hide_content: Optional[bool] = False
+    #: Garment image the customer attached for visual search. Stored so the
+    #: flagged-session review shows what they actually sent — without it an
+    #: image-driven turn reads as a contextless "Find outfits similar to this
+    #: image". This is a downscaled THUMBNAIL, not the full upload: the frontend
+    #: caps it (see IMAGE_THUMBNAIL_MAX_EDGE) so a 5 MB photo does not become
+    #: ~6.7 MB of base64 in the message_history JSONB column on every flagged row.
+    image: Optional[str] = None
+    #: Product the customer attached to this message by clicking its card, so
+    #: the review transcript shows the "Product selected" context the agent saw.
+    reply_product: Optional[ProductContext] = None
 
 
 class ChatEventData(BaseModel):
@@ -219,6 +229,11 @@ class ChatEventData(BaseModel):
     # "find similar outfits from this picture" flow. Described to text and used
     # as the product-search query — see TwoPassAgent.execute / describe_image.
     image: Optional[str] = None
+    # Small preview of `image` for the stored transcript. Sent separately so the
+    # persisted history stays light: the full-resolution `image` goes to the
+    # vision model and is discarded, while this thumbnail is what the flagged
+    # session review renders.
+    image_thumbnail: Optional[str] = None
 
     class Config:
         arbitrary_types_allowed = True

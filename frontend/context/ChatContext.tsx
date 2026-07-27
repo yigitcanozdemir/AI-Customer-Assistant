@@ -11,6 +11,7 @@ import {
 } from "react";
 import { v4 as uuidv4 } from "uuid";
 import {
+  consumeInternalNavigation,
   requestSessionDeletion,
   wipeLocalSession,
 } from "@/lib/session-lifecycle";
@@ -156,6 +157,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
     messages: Message[];
     isAssistantOpen: boolean;
     selectedProduct: Product | null;
+    // Orders belong to one store, so this must be per-store like everything
+    // else here. While it was module-level state an order selected in one store
+    // stayed selected after switching — and it is sent to the backend with the
+    // next message, so the agent received an order from a different store.
+    selectedOrder: OrderStatus | null;
     isSessionLocked: boolean;
     sessionLockReason: string | null;
     isTyping: boolean;
@@ -211,6 +217,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
     const handlePageHide = (event: PageTransitionEvent) => {
       if (event.persisted) return;
 
+      // A same-origin navigation tears the document down exactly like a closed
+      // tab, so this event alone cannot tell them apart. Without this check,
+      // opening a product page deleted the visitor's session server-side and
+      // wiped their identity — they arrived as a new visitor and had to enter
+      // their details again. Navigations mark themselves first (see
+      // markInternalNavigation); the flag is consumed here so it cannot linger.
+      if (consumeInternalNavigation()) return;
+
       const sessionIds = Object.values(sessionMapRef.current).map(
         (session) => session.sessionId
       );
@@ -236,6 +250,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
     setSessionId(newSessionId);
     setMessages([]);
     setSelectedProduct(null);
+    setSelectedOrder(null);
     setConnectionStatus("disconnected");
     if (wsRef.current) {
       wsRef.current.close();
@@ -251,6 +266,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
           messages: [],
           isAssistantOpen: false,
           selectedProduct: null,
+          selectedOrder: null,
           isSessionLocked: false,
           sessionLockReason: null,
           isTyping: false,
@@ -315,6 +331,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
 
       setIsAssistantOpen(storeState.isAssistantOpen);
       setSelectedProduct(storeState.selectedProduct);
+      setSelectedOrder(storeState.selectedOrder ?? null);
       setIsSessionLocked(storeState.isSessionLocked ?? false);
       setSessionLockReason(storeState.sessionLockReason ?? null);
       const restoredTyping = storeState.isTyping ?? false;
@@ -353,6 +370,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
       setMessages([]);
       setIsAssistantOpen(false);
       setSelectedProduct(null);
+      setSelectedOrder(null);
       setIsSessionLocked(false);
       setSessionLockReason(null);
       setConnectionStatus("disconnected");
@@ -364,6 +382,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
           messages: [],
           isAssistantOpen: false,
           selectedProduct: null,
+          selectedOrder: null,
           isSessionLocked: false,
           sessionLockReason: null,
           isTyping: false,
@@ -384,6 +403,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
             messages,
             isAssistantOpen,
             selectedProduct,
+            selectedOrder,
             isSessionLocked,
             sessionLockReason,
             isTyping,
@@ -400,6 +420,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
     messages,
     isAssistantOpen,
     selectedProduct,
+    selectedOrder,
     isSessionLocked,
     sessionLockReason,
     isTyping,
