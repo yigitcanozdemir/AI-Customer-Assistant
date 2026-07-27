@@ -1,6 +1,6 @@
 export const EXTERNAL_LINKS = {
   website: "https://www.yigitcanozdemir.com/",
-  linkedin: "https://www.linkedin.com/in/yi%C4%9Fit-can-%C3%B6zdemir/",
+  linkedin: "https://www.linkedin.com/in/yigit-can-ozdemir/",
   github: "https://github.com/yigitcanozdemir",
   repository: "https://github.com/yigitcanozdemir/AI-Customer-Assistant",
   email: "hello@yigitcanozdemir.com",
