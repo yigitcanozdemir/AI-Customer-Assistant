@@ -14,7 +14,6 @@ import { useUser } from "@/context/UserContext";
 import { useChat } from "@/context/ChatContext";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { RemoveScroll } from "react-remove-scroll";
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -97,14 +96,31 @@ export function CheckoutModal({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Scroll locking is delegated to `react-remove-scroll` further down (see the
-  // <RemoveScroll> wrapper around the overlay). The hand-rolled version that
-  // used to live here only locked when `window.innerWidth < 1024`, so on
-  // desktop the page behind this modal stayed scrollable and the scrollbar
-  // stayed live. It also keyed off the CART's open state, not just this
-  // modal's. The library is what the Radix Sheets ("How to use", "Flagged
-  // sessions") already use — which is why those two behave correctly — so this
-  // modal now goes through exactly the same path.
+  // Lock the page while this modal is open.
+  //
+  // Two bugs fixed versus the previous version: it only locked when
+  // `window.innerWidth < 1024`, so on desktop the page behind stayed
+  // scrollable and its scrollbar stayed live and draggable; and it keyed off
+  // the CART's open state as well as its own, so it locked while invisible.
+  // Keyed solely on `isOpen` now, at every viewport width.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const body = document.body;
+    const previous = {
+      overflow: body.style.overflow,
+      paddingRight: body.style.paddingRight,
+    };
+    // Reserve the width the scrollbar gives up, so the page does not shift.
+    const gap = window.innerWidth - document.documentElement.clientWidth;
+    if (gap > 0) body.style.paddingRight = `${gap}px`;
+    body.style.overflow = "hidden";
+
+    return () => {
+      body.style.overflow = previous.overflow;
+      body.style.paddingRight = previous.paddingRight;
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || typeof window === "undefined") return;
@@ -205,10 +221,6 @@ export function CheckoutModal({
     : "90vh";
 
   return (
-    // Same mechanism the Radix Sheets use: it blocks wheel/touch, removes the
-    // scrollbar so a scrollbar DRAG cannot scroll the page either, and
-    // compensates the reclaimed width so the layout does not shift.
-    <RemoveScroll>
     <div
       className="fixed inset-0 z-[60] flex w-full items-start justify-center bg-black/50"
       style={{
@@ -588,6 +600,5 @@ export function CheckoutModal({
         </div>
       </div>
     </div>
-    </RemoveScroll>
   );
 }
