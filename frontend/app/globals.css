@@ -221,6 +221,10 @@
   html {
     height: 100%;
     min-height: 100dvh;
+    /* The track belongs to <html>, which had no background of its own and so
+       painted the browser's white default — a bright strip down the side of
+       every dark theme. */
+    @apply bg-background;
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
@@ -314,22 +318,35 @@
   }
 }
 
+/* Scrollbars.
+   `--scroll` was only ever defined on :root as opaque black, and neither .dark
+   nor any [data-theme] block overrode it — so dark mode drew a black thumb on a
+   dark track (invisible), and the `--muted` track read as a flat white slab
+   against panels that are not white. Deriving both from `currentColor` instead
+   means every theme, light and dark, gets a correctly contrasting scrollbar for
+   free. */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--muted);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--scroll);
+  background: color-mix(in oklab, currentColor 28%, transparent);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--scroll-hover);
+  background: color-mix(in oklab, currentColor 45%, transparent);
+}
+
+/* Firefox has no ::-webkit pseudo-elements; this is the standards equivalent. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, currentColor 28%, transparent) transparent;
 }
 
 /* ---------------------------------------------------------------------------

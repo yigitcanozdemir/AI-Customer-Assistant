@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { markInternalNavigation } from "@/lib/session-lifecycle";
 import { Badge } from "@/components/ui/badge";
 import type React from "react";
 import { useState, useEffect, useRef } from "react";
@@ -55,6 +57,7 @@ const formatCurrency = (price: number, currency: string): string => {
 };
 
 export default function Store() {
+  const router = useRouter();
   const [windowWidth, setWindowWidth] = useState(1200);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -263,7 +266,16 @@ export default function Store() {
     url.searchParams.set("store", selectedStore);
     url.searchParams.delete("product");
     url.searchParams.delete("chat");
-    window.location.href = url.toString();
+    // router.push, not window.location.href: a hard navigation tears down the
+    // React tree AND fires `pagehide`, which the session-lifecycle handler read
+    // as "the visitor left" — deleting their server-side session and wiping
+    // their identity, so opening a product reset the whole chat.
+    //
+    // The marker is belt-and-braces: router.push should not fire `pagehide` at
+    // all, but if a future change (or a fallback to a hard load) makes it do so,
+    // the session survives instead of being silently deleted.
+    markInternalNavigation();
+    router.push(`${url.pathname}${url.search}`);
   };
 
   const nextImage = (productId: string, images: string[]) => {

@@ -20,12 +20,14 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { CONNECTION_ERROR_SUGGESTIONS } from "@/lib/chat-suggestions";
 import { prepareImageForUpload, transcodeToJpeg } from "@/lib/image-validation";
+import { markInternalNavigation } from "@/lib/session-lifecycle";
 import { useStore } from "@/context/StoreContext";
 import { useChat, type Message, type Product } from "@/context/ChatContext";
 import { useUser } from "@/context/UserContext";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import type { TrackingMapProps } from "@/components/ui/TrackingMap";
 
 const TrackingMap = dynamic<TrackingMapProps>(
@@ -148,6 +150,7 @@ interface ChatSidebarProps {
 }
 
 export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
+  const router = useRouter();
   const [inputValue, setInputValue] = useState("");
   // Downscaled copy of `attachedImage`, persisted in the transcript so the
   // flagged-session review can show it without storing megabytes of base64.
@@ -211,6 +214,17 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
     hasSentInitialMessage.current = false;
     // Dismissals are per-session; a new session starts with a clean slate.
     dismissedProductKeysRef.current = new Set();
+    // Order highlighting is local to this component, so switching store left
+    // the previous store's order visually selected (and its reply chip in the
+    // composer) even though that order belongs to a different catalogue.
+    // sessionId changes on every store switch, so this is the right trigger.
+    setSelectedOrderId(null);
+    // The composer draft is likewise per-conversation: a half-typed question
+    // and an attached garment image belong to the store you were browsing.
+    setInputValue("");
+    setAttachedImage(null);
+    setAttachedImageThumbnail(null);
+    setImageError(null);
   }, [sessionId]);
   useEffect(() => {
     setIsMounted(true);
@@ -878,9 +892,17 @@ export function ChatSidebar({ right, sideWidth }: ChatSidebarProps) {
   };
 
   const handleViewProduct = (productId: string) => {
-    window.location.href = `/product/${productId}?store=${encodeURIComponent(
-      selectedStoreForProduct
-    )}`;
+    // Client-side navigation, NOT window.location.href. A full page load tears
+    // down the React tree AND fires `pagehide`, which the session-lifecycle
+    // handler read as "the visitor left" — so it deleted the session server-side
+    // and wiped the identity in sessionStorage. Viewing a product therefore
+    // reset the chat and re-prompted for name/details.
+    markInternalNavigation();
+    router.push(
+      `/product/${productId}?store=${encodeURIComponent(
+        selectedStoreForProduct
+      )}`
+    );
   };
 
   const handleOrderSelect = (order: Order) => {
